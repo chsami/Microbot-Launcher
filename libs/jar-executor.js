@@ -1,5 +1,4 @@
 const { exec } = require('child_process');
-const path = require('path');
 const {logMessage} = require("./logger");
 
 function executeJar(command, callback) {

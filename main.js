@@ -80,11 +80,9 @@ ipcMain.handle('download-jcef', async (event) => {
             onDownloadProgress: (progressEvent) => {
                 const totalLength = 126009591;
 
-                if (totalLength !== null) {
-                    const progress = ((progressEvent.loaded * 100) / totalLength).toFixed(2);  // Keep two decimal places
-                    currentPercent = (10 + (progress * 0.4)).toFixed(2);  // Map the progress to 10%-50%
-                    event.sender.send('progress', { percent: currentPercent, status: `Downloading... (${progress}%)` });
-                }
+                const progress = ((progressEvent.loaded * 100) / totalLength).toFixed(2);  // Keep two decimal places
+                let currentPercent = (10 + (progress * 0.4)).toFixed(2);  // Map the progress to 10%-50%
+                event.sender.send('progress', { percent: currentPercent, status: `Downloading... (${progress}%)` });
             }
         });
 
@@ -240,11 +238,10 @@ ipcMain.handle('open-client', async (event, version, proxy) => {
     }
 });
 
-ipcMain.handle('jcef-exists', async (version) => {
+ipcMain.handle('jcef-exists', async () => {
     try {
         const filePath = path.join(__dirname, 'jcef-bundle');
-        const result = fs.existsSync(filePath)
-        return result
+        return fs.existsSync(filePath)
     } catch (error) {
         logMessage(error.message)
         return { error: error.message };
@@ -255,15 +252,14 @@ ipcMain.handle('jcef-exists', async (version) => {
 ipcMain.handle('client-exists', async (event, version) => {
     try {
         const filePath = path.join(__dirname, 'microbot-' + version + '.jar');
-        const result = fs.existsSync(filePath)
-        return result
+        return fs.existsSync(filePath)
     } catch (error) {
         logMessage(error.message)
         return { error: error.message };
     }
 });
 
-ipcMain.handle('launcher-exists', async (version) => {
+ipcMain.handle('launcher-exists', async () => {
     try {
         const filePath = path.join(__dirname, 'microbot-launcher.jar');
         const result = fs.existsSync(filePath)
@@ -274,7 +270,7 @@ ipcMain.handle('launcher-exists', async (version) => {
     }
 });
 
-ipcMain.handle('accounts-exists', async (version) => {
+ipcMain.handle('accounts-exists', async () => {
     try {
        const result = fs.existsSync('accounts.json')
         console.log(result)
@@ -286,10 +282,9 @@ ipcMain.handle('accounts-exists', async (version) => {
 });
 
 
-ipcMain.handle('read-accounts', async (version) => {
+ipcMain.handle('read-accounts', async () => {
     try {
-        const result = readAccountsJson()
-        return result
+        return readAccountsJson()
     } catch (error) {
         logMessage(error.message)
         return { error: error.message };
@@ -298,15 +293,15 @@ ipcMain.handle('read-accounts', async (version) => {
 
 ipcMain.handle('overwrite-credential-properties', async (event, character) => {
     try {
-        const result = overwrite(character)
-        return result
+        overwrite(character)
+        return { success: 'Succesfull'}
     } catch (error) {
         logMessage(error.message)
         return { error: error.message };
     }
 });
 
-ipcMain.handle('remove-accounts', async (event) => {
+ipcMain.handle('remove-accounts', async () => {
     try {
         removeAccountsJson()
     } catch (error) {
@@ -315,7 +310,7 @@ ipcMain.handle('remove-accounts', async (event) => {
     }
 });
 
-ipcMain.handle('check-file-change', async (event) => {
+ipcMain.handle('check-file-change', async () => {
     try {
         return checkFileModification()
     } catch (error) {

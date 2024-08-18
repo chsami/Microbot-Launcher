@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const { app } = require('electron');
 
 // Determine the log file path
 const logFilePath =  path.join(__dirname, '../debug.log');

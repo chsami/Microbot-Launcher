@@ -12,7 +12,7 @@ const readAccountsJson = () => {
             const uniqueDisplayNames = new Set();
 
             // Filter the accounts array
-            const uniqueAccounts = accounts.filter(account => {
+            return accounts.filter(account => {
                 if (uniqueDisplayNames.has(account.displayName)) {
                     // If the displayName is already in the set, skip this account
                     return false;
@@ -26,9 +26,7 @@ const readAccountsJson = () => {
                         return true;
                     }
                 }
-            });
-
-            return uniqueAccounts
+            })
         }
     } catch (err) {
         console.error('Error reading properties file:', err);

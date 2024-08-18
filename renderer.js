@@ -56,7 +56,7 @@ function updateProgress(percent, status) {
     statusText.textContent = status;
 }
 
-window.addEventListener('load', async (event) => {
+window.addEventListener('load', async () => {
 
     const properties = await window.electron.readProperties()
 
