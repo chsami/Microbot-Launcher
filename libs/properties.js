@@ -1,4 +1,14 @@
 const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+// Get the user's home directory
+const homeDir = os.homedir();
+
+// Construct the path to the .microbot folder
+const microbotDir = path.join(homeDir, '.microbot');
+
+const filePath = path.resolve(microbotDir, 'resource_versions.json');
 
 
 // Define your default values here
@@ -6,6 +16,7 @@ const defaultProperties = {
     launcher: '0.0.0',
     client: '0.0.0',
     launcher_html: '0.0.0',
+    version_pref: '0.0.0'
 };
 
 
@@ -22,7 +33,6 @@ const createDefaultPropertiesFile = (filePath) => {
 };
 
 const readPropertiesFile = () => {
-    const filePath = './resource_versions.json'
     try {
 
         if (fs.existsSync(filePath)) {
@@ -38,7 +48,6 @@ const readPropertiesFile = () => {
 };
 
 const writePropertiesFile = (data) => {
-    const filePath = './resource_versions.json';
     try {
         fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
     } catch (err) {

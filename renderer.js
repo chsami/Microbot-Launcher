@@ -1,6 +1,7 @@
-let accounts =  []
+let accounts = []
+let iii = null
 
-async  function openLauncher() {
+async function openLauncher() {
 
     if (!await window.electron.jcefExists()) {
         document.getElementById('loader-container').style.display = 'block';
@@ -14,9 +15,13 @@ async  function openLauncher() {
 
     document.getElementById('loader-container').style.display = 'none';
     await window.electron.openLauncher()
+    const ii = setInterval(async () => {
+        const clientVersion = await window.electron.fetchClientVersion()
+        await handleJagexAccountLogic(clientVersion, ii);
+    }, 1000)
 }
 
-async  function openClient(version) {
+async function openClient(version) {
     if (!await window.electron.clientExists()) {
         document.getElementById('loader-container').style.display = 'block';
         await window.electron.downloadClient(version)
@@ -32,7 +37,7 @@ async  function openClient(version) {
     // Get the selected value
     const selectedValue = selectElement.value;
 
-    const selectedAccount = accounts.find(x => x.accountId === selectedValue)
+    const selectedAccount = accounts?.find(x => x.accountId === selectedValue)
     if (selectedAccount) {
         await window.electron.overwriteCredentialProperties(selectedAccount)
         await window.electron.openClient(version, proxy)
@@ -56,6 +61,32 @@ function updateProgress(percent, status) {
     statusText.textContent = status;
 }
 
+async function handleJagexAccountLogic(clientVersion, ii) {
+    const exists = await window.electron.accountsExists()
+
+    if (exists) {
+        if (ii) {
+            clearInterval(ii)
+        }
+
+        document.getElementById(('play')).innerHTML = 'Play With Jagex Account'
+        document.getElementById(('logout')).style.display = 'block'
+        document.getElementById(('add-accounts')).style.display = 'block'
+        accounts = await window.electron.readAccounts()
+        populateAccountSelector(accounts)
+        logoutButton()
+        addAccountsButton()
+        setInterval(async () => {
+            const hasChanged = await window.electron.checkFileChange()
+            if (hasChanged) {
+                accounts = await window.electron.readAccounts()
+                populateAccountSelector(accounts)
+                populateSelectElement('client', [clientVersion])
+            }
+        }, 1000)
+    }
+}
+
 window.addEventListener('load', async () => {
 
     const properties = await window.electron.readProperties()
@@ -74,7 +105,7 @@ window.addEventListener('load', async () => {
         await window.electron.downloadMicrobotLauncher()
     }
 
-    if (properties['client'] !== clientVersion) {
+    if (properties['client'] === '0.0.0') {
         document.getElementById('loader-container').style.display = 'block';
         properties['client'] = clientVersion
         await window.electron.downloadClient(clientVersion)
@@ -92,37 +123,28 @@ window.addEventListener('load', async () => {
 
     document.getElementById('play').addEventListener('click', async () => {
         if (document.getElementById('play')?.innerText.toLowerCase() === 'Play With Jagex Account'.toLowerCase()) {
-            await openClient(clientVersion)
+            const proxy = getProxyValues()
+            const selectedVersion = document.getElementById('client').value
+            await openClient(selectedVersion, proxy)
         } else {
             await openLauncher()
         }
     })
 
-    const ii = setInterval(async () => {
-        const exists = await window.electron.accountsExists()
-        if (exists) {
-            document.getElementById(('play')).innerHTML = 'Play With Jagex Account'
-            document.querySelector('.game-info').style = 'display:block'
-            document.getElementById(('logout')).style.display = 'block'
-            document.getElementById(('add-accounts')).style.display = 'block'
-            accounts = await window.electron.readAccounts()
-            populateAccountSelector(accounts)
-            populateSelectElement('client', ['Microbot-' + clientVersion])
-            logoutButton()
-            playNoJagexAccount(clientVersion)
-            addAccountsButton()
-            clearInterval(ii)
-            setInterval(async () => {
-                const hasChanged = await window.electron.checkFileChange()
-                if (hasChanged) {
-                    accounts = await window.electron.readAccounts()
-                    populateAccountSelector(accounts)
-                    populateSelectElement('client', ['Microbot-' + clientVersion])
-                }
-            }, 1000)
-        }
-    }, 1000)
+    //Init buttons and UI
+    await initUI(properties)
 
+    await checkForClientUpdate(properties)
+
+    iii = setInterval(async () => {
+        await checkForClientUpdate()
+    }, 5 * 60 * 1000); // 5 minutes
+
+    await handleJagexAccountLogic(clientVersion);
+
+    document.querySelectorAll('.loadingButton').forEach(button => {
+        button.addEventListener('click', startLoading);
+    });
 });
 
 
@@ -139,6 +161,21 @@ function populateSelectElement(selectId, options) {
         optionElement.textContent = optionText;
         selectElement.appendChild(optionElement);
     });
+}
+
+function addSelectElement(selectId, option) {
+    // Get the select element by its ID
+    const selectElement = document.getElementById(selectId);
+
+// Create a new option element
+    const newOption = document.createElement('option');
+
+// Set the value and text of the new option
+    newOption.value = option;
+    newOption.text = option;
+
+// Add the new option to the select element
+    selectElement.appendChild(newOption);
 }
 
 
@@ -164,9 +201,11 @@ function logoutButton() {
         const userConfirmed = confirm("Are you sure you want to proceed?");
         if (!userConfirmed) return
         await window.electron.removeAccounts()
-        document.getElementById(('play')).innerHTML = 'Login'
-        document.querySelector('.game-info').style = 'display:none'
+        document.getElementById(('play')).innerHTML = 'Login Jagex Account'
+        document.querySelector('#add-accounts').style = 'display:none'
         document.querySelector('#logout').style = 'display:none'
+        accounts = []
+        populateAccountSelector([])
     })
 }
 
@@ -177,10 +216,32 @@ function addAccountsButton() {
     })
 }
 
-function playNoJagexAccount(version) {
+function playNoJagexAccount() {
     document.querySelector('#play-no-jagex-account').addEventListener('click', async () => {
         const proxy = getProxyValues()
-        await window.electron.playNoJagexAccount(version, proxy)
+        const selectedVersion = document.getElementById('client').value
+        await window.electron.playNoJagexAccount(selectedVersion, proxy)
+    })
+}
+
+function updateNowBtn() {
+    document.querySelector('#update-now-btn').addEventListener('click', async () => {
+        if (iii) clearInterval(iii)
+        document.querySelector('#update-available').style = 'display:none'
+        document.getElementById('loader-container').style.display = 'block';
+        const clientVersion = await window.electron.fetchClientVersion()
+        await window.electron.downloadClient(clientVersion)
+        addSelectElement('client', ['microbot-' + clientVersion + '.jar'])
+        const properties = await window.electron.readProperties()
+        properties['client'] = clientVersion
+        await window.electron.writeProperties(properties)
+        document.getElementById('loader-container').style.display = 'none';
+    })
+}
+
+function reminderMeLaterBtn() {
+    document.querySelector('#remind-me-later-btn').addEventListener('click', async () => {
+        document.querySelector('#update-available').style = 'display:none'
     })
 }
 
@@ -194,5 +255,51 @@ function getProxyValues() {
     return {
         proxyIp,
         proxyType,
+    }
+}
+
+function startLoading(event) {
+    const button = event.target;
+    button.classList.add('loading');
+
+    setTimeout(() => {
+        button.classList.remove('loading');
+    }, 1000);
+}
+
+async function setVersionPreference(properties) {
+    if (properties['version_pref'] && properties['version_pref'] !== '0.0.0') {
+        document.getElementById('client').value = properties['version_pref']
+    } else {
+        properties['version_pref'] = document.getElementById('client').value
+        await window.electron.writeProperties(properties)
+    }
+    document.getElementById('client').addEventListener('change', async (event) => {
+        const selectedValue = event.target.value
+        const properties = await window.electron.readProperties()
+        properties['version_pref'] = selectedValue
+        await window.electron.writeProperties(properties)
+    })
+}
+
+async function initUI(properties) {
+    updateNowBtn()
+    reminderMeLaterBtn()
+    playNoJagexAccount()
+    const listOfJars = await window.electron.listJars()
+    populateSelectElement('client', listOfJars)
+    setVersionPreference(properties)
+    document.querySelector('.game-info').style = 'display:block'
+}
+
+async function checkForClientUpdate(properties) {
+    const clientVersion = await window.electron.fetchClientVersion()
+    const listOfJars = await window.electron.listJars()
+
+    if (properties['client'] !== clientVersion && listOfJars.every(file => file.indexOf(clientVersion) < 0)) {
+        document.querySelector('#update-available').style = 'display:block'
+    } else if (properties['client'] !== clientVersion) {
+        properties['client'] = clientVersion
+        await window.electron.writeProperties(properties)
     }
 }

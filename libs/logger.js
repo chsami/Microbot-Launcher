@@ -1,8 +1,15 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+
+// Get the user's home directory
+const homeDir = os.homedir();
+
+// Construct the path to the .microbot folder
+const microbotDir = path.join(homeDir, '.microbot');
 
 // Determine the log file path
-const logFilePath =  path.join(__dirname, '../debug.log');
+const logFilePath =  path.join(microbotDir, 'debug.log');
 
 // Function to log messages to the file
 function logMessage(message) {

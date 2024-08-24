@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('electron', {
     overwriteCredentialProperties: (character) => ipcRenderer.invoke('overwrite-credential-properties', character),
     checkFileChange: () => ipcRenderer.invoke('check-file-change'),
     playNoJagexAccount:(version, proxy) => ipcRenderer.invoke('play-no-jagex-account', version, proxy),
+    listJars:() => ipcRenderer.invoke('list-jars'),
     ipcRenderer: {
         send: (channel, data) => ipcRenderer.send(channel, data),
         receive: (channel, func) => ipcRenderer.on(channel, (event, ...args) => func(event, ...args)),

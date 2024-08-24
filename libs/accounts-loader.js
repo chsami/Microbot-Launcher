@@ -1,7 +1,15 @@
 const fs = require('fs');
+const os = require('os');
+const path = require("path");
+
+// Get the user's home directory
+const homeDir = os.homedir();
+
+// Construct the path to the .microbot folder
+const microbotDir = path.join(homeDir, '.microbot');
+const filePath = path.resolve(microbotDir, 'accounts.json');
 
 const readAccountsJson = () => {
-    const filePath = './accounts.json'
     try {
 
         if (fs.existsSync(filePath)) {
@@ -35,7 +43,6 @@ const readAccountsJson = () => {
 };
 
 const removeAccountsJson = () => {
-    const filePath = './accounts.json'
     try {
 
         if (fs.existsSync(filePath)) {
@@ -51,24 +58,25 @@ let lastModifiedTime = null;
 
 // Function to check the file's modification time
 function checkFileModification() {
-    const filePath = './accounts.json'
+    if (fs.existsSync(filePath)) {
 
-    fs.stat(filePath, (err, stats) => {
-        if (err) {
-            console.error(`Error checking file: ${err.message}`);
-            return false;
-        }
+        fs.stat(filePath, (err, stats) => {
+            if (err) {
+                console.error(`Error checking file: ${err.message}`);
+                return false;
+            }
 
-        const modifiedTime = stats.mtime;
+            const modifiedTime = stats.mtime;
 
-        // Check if the modification time has changed
-        if (!lastModifiedTime || modifiedTime > lastModifiedTime) {
-            console.log('File has been modified!');
-            lastModifiedTime = modifiedTime; // Update the last modification time
-            return true
-        }
-        return false
-    });
+            // Check if the modification time has changed
+            if (!lastModifiedTime || modifiedTime > lastModifiedTime) {
+                console.log('File has been modified!');
+                lastModifiedTime = modifiedTime; // Update the last modification time
+                return true
+            }
+            return false
+        });
+    }
 }
 
 module.exports = {
