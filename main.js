@@ -383,16 +383,6 @@ ipcMain.handle('launcher-exists', async () => {
     }
 });
 
-ipcMain.handle('accounts-exists', async () => {
-    try {
-        return fs.existsSync(microbotDir + '/accounts.json')
-    } catch (error) {
-        logMessage(error.message)
-        return {error: error.message};
-    }
-});
-
-
 ipcMain.handle('read-accounts', async () => {
     try {
         return readAccountsJson()

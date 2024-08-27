@@ -14,11 +14,8 @@ async function openLauncher() {
     }
 
     document.getElementById('loader-container').style.display = 'none';
+    console.log("fire!")
     await window.electron.openLauncher()
-    const ii = setInterval(async () => {
-        const clientVersion = await window.electron.fetchClientVersion()
-        await handleJagexAccountLogic(clientVersion, ii);
-    }, 1000)
 }
 
 async function openClient(version) {
@@ -61,30 +58,25 @@ function updateProgress(percent, status) {
     statusText.textContent = status;
 }
 
-async function handleJagexAccountLogic(clientVersion, ii) {
-    const exists = await window.electron.accountsExists()
-
-    if (exists) {
-        if (ii) {
-            clearInterval(ii)
+async function handleJagexAccountLogic(clientVersion) {
+    setInterval(async () => {
+        const hasChanged = await window.electron.checkFileChange()
+        console.log(hasChanged)
+        if (hasChanged) {
+            document.getElementById(('play')).innerHTML = 'Play With Jagex Account'
+            document.getElementById(('logout')).style.display = 'block'
+            document.getElementById(('add-accounts')).style.display = 'block'
+            accounts = await window.electron.readAccounts()
+            populateAccountSelector(accounts)
+            logoutButton()
+            addAccountsButton()
+            accounts = await window.electron.readAccounts()
+            populateAccountSelector(accounts)
+            populateSelectElement('client', [clientVersion])
+            document.getElementById(('logout')).style.display = 'block'
+            document.getElementById(('add-accounts')).style.display = 'block'
         }
-
-        document.getElementById(('play')).innerHTML = 'Play With Jagex Account'
-        document.getElementById(('logout')).style.display = 'block'
-        document.getElementById(('add-accounts')).style.display = 'block'
-        accounts = await window.electron.readAccounts()
-        populateAccountSelector(accounts)
-        logoutButton()
-        addAccountsButton()
-        setInterval(async () => {
-            const hasChanged = await window.electron.checkFileChange()
-            if (hasChanged) {
-                accounts = await window.electron.readAccounts()
-                populateAccountSelector(accounts)
-                populateSelectElement('client', [clientVersion])
-            }
-        }, 1000)
-    }
+    }, 1000)
 }
 
 window.addEventListener('load', async () => {
@@ -210,8 +202,8 @@ function logoutButton() {
 }
 
 function addAccountsButton() {
-    const logoutBtn = document.getElementById('add-accounts');
-    logoutBtn?.addEventListener('click', async () => {
+    const addAccounts = document.getElementById('add-accounts');
+    addAccounts?.addEventListener('click', async () => {
         await openLauncher()
     })
 }

@@ -56,27 +56,24 @@ const removeAccountsJson = () => {
 
 let lastModifiedTime = null;
 
-// Function to check the file's modification time
 function checkFileModification() {
+    let val = false;
     if (fs.existsSync(filePath)) {
-
-        fs.stat(filePath, (err, stats) => {
-            if (err) {
-                console.error(`Error checking file: ${err.message}`);
-                return false;
-            }
-
+        try {
+            const stats = fs.statSync(filePath);
             const modifiedTime = stats.mtime;
 
             // Check if the modification time has changed
             if (!lastModifiedTime || modifiedTime > lastModifiedTime) {
                 console.log('File has been modified!');
                 lastModifiedTime = modifiedTime; // Update the last modification time
-                return true
+                val = true;
             }
-            return false
-        });
+        } catch (err) {
+            console.error(`Error checking file: ${err.message}`);
+        }
     }
+    return val;
 }
 
 module.exports = {

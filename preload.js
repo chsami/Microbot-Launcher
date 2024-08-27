@@ -12,7 +12,6 @@ contextBridge.exposeInMainWorld('electron', {
     fetchLauncherHtmlVersion: () => ipcRenderer.invoke('fetch-launcher-html-version'),
     openLauncher: () => ipcRenderer.invoke('open-launcher'),
     openClient: (version, proxy) => ipcRenderer.invoke('open-client', version, proxy),
-    accountsExists: () => ipcRenderer.invoke('accounts-exists'),
     readAccounts: () => ipcRenderer.invoke('read-accounts'),
     removeAccounts: () => ipcRenderer.invoke('remove-accounts'),
     jcefExists: () => ipcRenderer.invoke('jcef-exists'),
