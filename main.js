@@ -343,7 +343,7 @@ ipcMain.handle('open-launcher', async () => {
 
 ipcMain.handle('open-client', async (event, version, proxy) => {
     try {
-        let filePath = path.join(microbotDir, "microbot-" + version + ".jar");
+        let filePath = path.join(microbotDir, version);
         filePath += ' -proxy=' + proxy.proxyIp + ' -proxy-type=' + proxy.proxyType
         executeJar('java -jar ' + filePath)
     } catch (error) {
@@ -422,7 +422,7 @@ ipcMain.handle('check-file-change', async () => {
 
 ipcMain.handle('play-no-jagex-account', async (event, version, proxy) => {
     try {
-        let filePath = path.join(microbotDir, "microbot-" + version + ".jar");
+        let filePath = path.join(microbotDir, version);
         filePath += ' -clean-jagex-launcher'
         filePath += ' -proxy=' + proxy.proxyIp + ' -proxy-type=' + proxy.proxyType
         executeJar('java -jar ' + filePath)
