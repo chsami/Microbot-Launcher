@@ -160,14 +160,14 @@ async function createWindow() {
     });
 
     await downloadFileFromBlobStorage('https://developmentb464.blob.core.windows.net/microbot/launcher', 'css','styles.css')
-    const indexHtmlPath = await downloadFileFromBlobStorage('https://developmentb464.blob.core.windows.net/microbot/launcher', '', 'index.html')
-    //const indexHtmlPath = null
+  //  const indexHtmlPath = await downloadFileFromBlobStorage('https://developmentb464.blob.core.windows.net/microbot/launcher', '', 'index.html')
+    const indexHtmlPath = null
     await mainWindow.loadFile(indexHtmlPath ? indexHtmlPath : 'index.html');
 
     setTimeout(() => {
         splash.destroy();
         mainWindow.show();
-    }, 2000);
+    }, 1000);
 
 }
 

@@ -129,7 +129,8 @@ window.addEventListener('load', async () => {
     await checkForClientUpdate(properties)
 
     iii = setInterval(async () => {
-        await checkForClientUpdate()
+        const properties = await window.electron.readProperties()
+        await checkForClientUpdate(properties)
     }, 5 * 60 * 1000); // 5 minutes
 
     await handleJagexAccountLogic(clientVersion);
@@ -137,6 +138,8 @@ window.addEventListener('load', async () => {
     document.querySelectorAll('.loadingButton').forEach(button => {
         button.addEventListener('click', startLoading);
     });
+
+    document.getElementById('website').src = "https://www.themicrobot.com?source=launcher"
 });
 
 
@@ -280,7 +283,7 @@ async function initUI(properties) {
     playNoJagexAccount()
     const listOfJars = await window.electron.listJars()
     populateSelectElement('client', listOfJars)
-    setVersionPreference(properties)
+    await setVersionPreference(properties)
     document.querySelector('.game-info').style = 'display:block'
 }
 
