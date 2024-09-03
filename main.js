@@ -150,7 +150,7 @@ async function createWindow() {
         height: 800,
         show: false, // Don't show the main window immediately
         title: 'Microbot Launcher',
-        autoHideMenuBar: false,
+        autoHideMenuBar: true,
         icon: path.join(__dirname, 'images/microbot_transparent.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
@@ -160,8 +160,7 @@ async function createWindow() {
     });
 
     await downloadFileFromBlobStorage('https://developmentb464.blob.core.windows.net/microbot/launcher', 'css','styles.css')
-  //  const indexHtmlPath = await downloadFileFromBlobStorage('https://developmentb464.blob.core.windows.net/microbot/launcher', '', 'index.html')
-    const indexHtmlPath = null
+    const indexHtmlPath = await downloadFileFromBlobStorage('https://developmentb464.blob.core.windows.net/microbot/launcher', '', 'index.html')
     await mainWindow.loadFile(indexHtmlPath ? indexHtmlPath : 'index.html');
 
     setTimeout(() => {
@@ -343,7 +342,7 @@ ipcMain.handle('open-launcher', async () => {
 
 ipcMain.handle('open-client', async (event, version, proxy) => {
     try {
-        let filePath = path.join(microbotDir, version);
+        let filePath = path.join(microbotDir, 'microbot-' + version + ".jar");
         filePath += ' -proxy=' + proxy.proxyIp + ' -proxy-type=' + proxy.proxyType
         executeJar('java -jar ' + filePath)
     } catch (error) {
@@ -422,7 +421,7 @@ ipcMain.handle('check-file-change', async () => {
 
 ipcMain.handle('play-no-jagex-account', async (event, version, proxy) => {
     try {
-        let filePath = path.join(microbotDir, version);
+        let filePath = path.join(microbotDir, 'microbot-' + version + ".jar");
         filePath += ' -clean-jagex-launcher'
         filePath += ' -proxy=' + proxy.proxyIp + ' -proxy-type=' + proxy.proxyType
         executeJar('java -jar ' + filePath)
