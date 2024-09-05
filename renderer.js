@@ -37,6 +37,7 @@ async function openClient(version) {
     const selectedAccount = accounts?.find(x => x.accountId === selectedValue)
     if (selectedAccount) {
         await window.electron.overwriteCredentialProperties(selectedAccount)
+        version = version.match(/-(\d+\.\d+\.\d+)\.jar/)[1];
         await window.electron.openClient(version, proxy)
     } else {
         alert('Account not found. Please restart your client.')
@@ -215,7 +216,8 @@ function playNoJagexAccount() {
     document.querySelector('#play-no-jagex-account').addEventListener('click', async () => {
         const proxy = getProxyValues()
         const selectedVersion = document.getElementById('client').value
-        await window.electron.playNoJagexAccount(selectedVersion, proxy)
+        const version = selectedVersion.match(/-(\d+\.\d+\.\d+)\.jar/)[1];
+        await window.electron.playNoJagexAccount(version, proxy)
     })
 }
 
