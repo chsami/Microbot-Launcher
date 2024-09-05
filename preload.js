@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld('electron', {
     downloadLauncherHtml: () => ipcRenderer.invoke('download-client'),
     readProperties: () => ipcRenderer.invoke('read-properties'),
     writeProperties: (data) => ipcRenderer.invoke('write-properties', data),
-    fetchLauncherVersion: () => ipcRenderer.invoke('fetch-launcher-version'),
+    fetchLauncherVersion: () => ipcRenderer.invoke('fetch-launcher-version'), //jagex launcher
     fetchClientVersion: () => ipcRenderer.invoke('fetch-client-version'),
     fetchLauncherHtmlVersion: () => ipcRenderer.invoke('fetch-launcher-html-version'),
     openLauncher: () => ipcRenderer.invoke('open-launcher'),
@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('electron', {
     checkFileChange: () => ipcRenderer.invoke('check-file-change'),
     playNoJagexAccount:(version, proxy) => ipcRenderer.invoke('play-no-jagex-account', version, proxy),
     listJars:() => ipcRenderer.invoke('list-jars'),
+    launcherVersion:() => ipcRenderer.invoke('launcher-version'),
     ipcRenderer: {
         send: (channel, data) => ipcRenderer.send(channel, data),
         receive: (channel, func) => ipcRenderer.on(channel, (event, ...args) => func(event, ...args)),

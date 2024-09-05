@@ -84,9 +84,13 @@ window.addEventListener('load', async () => {
 
     const properties = await window.electron.readProperties()
 
-    const launcherVersion = await window.electron.fetchLauncherVersion()
+    const launcherVersion = await window.electron.fetchLauncherVersion() // jagex launcher version
     const clientVersion = await window.electron.fetchClientVersion()
     const launcherHtmlVersion = await window.electron.fetchLauncherHtmlVersion()
+
+    const microbotLauncherVersion = await window.electron.launcherVersion()
+
+    document.title = 'Microbot Launcher ' + microbotLauncherVersion
 
 
     if (properties['launcher'] !== launcherVersion) {

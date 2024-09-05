@@ -13,6 +13,10 @@ const os = require('os');
 const url = 'https://microbot-api.azurewebsites.net'
 // const url = 'http://localhost:5029'
 
+const packageJsonPath = path.join(__dirname, 'package.json');
+const packageJson = require(packageJsonPath);
+const packageVersion = packageJson.version;
+
 let splash;
 let mainWindow;
 
@@ -441,4 +445,8 @@ ipcMain.handle('list-jars', async () => {
     const regex = /\d/;
 
     return files.filter(file => file.startsWith('microbot-') && file.endsWith('.jar') && regex.test(file))
+});
+
+ipcMain.handle('launcher-version', async () => {
+    return packageVersion
 });
