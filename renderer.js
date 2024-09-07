@@ -14,7 +14,6 @@ async function openLauncher() {
     }
 
     document.getElementById('loader-container').style.display = 'none';
-    console.log("fire!")
     await window.electron.openLauncher()
 }
 
@@ -67,7 +66,6 @@ function updateProgress(percent, status) {
 async function handleJagexAccountLogic(clientVersion) {
     setInterval(async () => {
         const hasChanged = await window.electron.checkFileChange()
-        console.log(hasChanged)
         if (hasChanged) {
             document.getElementById(('play')).innerHTML = 'Play With Jagex Account'
             document.getElementById(('logout')).style.display = 'block'
@@ -87,16 +85,16 @@ async function handleJagexAccountLogic(clientVersion) {
 
 window.onerror = function myErrorHandler(errorMsg, url, lineNumber) {
     alert("Error occured: " + errorMsg);//or any message
-    window.electron.log(errorMsg)
+    window.electron.logError(errorMsg)
     return false;
 }
 window.addEventListener("error", function (e) {
     if (e.error) {
         alert("Error occured: " + e.error.stack);//or any message
-        window.electron.log(e.error.stack)
+        window.electron.logError(e.error.stack)
     } else if (e.reason) {
         alert("Error occured: " + e.reason.stack);//or any message
-        window.electron.log( e.reason.stack)
+        window.electron.logError( e.reason.stack)
     }
     return false;
 })
@@ -104,7 +102,7 @@ window.addEventListener("error", function (e) {
 window.addEventListener("unhandledrejection", (event) => {
     event.preventDefault(); // This will not print the error in the console });
     alert("Error occured: " + event.reason.stack);//or any message
-    window.electron.log( event.reason.stack)
+    window.electron.logError( event.reason.stack)
 });
 
 window.addEventListener('load', async () => {

@@ -8,7 +8,7 @@ const {executeJar} = require('./libs/jar-executor');
 const {readPropertiesFile, writePropertiesFile} = require("./libs/properties");
 const {readAccountsJson, removeAccountsJson, checkFileModification} = require("./libs/accounts-loader");
 const {overwrite} = require("./libs/overwrite-credential-properties");
-const {logMessage} = require("./libs/logger");
+const {logMessage, logError} = require("./libs/logger");
 const os = require('os');
 
 
@@ -454,6 +454,6 @@ ipcMain.handle('launcher-version', async () => {
     return packageVersion
 });
 
-ipcMain.handle('log', async (event, message) => {
-    logMessage(message)
+ipcMain.handle('log-error', async (event, message) => {
+    logError(message)
 });
