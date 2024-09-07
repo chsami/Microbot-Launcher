@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "adm-zip": "^0.5.15",
+    "applicationinsights": "^2.9.6",
     "axios": "^1.7.2",
     "electron-squirrel-startup": "^1.0.1"
   },

@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const {appInsights} = require("./appinsights");
 
 // Get the user's home directory
 const homeDir = os.homedir();
@@ -17,6 +18,8 @@ function logMessage(message) {
         fs.writeFileSync(logFilePath, '', 'utf8');
     }
     const logEntry = `${new Date().toISOString()} - ${message}\n`;
+    console.log(message)
+    appInsights.defaultClient.trackException({ exception: new Error(message) });
     fs.appendFile(logFilePath, logEntry, (err) => {
         if (err) {
             console.error('Failed to write to log file:', err);

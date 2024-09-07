@@ -10,6 +10,8 @@ const {readAccountsJson, removeAccountsJson, checkFileModification} = require(".
 const {overwrite} = require("./libs/overwrite-credential-properties");
 const {logMessage} = require("./libs/logger");
 const os = require('os');
+
+
 const url = 'https://microbot-api.azurewebsites.net'
 // const url = 'http://localhost:5029'
 
@@ -30,6 +32,7 @@ const microbotDir = path.join(homeDir, '.microbot');
 if (!fs.existsSync(microbotDir)) {
     fs.mkdirSync(microbotDir);
 }
+
 
 
 
@@ -449,4 +452,8 @@ ipcMain.handle('list-jars', async () => {
 
 ipcMain.handle('launcher-version', async () => {
     return packageVersion
+});
+
+ipcMain.handle('log', async (event, message) => {
+    logMessage(message)
 });

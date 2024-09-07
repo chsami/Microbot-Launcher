@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('electron', {
     playNoJagexAccount:(version, proxy) => ipcRenderer.invoke('play-no-jagex-account', version, proxy),
     listJars:() => ipcRenderer.invoke('list-jars'),
     launcherVersion:() => ipcRenderer.invoke('launcher-version'),
+    log:(message) => ipcRenderer.invoke('log', message),
     ipcRenderer: {
         send: (channel, data) => ipcRenderer.send(channel, data),
         receive: (channel, func) => ipcRenderer.on(channel, (event, ...args) => func(event, ...args)),

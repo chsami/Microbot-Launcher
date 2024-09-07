@@ -37,8 +37,13 @@ async function openClient(version) {
     const selectedAccount = accounts?.find(x => x.accountId === selectedValue)
     if (selectedAccount) {
         await window.electron.overwriteCredentialProperties(selectedAccount)
-        version = version.match(/-(\d+\.\d+\.\d+)\.jar/)[1];
-        await window.electron.openClient(version, proxy)
+        const regex = selectedValue.match(/-(\d+\.\d+\.\d+)\.jar/);
+        if (regex != null) {
+            const version = regex[1];
+            await window.electron.playNoJagexAccount(version, proxy)
+        } else {
+            await window.electron.playNoJagexAccount(selectedValue, proxy)
+        }
     } else {
         alert('Account not found. Please restart your client.')
     }
@@ -79,6 +84,28 @@ async function handleJagexAccountLogic(clientVersion) {
         }
     }, 1000)
 }
+
+window.onerror = function myErrorHandler(errorMsg, url, lineNumber) {
+    alert("Error occured: " + errorMsg);//or any message
+    window.electron.log(errorMsg)
+    return false;
+}
+window.addEventListener("error", function (e) {
+    if (e.error) {
+        alert("Error occured: " + e.error.stack);//or any message
+        window.electron.log(e.error.stack)
+    } else if (e.reason) {
+        alert("Error occured: " + e.reason.stack);//or any message
+        window.electron.log( e.reason.stack)
+    }
+    return false;
+})
+
+window.addEventListener("unhandledrejection", (event) => {
+    event.preventDefault(); // This will not print the error in the console });
+    alert("Error occured: " + event.reason.stack);//or any message
+    window.electron.log( event.reason.stack)
+});
 
 window.addEventListener('load', async () => {
 
@@ -220,8 +247,13 @@ function playNoJagexAccount() {
     document.querySelector('#play-no-jagex-account').addEventListener('click', async () => {
         const proxy = getProxyValues()
         const selectedVersion = document.getElementById('client').value
-        const version = selectedVersion.match(/-(\d+\.\d+\.\d+)\.jar/)[1];
-        await window.electron.playNoJagexAccount(version, proxy)
+        const regex = selectedVersion.match(/-(\d+\.\d+\.\d+)\.jar/);
+        if (regex != null) {
+            const version = regex.match(/-(\d+\.\d+\.\d+)\.jar/)[1];
+            await window.electron.playNoJagexAccount(version, proxy)
+        } else {
+            await window.electron.playNoJagexAccount(selectedVersion, proxy)
+        }
     })
 }
 
