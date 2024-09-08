@@ -36,12 +36,14 @@ async function openClient(version) {
     const selectedAccount = accounts?.find(x => x.accountId === selectedValue)
     if (selectedAccount) {
         await window.electron.overwriteCredentialProperties(selectedAccount)
-        const regex = selectedValue.match(/-(\d+\.\d+\.\d+)\.jar/);
+        const selectedVersion = document.getElementById('client').value
+        const regex = selectedVersion.match(/-(\d+\.\d+\.\d+)\.jar/);
         if (regex != null) {
+            console.log(regex)
             const version = regex[1];
-            await window.electron.playNoJagexAccount(version, proxy)
+            await window.electron.openClient(version, proxy)
         } else {
-            await window.electron.playNoJagexAccount(selectedValue, proxy)
+            await window.electron.openClient(selectedVersion, proxy)
         }
     } else {
         alert('Account not found. Please restart your client.')
