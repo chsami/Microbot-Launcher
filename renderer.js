@@ -39,7 +39,6 @@ async function openClient(version) {
         const selectedVersion = document.getElementById('client').value
         const regex = selectedVersion.match(/-(\d+\.\d+\.\d+)\.jar/);
         if (regex != null) {
-            console.log(regex)
             const version = regex[1];
             await window.electron.openClient(version, proxy)
         } else {
