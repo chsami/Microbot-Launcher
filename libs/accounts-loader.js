@@ -1,12 +1,8 @@
 const fs = require('fs');
 const os = require('os');
 const path = require("path");
+const {microbotDir} = require("./dir-module");
 
-// Get the user's home directory
-const homeDir = os.homedir();
-
-// Construct the path to the .microbot folder
-const microbotDir = path.join(homeDir, '.microbot');
 const filePath = path.resolve(microbotDir, 'accounts.json');
 
 const readAccountsJson = () => {

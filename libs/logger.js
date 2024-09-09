@@ -2,12 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const {appInsights} = require("./appinsights");
-
-// Get the user's home directory
-const homeDir = os.homedir();
-
-// Construct the path to the .microbot folder
-const microbotDir = path.join(homeDir, '.microbot');
+const {microbotDir} = require("./dir-module");
 
 // Determine the log file path
 const logFilePath =  path.join(microbotDir, 'debug.log');
@@ -30,7 +25,6 @@ function logError(message) {
         fs.writeFileSync(logFilePath, '', 'utf8');
     }
     const logEntry = `${new Date().toISOString()} - ${message}\n`;
-    console.log(message)
     appInsights.defaultClient.trackException({ exception: new Error(message) });
     fs.appendFile(logFilePath, logEntry, (err) => {
         if (err) {

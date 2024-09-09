@@ -1,4 +1,5 @@
 const {app, BrowserWindow} = require('electron');
+const {microbotDir} = require("./libs/dir-module");
 const path = require('path');
 const {ipcMain} = require('electron');
 const fs = require('fs');
@@ -9,8 +10,6 @@ const {readPropertiesFile, writePropertiesFile} = require("./libs/properties");
 const {readAccountsJson, removeAccountsJson, checkFileModification} = require("./libs/accounts-loader");
 const {overwrite} = require("./libs/overwrite-credential-properties");
 const {logMessage, logError} = require("./libs/logger");
-const os = require('os');
-
 
 const url = 'https://microbot-api.azurewebsites.net'
 // const url = 'http://localhost:5029'
@@ -22,18 +21,10 @@ const packageVersion = packageJson.version;
 let splash;
 let mainWindow;
 
-// Get the user's home directory
-const homeDir = os.homedir();
-
-// Construct the path to the .microbot folder
-const microbotDir = path.join(homeDir, '.microbot');
-
 // Ensure the .microbot directory exists
 if (!fs.existsSync(microbotDir)) {
     fs.mkdirSync(microbotDir);
 }
-
-
 
 
 // this should be placed at top of main.js to handle setup events quickly
@@ -56,17 +47,18 @@ function handleSquirrelEvent() {
     const updateDotExe = path.resolve(path.join(rootAtomFolder, 'Update.exe'));
     const exeName = path.basename(process.execPath);
 
-    const spawn = function(command, args) {
+    const spawn = function (command, args) {
         let spawnedProcess;
 
         try {
             spawnedProcess = ChildProcess.spawn(command, args, {detached: true});
-        } catch (error) {}
+        } catch (error) {
+        }
 
         return spawnedProcess;
     };
 
-    const spawnUpdate = function(args) {
+    const spawnUpdate = function (args) {
         return spawn(updateDotExe, args);
     };
 
@@ -109,30 +101,35 @@ function handleSquirrelEvent() {
 
 
 async function downloadFileFromBlobStorage(blobPath, dir, filename) {
+    try {
+        // Construct the URL, including the dir only if it's provided
+        const url = dir ? `${blobPath}/${dir}/${filename}` : `${blobPath}/${filename}`;
 
-// Construct the URL, including the dir only if it's provided
-    const url = dir ? `${blobPath}/${dir}/${filename}` : `${blobPath}/${filename}`;
+        const response = await axios.get(url,
+            {responseType: 'arraybuffer'})
+        // Step 2: Determine the path to save the file
 
-    const response = await axios.get(url,
-        {responseType: 'arraybuffer'})
-    // Step 2: Determine the path to save the file
-
-    // Ensure the directory exists
-    if (dir) {
-        const dirPath = path.join(__dirname, dir);
-        if (!fs.existsSync(dirPath)) {
-            fs.mkdirSync(dirPath, {recursive: true});
+        // Ensure the directory exists
+        if (dir) {
+            const dirPath = path.join(microbotDir, dir);
+            if (!fs.existsSync(dirPath)) {
+                fs.mkdirSync(dirPath, {recursive: true});
+            }
+            const filePath = path.join(dirPath, filename);
+            fs.writeFileSync(filePath, response.data);
+            return filePath
         }
-        const filePath = path.join(dirPath, filename);
+
+        // Step 3: Save the file
+        const filePath = path.join(microbotDir, filename);
         fs.writeFileSync(filePath, response.data);
+
         return filePath
+    } catch (err) {
+        logError(err)
     }
 
-    // Step 3: Save the file
-    const filePath = path.join(__dirname, filename);
-    fs.writeFileSync(filePath, response.data);
-
-    return filePath
+    return ""
 }
 
 async function createWindow() {
@@ -147,9 +144,12 @@ async function createWindow() {
         icon: path.join(__dirname, 'images/microbot_transparent.ico'),
     });
 
+
     const splashPath = await downloadFileFromBlobStorage('https://developmentb464.blob.core.windows.net/microbot/launcher', '', 'splash.html')
 
+
     await splash.loadFile(splashPath ? splashPath : 'splash.html');
+
 
     // Create the main window, but don't show it yet
     mainWindow = new BrowserWindow({
@@ -157,7 +157,7 @@ async function createWindow() {
         height: 800,
         show: false, // Don't show the main window immediately
         title: 'Microbot Launcher',
-        autoHideMenuBar: true,
+        autoHideMenuBar: false,
         icon: path.join(__dirname, 'images/microbot_transparent.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
@@ -166,8 +166,9 @@ async function createWindow() {
         },
     });
 
-    await downloadFileFromBlobStorage('https://developmentb464.blob.core.windows.net/microbot/launcher', 'css','styles.css')
+    await downloadFileFromBlobStorage('https://developmentb464.blob.core.windows.net/microbot/launcher', 'css', 'styles.css')
     const indexHtmlPath = await downloadFileFromBlobStorage('https://developmentb464.blob.core.windows.net/microbot/launcher', '', 'index.html')
+    console.log(indexHtmlPath)
     await mainWindow.loadFile(indexHtmlPath ? indexHtmlPath : 'index.html');
 
     setTimeout(() => {
@@ -338,8 +339,8 @@ ipcMain.handle('read-properties', async () => {
 
 ipcMain.handle('open-launcher', async () => {
     try {
-        const filePath = path.join(microbotDir, 'jcef-bundle');
-        const launcherPath = path.join(microbotDir, 'microbot-launcher.jar');
+        const filePath = '"' + path.join(microbotDir, 'jcef-bundle') + '"';
+        const launcherPath = '"' + path.join(microbotDir, 'microbot-launcher.jar') + '"';
         executeJar('java -Djava.library.path=' + filePath + ' -jar ' + launcherPath)
     } catch (error) {
         logMessage(error.message)
@@ -349,7 +350,7 @@ ipcMain.handle('open-launcher', async () => {
 
 ipcMain.handle('open-client', async (event, version, proxy) => {
     try {
-        let filePath = path.join(microbotDir, 'microbot-' + version + ".jar");
+        let filePath = '"' + path.join(microbotDir, 'microbot-' + version + ".jar") + '"';
         filePath += ' -proxy=' + proxy.proxyIp + ' -proxy-type=' + proxy.proxyType
         executeJar('java -jar ' + filePath)
     } catch (error) {
@@ -428,7 +429,7 @@ ipcMain.handle('check-file-change', async () => {
 
 ipcMain.handle('play-no-jagex-account', async (event, version, proxy) => {
     try {
-        let filePath = path.join(microbotDir, 'microbot-' + version + ".jar");
+        let filePath = '"' + path.join(microbotDir, 'microbot-' + version + ".jar") + '"';
         filePath += ' -clean-jagex-launcher'
         filePath += ' -proxy=' + proxy.proxyIp + ' -proxy-type=' + proxy.proxyType
         executeJar('java -jar ' + filePath)
