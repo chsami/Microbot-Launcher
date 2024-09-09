@@ -38,7 +38,7 @@ async function openClient(version) {
         await window.electron.overwriteCredentialProperties(selectedAccount)
         const selectedVersion = document.getElementById('client').value
         const regex = selectedVersion.match(/-(\d+\.\d+\.\d+)\.jar/);
-        if (regex != null) {
+        if (regex) {
             const version = regex[1];
             await window.electron.openClient(version, proxy)
         } else {
@@ -85,16 +85,16 @@ async function handleJagexAccountLogic(clientVersion) {
 }
 
 window.onerror = function myErrorHandler(errorMsg, url, lineNumber) {
-    alert("Error occured: " + errorMsg);//or any message
+    alert("Error occured: " + errorMsg + " - Version 1.0.5");//or any message
     window.electron.logError(errorMsg)
     return false;
 }
 window.addEventListener("error", function (e) {
     if (e.error) {
-        alert("Error occured: " + e.error.stack);//or any message
+        alert("Error occured: " + e.error.stack + " - Version 1.0.5");//or any message
         window.electron.logError(e.error.stack)
     } else if (e.reason) {
-        alert("Error occured: " + e.reason.stack);//or any message
+        alert("Error occured: " + e.reason.stack + " - Version 1.0.5");//or any message
         window.electron.logError( e.reason.stack)
     }
     return false;
@@ -102,7 +102,7 @@ window.addEventListener("error", function (e) {
 
 window.addEventListener("unhandledrejection", (event) => {
     event.preventDefault(); // This will not print the error in the console });
-    alert("Error occured: " + event.reason.stack);//or any message
+    alert("Error occured: " + event.reason.stack + " - Version 1.0.5");//or any message
     window.electron.logError( event.reason.stack)
 });
 
@@ -247,8 +247,8 @@ function playNoJagexAccount() {
         const proxy = getProxyValues()
         const selectedVersion = document.getElementById('client').value
         const regex = selectedVersion.match(/-(\d+\.\d+\.\d+)\.jar/);
-        if (regex != null) {
-            const version = regex.match(/-(\d+\.\d+\.\d+)\.jar/)[1];
+        if (regex) {
+            const version = regex[1];
             await window.electron.playNoJagexAccount(version, proxy)
         } else {
             await window.electron.playNoJagexAccount(selectedVersion, proxy)
