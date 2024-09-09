@@ -4,6 +4,54 @@ Microbot Launcher for The Microbot Client
 ![image](https://github.com/user-attachments/assets/2c2daaeb-9c48-4e2d-8827-b38d4935d485)
 
 
+## Prerequisites
+Before you begin, ensure you have the following installed on your machine:
+- [Node.js](https://nodejs.org/) (preferably the latest version)
+- [npm](https://www.npmjs.com/) (comes with Node.js)
+- [Electron](https://www.electronjs.org/)
+
+You can install Electron globally with the following command:
+
+```bash
+npm install -g electron
+```
+
+## Installation
+
+1) clone the repository
+
+```bash
+git clone https://github.com/your-repo/microbot-launcher.git
+```
+
+2) navigate to the project directory
+
+```bash
+cd microbot-launcher
+```
+
+3) install the dependencies
+
+```bash
+npm install
+```
+
+## Running the project
+
+```bash
+npm run dev
+```
+
+## Package for Windows
+For 64-bit
+```bash
+npm run build:x64
+```
+For 32-bit
+```bash
+npm run build:ia32
+```
+
 ## Steps to Contribute:
 1. Fork the repository
 2.  Create a new branch (git checkout -b feature-branch)
