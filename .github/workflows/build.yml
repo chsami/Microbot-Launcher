@@ -36,4 +36,4 @@ jobs:
           prerelease: false
           title: "Release 1.0.7"
           files: |
-             D:/a/Microbot-Launcher/Microbot-Launcher/out/make/*
+             D:/a/Microbot-Launcher/Microbot-Launcher/out/squirrel.windows/microbot-launcher-x64-1.0.7 Setup.exe
