@@ -10,6 +10,8 @@ const {readPropertiesFile, writePropertiesFile} = require("./libs/properties");
 const {readAccountsJson, removeAccountsJson, checkFileModification} = require("./libs/accounts-loader");
 const {overwrite} = require("./libs/overwrite-credential-properties");
 const {logMessage, logError} = require("./libs/logger");
+const { updateElectronApp, UpdateSourceType } = require('update-electron-app')
+
 
 const url = 'https://microbot-api.azurewebsites.net'
 // const url = 'http://localhost:5029'
@@ -25,6 +27,8 @@ let mainWindow;
 if (!fs.existsSync(microbotDir)) {
     fs.mkdirSync(microbotDir);
 }
+
+updateElectronApp()
 
 
 // this should be placed at top of main.js to handle setup events quickly
@@ -157,7 +161,7 @@ async function createWindow() {
         height: 800,
         show: false, // Don't show the main window immediately
         title: 'Microbot Launcher',
-        autoHideMenuBar: false,
+        autoHideMenuBar: true,
         icon: path.join(__dirname, 'images/microbot_transparent.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),

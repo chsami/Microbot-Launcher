@@ -1,6 +1,6 @@
 {
   "name": "microbot-launcher",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Launcher for the microbot client",
   "main": "main.js",
   "scripts": {
@@ -23,14 +23,14 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.4.0",
     "@electron-forge/plugin-fuses": "^7.4.0",
     "@electron/fuses": "^1.8.0",
-    "electron": "^31.1.0",
-    "electron-packager": "^17.1.2"
+    "electron": "^33.2.0"
   },
   "dependencies": {
     "adm-zip": "^0.5.15",
     "applicationinsights": "^2.9.6",
     "axios": "^1.7.2",
-    "electron-squirrel-startup": "^1.0.1"
+    "electron-squirrel-startup": "^1.0.1",
+    "update-electron-app": "^3.0.0"
   },
   "build": {
     "appId": "MicrobotLauncher",
@@ -39,7 +39,7 @@
       "buildResources": "images"
     },
     "win": {
-      "target": "nsis"
+      "target": "squirrel"
     },
     "mac": {
       "target": "dmg"
