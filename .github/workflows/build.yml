@@ -19,11 +19,11 @@ jobs:
         with:
           node-version: 18.17.1
 
-      - name: Build project
-        run: npm run build:x64
-
       - name: Install dependencies
         run: npm install
+
+      - name: Build project
+        run: npm run build:x64
 
       - name: Create GitHub Release
         id: create_release
