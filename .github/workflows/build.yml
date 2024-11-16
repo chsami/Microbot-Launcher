@@ -36,4 +36,4 @@ jobs:
           prerelease: false
           title: "Release 1.0.7"
           files: |
-            /home/runner/work/microbot-launcher/out/make
+            /home/runner/work/microbot-launcher/out/make/*
