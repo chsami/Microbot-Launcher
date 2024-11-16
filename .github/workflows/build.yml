@@ -28,23 +28,12 @@ jobs:
       - name: Build project
         run: npm run build:x64
 
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
+      - name: Create Release
+        uses: "marvinpinto/action-automatic-releases@latest"
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "1.0.7"
           prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Release Assets
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: build/*
-          asset_name: ${{ github.ref_name }}-build.zip
-          tag: ${{ github.ref }}
-          overwrite: true
-          file_glob: true
+          title: "Release 1.0.7"
+          files: |
+            /home/runner/work/microbot-launcher/out/make
