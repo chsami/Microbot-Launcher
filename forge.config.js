@@ -5,8 +5,22 @@ const {join} = require("node:path");
 module.exports = {
   packagerConfig: {
     asar: true,
+    name: `${process.env.npm_package_name}-x64`, // Include x64 in the .exe name
+    arch: 'x64',
+    platform: 'win32',
+    overwrite: true, // Overwrite existing files if necessary
     icon: join(__dirname, 'images', 'microbot_transparent')
   },
+/*
+    packagerConfig: {
+    asar: true,
+    name: `${process.env.npm_package_name}-x32`, // Include x64 in the .exe name
+    arch: 'ia32',
+    platform: 'win32',
+    overwrite: true, // Overwrite existing files if necessary
+    icon: join(__dirname, 'images', 'microbot_transparent')
+  },*/
+
   rebuildConfig: {},
   makers: [
     {

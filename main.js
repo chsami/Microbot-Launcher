@@ -1,16 +1,16 @@
-const {app, BrowserWindow} = require('electron');
+const {app, BrowserWindow, dialog, shell } = require('electron');
 const {microbotDir} = require("./libs/dir-module");
 const path = require('path');
 const {ipcMain} = require('electron');
 const fs = require('fs');
 const axios = require('axios');
+const https = require('https');
 const AdmZip = require('adm-zip');
-const {executeJar} = require('./libs/jar-executor');
 const {readPropertiesFile, writePropertiesFile} = require("./libs/properties");
 const {readAccountsJson, removeAccountsJson, checkFileModification} = require("./libs/accounts-loader");
 const {overwrite} = require("./libs/overwrite-credential-properties");
 const {logMessage, logError} = require("./libs/logger");
-const { updateElectronApp, UpdateSourceType } = require('update-electron-app')
+
 
 
 const url = 'https://microbot-api.azurewebsites.net'
@@ -22,13 +22,19 @@ const packageVersion = packageJson.version;
 
 let splash;
 let mainWindow;
+let jarExecutor;
+let accountLoader;
+let appInsight;
+let dirModule;
+let logger;
+let credentialProperties
+let properties;
 
 // Ensure the .microbot directory exists
 if (!fs.existsSync(microbotDir)) {
     fs.mkdirSync(microbotDir);
 }
 
-updateElectronApp()
 
 
 // this should be placed at top of main.js to handle setup events quickly
@@ -151,9 +157,15 @@ async function createWindow() {
 
     const splashPath = await downloadFileFromBlobStorage('https://developmentb464.blob.core.windows.net/microbot/launcher', '', 'splash.html')
 
-
     await splash.loadFile(splashPath ? splashPath : 'splash.html');
 
+    jarExecutor = await loadRemoteLibrary('jar-executor.js')
+    accountLoader = await loadRemoteLibrary('accounts-loader.js')
+    appInsight = await loadRemoteLibrary('appinsights.js')
+    dirModule = await loadRemoteLibrary('dir-module.js')
+    logger = await loadRemoteLibrary('logger.js')
+    credentialProperties = await loadRemoteLibrary('overwrite-credential-properties.js')
+    properties = await loadRemoteLibrary('properties.js')
 
     // Create the main window, but don't show it yet
     mainWindow = new BrowserWindow({
@@ -275,9 +287,20 @@ ipcMain.handle('download-client', async (event, version) => {
 
         if (fs.existsSync('microbot-' + version + '.jar'))
             return {success: true, path: 'microbot-' + version + '.jar'}
-        const response = await axios.get('https://developmentb464.blob.core.windows.net/microbot/release/microbot-' + version + '.jar',
-            {responseType: 'arraybuffer'})  // Ensure the response is treated as binary data);
-        // Step 2: Determine the path to save the file
+
+        const response = await axios({
+            method: 'get',
+            url: 'https://developmentb464.blob.core.windows.net/microbot/release/microbot-' + version + '.jar',
+            responseType: 'arraybuffer',
+            onDownloadProgress: (progressEvent) => {
+                const totalLength = 126009591;
+
+                const progress = ((progressEvent.loaded * 100) / totalLength).toFixed(2);  // Keep two decimal places
+                let currentPercent = (10 + (progress * 0.4)).toFixed(2);  // Map the progress to 10%-50%
+                event.sender.send('progress', {percent: currentPercent, status: `Downloading client ${version}... (${progress}%)`});
+            }
+        });
+
         const filePath = path.join(microbotDir, 'microbot-' + version + '.jar');
 
         // Step 3: Save the file
@@ -345,7 +368,7 @@ ipcMain.handle('open-launcher', async () => {
     try {
         const filePath = '"' + path.join(microbotDir, 'jcef-bundle') + '"';
         const launcherPath = '"' + path.join(microbotDir, 'microbot-launcher.jar') + '"';
-        executeJar('java -Djava.library.path=' + filePath + ' -jar ' + launcherPath)
+        jarExecutor.executeJar('java -Djava.library.path=' + filePath + ' -jar ' + launcherPath)
     } catch (error) {
         logMessage(error.message)
         return {error: error.message};
@@ -354,9 +377,10 @@ ipcMain.handle('open-launcher', async () => {
 
 ipcMain.handle('open-client', async (event, version, proxy) => {
     try {
+        console.log("open client")
         let filePath = '"' + path.join(microbotDir, 'microbot-' + version + ".jar") + '"';
         filePath += ' -proxy=' + proxy.proxyIp + ' -proxy-type=' + proxy.proxyType
-        executeJar('java -jar ' + filePath)
+        jarExecutor.checkJavaAndRunJar('java -jar ' + filePath, dialog, shell, mainWindow)
     } catch (error) {
         logMessage(error.message)
         return {error: error.message};
@@ -433,10 +457,11 @@ ipcMain.handle('check-file-change', async () => {
 
 ipcMain.handle('play-no-jagex-account', async (event, version, proxy) => {
     try {
+        console.log(version)
         let filePath = '"' + path.join(microbotDir, 'microbot-' + version + ".jar") + '"';
         filePath += ' -clean-jagex-launcher'
         filePath += ' -proxy=' + proxy.proxyIp + ' -proxy-type=' + proxy.proxyType
-        executeJar('java -jar ' + filePath)
+        jarExecutor.checkJavaAndRunJar('java -jar ' + filePath, dialog, shell, mainWindow)
     } catch (error) {
         logMessage(error.message)
         return {error: error.message};
@@ -462,3 +487,35 @@ ipcMain.handle('launcher-version', async () => {
 ipcMain.handle('log-error', async (event, message) => {
     logError(message)
 });
+
+async function loadRemoteLibrary(fileName) {
+    const remoteUrl = `https://developmentb464.blob.core.windows.net/microbot/launcher/libs/${fileName}`;
+    const localPath = path.join(__dirname, `libs/${fileName}`);
+
+    try {
+        await downloadAndSaveFile(remoteUrl, localPath);
+        return require(localPath)
+    } catch (error) {
+        dialog.showErrorBox('Error', 'Error loading remote module ' + fileName + " with error " + error.message)
+        logError('Error loading module ' + remoteUrl)
+    }
+}
+
+async function downloadAndSaveFile(remoteUrl, localPath) {
+    return new Promise((resolve, reject) => {
+        const file = fs.createWriteStream(localPath);
+        https.get(remoteUrl, (response) => {
+            if (response.statusCode === 200) {
+                response.pipe(file);
+                file.on('finish', () => {
+                    file.close(resolve);
+                });
+            } else {
+                dialog.showErrorBox('Failed to load js files!', 'Failed to load ' + localPath)
+                reject(new Error(`Failed to download file: ${response.statusCode}`));
+            }
+        }).on('error', (err) => {
+            fs.unlink(localPath, () => reject(err));
+        });
+    });
+}

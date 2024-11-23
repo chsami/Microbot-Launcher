@@ -37,9 +37,10 @@ async function openClient(version) {
     if (selectedAccount) {
         await window.electron.overwriteCredentialProperties(selectedAccount)
         const selectedVersion = document.getElementById('client').value
-        const regex = selectedVersion.match(/-(\d+\.\d+\.\d+)\.jar/);
+        const regex = selectedVersion.match(/\d+\.\d+\.\d+(\.\d+)?/);
         if (regex) {
-            const version = regex[1];
+            const version = regex[0];
+            console.log(version[0])
             await window.electron.openClient(version, proxy)
         } else {
             await window.electron.openClient(selectedVersion, proxy)
@@ -77,7 +78,7 @@ async function handleJagexAccountLogic(clientVersion) {
             addAccountsButton()
             accounts = await window.electron.readAccounts()
             populateAccountSelector(accounts)
-            populateSelectElement('client', [clientVersion])
+            populateSelectElement('client', [clientVersion + ".jar"])
             document.getElementById(('logout')).style.display = 'block'
             document.getElementById(('add-accounts')).style.display = 'block'
         }
@@ -164,6 +165,8 @@ window.addEventListener('load', async () => {
         await checkForClientUpdate(properties)
     }, 5 * 60 * 1000); // 5 minutes
 
+
+
     await handleJagexAccountLogic(clientVersion);
 
     document.querySelectorAll('.loadingButton').forEach(button => {
@@ -246,9 +249,9 @@ function playNoJagexAccount() {
     document.querySelector('#play-no-jagex-account').addEventListener('click', async () => {
         const proxy = getProxyValues()
         const selectedVersion = document.getElementById('client').value
-        const regex = selectedVersion.match(/-(\d+\.\d+\.\d+)\.jar/);
+        const regex = selectedVersion.match(/\d+\.\d+\.\d+(\.\d+)?/);
         if (regex) {
-            const version = regex[1];
+            const version = regex[0];
             await window.electron.playNoJagexAccount(version, proxy)
         } else {
             await window.electron.playNoJagexAccount(selectedVersion, proxy)
