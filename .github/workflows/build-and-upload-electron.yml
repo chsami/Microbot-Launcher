@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
       - name: Checkout repo
@@ -23,9 +23,6 @@ jobs:
 
       - name: Build Electron app (x64)
         run: npm run build:x64
-
-      - name: Build Electron app (ia32)
-        run: npm run build:ia32
 
       - name: Upload EXEs to Hetzner
         uses: appleboy/scp-action@v0.1.7
