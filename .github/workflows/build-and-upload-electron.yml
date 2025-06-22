@@ -24,12 +24,22 @@ jobs:
       - name: Build Electron app (x64)
         run: npm run build:x64
 
-      - name: Upload via curl SFTP
+      - name: Install WinSCP
         run: |
-          $files = Get-ChildItem "out/make/squirrel.windows/x64/*.exe"
-          foreach ($file in $files) {
-              curl --insecure -T "$($file.FullName)" `
-                   --key "${{ secrets.PROD_SSH_KEY }}" `
-                   "sftp://root@138.201.81.246/var/www/files/releases/microbot-launcher/$($file.Name)"
-          }
+          Invoke-WebRequest -Uri "https://winscp.net/download/WinSCP-5.21.8-Portable.zip" -OutFile "winscp.zip"
+          Expand-Archive -Path "winscp.zip" -DestinationPath "winscp"
+        shell: powershell
+
+      - name: Upload files with WinSCP
+        run: |
+          $winscpPath = ".\winscp\WinSCP.com"
+          
+          # Create WinSCP script
+          @"
+            open sftp://root@138.201.81.246 -privatekey="${{ secrets.PROD_SSH_KEY }}"
+            put out/make/squirrel.windows/x64/*.exe /var/www/files/releases/microbot-launcher/
+            exit
+          "@ | Out-File -FilePath "upload.txt" -Encoding utf8
+          
+          & $winscpPath /script="upload.txt"
         shell: powershell
