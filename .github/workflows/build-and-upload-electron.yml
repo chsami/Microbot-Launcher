@@ -29,7 +29,7 @@ jobs:
           $files = Get-ChildItem "out/make/squirrel.windows/x64/*.exe"
           foreach ($file in $files) {
               curl --insecure -T "$($file.FullName)" `
-                   --key "${{ secrets.SSH_PRIVATE_KEY_PATH }}" `
+                   --key "${{ secrets.PROD_SSH_KEY }}" `
                    "sftp://root@138.201.81.246/var/www/files/releases/microbot-launcher/$($file.Name)"
           }
         shell: powershell
