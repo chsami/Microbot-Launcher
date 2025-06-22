@@ -32,8 +32,8 @@ jobs:
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "1.0.7"
+          automatic_release_tag: "1.1.1"
           prerelease: false
-          title: "Release 1.0.7"
+          title: "Release 1.1.1"
           files: |
-             D:/a/Microbot-Launcher/Microbot-Launcher/out/squirrel.windows/microbot-launcher-x64-1.0.7 Setup.exe
+             D:/a/Microbot-Launcher/Microbot-Launcher/out/squirrel.windows/microbot-launcher-x64-1.1.1 Setup.exe
