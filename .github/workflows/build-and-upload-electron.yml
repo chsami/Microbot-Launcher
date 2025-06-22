@@ -24,19 +24,12 @@ jobs:
       - name: Build Electron app (x64)
         run: npm run build:x64
 
-      - name: Setup SSH key
-        run: |
-          $keyPath = Join-Path $env:RUNNER_TEMP "id_rsa"
-          [System.IO.File]::WriteAllText($keyPath, "${{ secrets.SSH_PRIVATE_KEY }}")
-          icacls $keyPath /inheritance:r /grant "${env:USERNAME}:(F)"
-        shell: powershell
-
-      - name: Upload files
-        run: |
-          $ErrorActionPreference = "Stop"
-          scp -i "${env:PROD_SSH_KEY_PATH}" -o StrictHostKeyChecking=no `
-              out/make/squirrel.windows/x64/*.exe `
-              root@138.201.81.246:/var/www/files/releases/microbot-launcher/
-        shell: powershell
-        env:
-          PROD_SSH_KEY_PATH: D:\a\_temp\id_rsa
+      - name: SFTP Deploy
+        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+        with:
+          server: 138.201.81.246
+          username: root
+          ssh_private_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          local_path: './out/make/squirrel.windows/x64/'
+          remote_path: '/var/www/files/releases/microbot-launcher/'
+          sftp_only: true
