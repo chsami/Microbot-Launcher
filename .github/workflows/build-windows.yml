@@ -1,0 +1,31 @@
+# .github/workflows/build-windows.yml
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-win:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows .exe
+        run: npm run build:x64
+
+      - name: Upload EXE as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: microbot-launcher-exe
+          path: out/make/squirrel.windows/x64/*.exe
