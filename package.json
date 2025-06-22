@@ -9,8 +9,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "package-windows": "electron-packager . MicrobotLauncher --platform=win32 --arch=x64 --out=dist1",
     "package": "electron-forge package",
-    "build:x64": "electron-forge make --arch=x64",
-    "build:ia32": "electron-forge make --arch=ia32"
+    "build:x64": "electron-forge package --arch=x64 && electron-forge make --arch=x64",
+    "build:ia32": "electron-forge package --arch=ia32 && electron-forge make --arch=ia32"
   },
   "config": {
     "forge": {
