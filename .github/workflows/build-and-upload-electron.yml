@@ -24,12 +24,19 @@ jobs:
       - name: Build Electron app (x64)
         run: npm run build:x64
 
+      - name: Save SSH key to file
+        shell: pwsh
+        run: |
+          $keyPath = "$env:RUNNER_TEMP\id_rsa"
+          Set-Content -Path $keyPath -Value "${{ secrets.PROD_SSH_KEY }}" -Force
+          & icacls $keyPath /inheritance:r /grant:r "$env:USERNAME:R"
+
       - name: Upload EXEs to Hetzner
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.PROD_HOST }}
-          username: root
-          key: ${{ secrets.PROD_SSH_KEY }}
-          source: out/**/*.exe
-          target: /var/www/files/releases/microbot-launcher/
-          strip_components: 1
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          scp -i "${env:PROD_SSH_KEY_PATH}" -o StrictHostKeyChecking=no `
+            out/make/squirrel.windows/x64/*.exe `
+            root@${{ secrets.PROD_HOST }}:/var/www/files/releases/microbot-launcher/
+        env:
+          PROD_SSH_KEY_PATH: ${{ runner.temp }}\id_rsa
