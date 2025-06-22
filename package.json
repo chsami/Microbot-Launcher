@@ -12,6 +12,31 @@
     "build:x64": "electron-forge make --arch=x64",
     "build:ia32": "electron-forge make --arch=ia32"
   },
+  "config": {
+    "forge": {
+      "packagerConfig": {
+        "executableName": "microbot-launcher"
+      },
+      "makers": [
+        {
+          "name": "@electron-forge/maker-squirrel",
+          "platforms": ["win32"]
+        },
+        {
+          "name": "@electron-forge/maker-zip",
+          "platforms": ["win32"]
+        },
+        {
+          "name": "@electron-forge/maker-deb",
+          "platforms": ["linux"]
+        },
+        {
+          "name": "@electron-forge/maker-rpm",
+          "platforms": ["linux"]
+        }
+      ]
+    }
+  },
   "author": "chsami",
   "license": "ISC",
   "devDependencies": {
