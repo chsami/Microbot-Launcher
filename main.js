@@ -13,7 +13,7 @@ const {logMessage, logError} = require("./libs/logger");
 
 
 
-const url = 'https://microbot-api.azurewebsites.net'
+const url = 'https://microbot.cloud'
 // const url = 'http://localhost:5029'
 
 const packageJsonPath = path.join(__dirname, 'package.json');
