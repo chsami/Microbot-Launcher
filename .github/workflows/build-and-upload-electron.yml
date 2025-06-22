@@ -24,22 +24,24 @@ jobs:
       - name: Build Electron app (x64)
         run: npm run build:x64
 
-      - name: Install WinSCP
+      - name: Download WinSCP (alternative version)
         run: |
-          Invoke-WebRequest -Uri "https://winscp.net/download/WinSCP-5.21.8-Portable.zip" -OutFile "winscp.zip"
-          Expand-Archive -Path "winscp.zip" -DestinationPath "winscp"
-        shell: powershell
-
-      - name: Upload files with WinSCP
-        run: |
-          $winscpPath = ".\winscp\WinSCP.com"
+          # Try a different version
+          try {
+              Invoke-WebRequest -Uri "https://sourceforge.net/projects/winscp/files/WinSCP/5.21.8/WinSCP-5.21.8-Portable.zip/download" -OutFile "winscp.zip" -UseBasicParsing
+          } catch {
+              # Fallback to direct GitHub mirror or chocolatey
+              Write-Host "Trying alternative download..."
+              Invoke-WebRequest -Uri "https://github.com/winscp/winscp/releases/download/v5.21.8/WinSCP-5.21.8-Portable.zip" -OutFile "winscp.zip" -UseBasicParsing
+          }
           
-          # Create WinSCP script
-          @"
-            open sftp://root@138.201.81.246 -privatekey="${{ secrets.PROD_SSH_KEY }}"
-            put out/make/squirrel.windows/x64/*.exe /var/www/files/releases/microbot-launcher/
-            exit
-          "@ | Out-File -FilePath "upload.txt" -Encoding utf8
+          # Verify file size before extracting
+          $fileSize = (Get-Item "winscp.zip").Length
+          Write-Host "Downloaded file size: $fileSize bytes"
           
-          & $winscpPath /script="upload.txt"
+          if ($fileSize -lt 1000000) {  # Less than 1MB is suspicious
+              throw "Downloaded file seems too small, possibly corrupted"
+          }
+          
+          Expand-Archive -Path "winscp.zip" -DestinationPath "winscp" -Force
         shell: powershell
