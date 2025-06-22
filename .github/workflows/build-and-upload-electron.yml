@@ -31,12 +31,12 @@ jobs:
           icacls $keyPath /inheritance:r /grant "${env:USERNAME}:(F)"
         shell: powershell
 
-      - name: Upload EXEs to Hetzner
-        shell: pwsh
+      - name: Upload files
         run: |
           $ErrorActionPreference = "Stop"
           scp -i "${env:PROD_SSH_KEY_PATH}" -o StrictHostKeyChecking=no `
-            out/make/squirrel.windows/x64/*.exe `
-            root@${{ secrets.PROD_HOST }}:/var/www/files/releases/microbot-launcher/
+              out/make/squirrel.windows/x64/*.exe `
+              root@138.201.81.246:/var/www/files/releases/microbot-launcher/
+        shell: powershell
         env:
-          PROD_SSH_KEY_PATH: ${{ runner.temp }}\id_rsa
+          PROD_SSH_KEY_PATH: D:\a\_temp\id_rsa
