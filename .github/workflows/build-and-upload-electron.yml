@@ -24,12 +24,12 @@ jobs:
       - name: Build Electron app (x64)
         run: npm run build:x64
 
-      - name: Save SSH key to file (Windows)
-        shell: pwsh
+      - name: Setup SSH key
         run: |
           $keyPath = Join-Path $env:RUNNER_TEMP "id_rsa"
-          [System.IO.File]::WriteAllText($keyPath, "${{ secrets.PROD_SSH_KEY }}")
-          icacls $keyPath /inheritance:r /grant:r "$env:USERNAME:R"
+          [System.IO.File]::WriteAllText($keyPath, "${{ secrets.SSH_PRIVATE_KEY }}")
+          icacls $keyPath /inheritance:r /grant "${env:USERNAME}:(F)"
+        shell: powershell
 
       - name: Upload EXEs to Hetzner
         shell: pwsh
