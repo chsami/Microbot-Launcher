@@ -1,4 +1,3 @@
-# .github/workflows/upload-to-hetzner.yml
 name: Upload EXE to Hetzner
 
 on:
@@ -14,9 +13,10 @@ jobs:
 
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: microbot-launcher-exe
+          path: ./artifact
 
       - name: Upload to Hetzner
         env:
@@ -25,5 +25,5 @@ jobs:
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H your.hetzner.server >> ~/.ssh/known_hosts
-          scp *.exe root@138.201.81.246:/var/www/files/releases/microbot-launcher
+          ssh-keyscan -H 138.201.81.246 >> ~/.ssh/known_hosts
+          scp ./artifact/*.exe root@138.201.81.246:/var/www/files/releases/microbot-launcher
