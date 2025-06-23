@@ -6,11 +6,13 @@ const {microbotDir} = require("./dir-module");
 // Determine the log file path
 const logFilePath =  path.join(microbotDir, 'debug.log');
 
+// Ensure log file exists once at startup
+if (!fs.existsSync(logFilePath)) {
+    fs.writeFileSync(logFilePath, '', 'utf8');
+}
+
 // Function to log messages to the file
 function logMessage(message) {
-    if (!fs.existsSync(logFilePath)) {
-        fs.writeFileSync(logFilePath, '', 'utf8');
-    }
     const logEntry = `${new Date().toISOString()} - ${message}\n`;
     fs.appendFile(logFilePath, logEntry, (err) => {
         if (err) {
@@ -19,9 +21,6 @@ function logMessage(message) {
     });
 }
 function logError(message) {
-    if (!fs.existsSync(logFilePath)) {
-        fs.writeFileSync(logFilePath, '', 'utf8');
-    }
     const logEntry = `${new Date().toISOString()} - ${message}\n`;
     fs.appendFile(logFilePath, logEntry, (err) => {
         if (err) {

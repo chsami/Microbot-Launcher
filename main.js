@@ -1,4 +1,4 @@
-const {app, BrowserWindow, dialog, shell } = require('electron');
+const {app, BrowserWindow, dialog, shell} = require('electron');
 const {microbotDir} = require("./libs/dir-module");
 const path = require('path');
 const {ipcMain} = require('electron');
@@ -12,11 +12,8 @@ const {overwrite} = require("./libs/overwrite-credential-properties");
 const {logMessage, logError} = require("./libs/logger");
 
 
-
 const url = 'https:/microbot.cloud'
 const filestorage = 'https://files.microbot.cloud'
-
-// const url = 'http://localhost:5029'
 
 const packageJsonPath = path.join(__dirname, 'package.json');
 const packageJson = require(packageJsonPath);
@@ -35,7 +32,6 @@ let properties;
 if (!fs.existsSync(microbotDir)) {
     fs.mkdirSync(microbotDir);
 }
-
 
 
 // this should be placed at top of main.js to handle setup events quickly
@@ -297,7 +293,10 @@ ipcMain.handle('download-client', async (event, version) => {
 
                 const progress = ((progressEvent.loaded * 100) / totalLength).toFixed(2);  // Keep two decimal places
                 let currentPercent = (10 + (progress * 0.4)).toFixed(2);  // Map the progress to 10%-50%
-                event.sender.send('progress', {percent: currentPercent, status: `Downloading client ${version}... (${progress}%)`});
+                event.sender.send('progress', {
+                    percent: currentPercent,
+                    status: `Downloading client ${version}... (${progress}%)`
+                });
             }
         });
 
@@ -366,10 +365,15 @@ ipcMain.handle('read-properties', async () => {
 
 ipcMain.handle('open-launcher', async () => {
     try {
-        const filePath = '"' + path.join(microbotDir, 'jcef-bundle') + '"';
-        const launcherPath = '"' + path.join(microbotDir, 'microbot-launcher.jar') + '"';
+        const filePath = path.join(microbotDir, 'jcef-bundle');
+        const launcherPath = path.join(microbotDir, 'microbot-launcher.jar');
+
         jarExecutor.executeJar(
-            ['-Djava.library.path=' + filePath, '-jar', launcherPath],
+            [
+                `-Djava.library.path=${filePath}`,
+                '-jar',
+                launcherPath
+            ],
             dialog
         );
     } catch (error) {
@@ -380,11 +384,17 @@ ipcMain.handle('open-launcher', async () => {
 
 ipcMain.handle('open-client', async (event, version, proxy) => {
     try {
-        console.log("open client")
-        let filePath = '"' + path.join(microbotDir, 'microbot-' + version + ".jar") + '"';
-        filePath += ' -proxy=' + proxy.proxyIp + ' -proxy-type=' + proxy.proxyType
+        const jarPath = path.join(microbotDir, 'microbot-' + version + ".jar");
+
+        const commandArgs = [
+            '-jar',
+            jarPath,
+            '-proxy=' + proxy.proxyIp,
+            '-proxy-type=' + proxy.proxyType
+        ];
+
         jarExecutor.checkJavaAndRunJar(
-            ['-jar', filePath],
+            commandArgs,
             dialog,
             shell,
             mainWindow
@@ -465,11 +475,19 @@ ipcMain.handle('check-file-change', async () => {
 
 ipcMain.handle('play-no-jagex-account', async (event, version, proxy) => {
     try {
-        console.log(version)
-        let filePath = '"' + path.join(microbotDir, 'microbot-' + version + ".jar") + '"';
-        filePath += ' -clean-jagex-launcher'
-        filePath += ' -proxy=' + proxy.proxyIp + ' -proxy-type=' + proxy.proxyType
-        jarExecutor.checkJavaAndRunJar('java -jar ' + filePath, dialog, shell, mainWindow)
+        const jarPath = path.join(microbotDir, 'microbot-' + version + "");
+        jarExecutor.checkJavaAndRunJar(
+            [
+                '-jar',
+                jarPath,
+                '-clean-jagex-launcher',
+                '-proxy=' + proxy.proxyIp,
+                '-proxy-type=' + proxy.proxyType
+            ],
+            dialog,
+            shell,
+            mainWindow
+        );
     } catch (error) {
         logMessage(error.message)
         return {error: error.message};

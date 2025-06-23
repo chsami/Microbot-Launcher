@@ -1,13 +1,13 @@
-const { exec } = require('child_process');
-const {logMessage} = require("./logger");
+const { spawn } = require('child_process');
+const { logMessage } = require('./logger');
 
 // Check Java and run the JAR
-function checkJavaAndRunJar(command, dialog, shell, mainWindow) {
-    logMessage(command)
+function checkJavaAndRunJar(commandArgs, dialog, shell, mainWindow) {
+    logMessage(`java ${commandArgs.join(' ')}`);
     isJavaInstalled((isInstalled, error) => {
         if (isInstalled) {
             console.log('Java is installed, running the JAR...');
-            executeJar(command, dialog);
+            executeJar(commandArgs, dialog);
         } else {
             dialog.showMessageBox(mainWindow, {
                 type: 'error',
@@ -16,7 +16,6 @@ function checkJavaAndRunJar(command, dialog, shell, mainWindow) {
                 buttons: ['Yes, Download JDK', 'Cancel']
             }).then((result) => {
                 if (result.response === 0) {
-                    // Open JDK download page in the default browser
                     shell.openExternal('https://www.oracle.com/java/technologies/downloads/');
                 } else {
                     console.log('User chose not to download Java.');
@@ -27,34 +26,50 @@ function checkJavaAndRunJar(command, dialog, shell, mainWindow) {
 }
 
 function isJavaInstalled(callback) {
-    exec('java -version', (error, stdout, stderr) => {
-        console.log(stderr, stderr)
-        if (error) {
-            callback(false, stderr);
-        } else {
-            callback(true);
-        }
+    const javaProcess = spawn('java', ['-version']);
+
+    let stderrData = '';
+
+    javaProcess.stderr.on('data', (data) => {
+        stderrData += data.toString();
+    });
+
+    javaProcess.on('error', (err) => {
+        callback(false, err.message);
+    });
+
+    javaProcess.on('close', (code) => {
+        callback(code === 0, stderrData);
     });
 }
 
-function executeJar(command, dialog) {
-    // Execute the JAR file
-    logMessage(command)
-    exec(command, (error, stdout, stderr) => {
-        try {
-            if (error) {
-                logMessage(error.message)
-                if (dialog) {
-                    dialog.showErrorBox('Error running jar!', error.message)
-                }
-            }
-        } catch(exception) {
-            logMessage(exception?.message)
-        }
+function executeJar(commandArgs, dialog) {
+    logMessage(`java ${commandArgs.join(' ')}`);
 
+    const jarProcess = spawn('java', commandArgs);
+
+    jarProcess.stdout.on('data', (data) => {
+        logMessage(`[stdout] ${data}`);
+    });
+
+    jarProcess.stderr.on('data', (data) => {
+        logMessage(`[stderr] ${data}`);
+        if (dialog) {
+            dialog.showErrorBox('Error running jar!', data);
+        }
+    });
+
+    jarProcess.on('error', (err) => {
+        logMessage(`[error] ${err.message}`);
+        if (dialog) {
+            dialog.showErrorBox('Error running jar!', err.message);
+        }
+    });
+
+    jarProcess.on('close', (code) => {
+        logMessage(`JAR exited with code ${code}`);
     });
 }
-
 
 module.exports = {
     checkJavaAndRunJar,
