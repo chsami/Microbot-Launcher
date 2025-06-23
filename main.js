@@ -475,7 +475,7 @@ ipcMain.handle('check-file-change', async () => {
 
 ipcMain.handle('play-no-jagex-account', async (event, version, proxy) => {
     try {
-        const jarPath = path.join(microbotDir, 'microbot-' + version + "");
+        const jarPath = path.join(microbotDir, 'microbot-' + version + ".jar");
         jarExecutor.checkJavaAndRunJar(
             [
                 '-jar',
