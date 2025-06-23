@@ -42,4 +42,4 @@ jobs:
           echo "$SSH_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H 138.201.81.246 >> ~/.ssh/known_hosts
-          scp ./artifact/*.exe root@138.201.81.246:/var/www/files/releases/microbot-launcher
+          scp ./artifact/*.exe root@138.201.81.246:/var/www/files/releases/microbot-launcher.exe
