@@ -13,7 +13,9 @@ const {logMessage, logError} = require("./libs/logger");
 
 
 
-const url = 'https://microbot.cloud'
+const url = 'https:/microbot.cloud'
+const filestorage = 'https://files.microbot.cloud'
+
 // const url = 'http://localhost:5029'
 
 const packageJsonPath = path.join(__dirname, 'package.json');
@@ -24,7 +26,6 @@ let splash;
 let mainWindow;
 let jarExecutor;
 let accountLoader;
-let appInsight;
 let dirModule;
 let logger;
 let credentialProperties
@@ -155,13 +156,12 @@ async function createWindow() {
     });
 
 
-    const splashPath = await downloadFileFromBlobStorage('https://developmentb464.blob.core.windows.net/microbot/launcher', '', 'splash.html')
+    const splashPath = await downloadFileFromBlobStorage(filestorage + '/assets/microbot-launcher', '', 'splash.html')
 
     await splash.loadFile(splashPath ? splashPath : 'splash.html');
 
     jarExecutor = await loadRemoteLibrary('jar-executor.js')
     accountLoader = await loadRemoteLibrary('accounts-loader.js')
-    appInsight = await loadRemoteLibrary('appinsights.js')
     dirModule = await loadRemoteLibrary('dir-module.js')
     logger = await loadRemoteLibrary('logger.js')
     credentialProperties = await loadRemoteLibrary('overwrite-credential-properties.js')
@@ -182,9 +182,9 @@ async function createWindow() {
         },
     });
 
-    await downloadFileFromBlobStorage('https://developmentb464.blob.core.windows.net/microbot/launcher', 'css', 'styles.css')
-    const indexHtmlPath = await downloadFileFromBlobStorage('https://developmentb464.blob.core.windows.net/microbot/launcher', '', 'index.html')
-    console.log(indexHtmlPath)
+    await downloadFileFromBlobStorage(filestorage + '/assets/microbot-launcher', 'css', 'styles.css')
+    const indexHtmlPath = await downloadFileFromBlobStorage(filestorage + '/assets/microbot-launcher', '', 'index.html')
+
     await mainWindow.loadFile(indexHtmlPath ? indexHtmlPath : 'index.html');
 
     setTimeout(() => {
@@ -212,7 +212,7 @@ ipcMain.handle('download-jcef', async (event) => {
 
         const response = await axios({
             method: 'get',
-            url: 'https://developmentb464.blob.core.windows.net/microbot/launcher/jcef-bundle.zip',
+            url: url + '/assets/microbot-launcher/jcef-bundle.zip',
             responseType: 'arraybuffer',
             onDownloadProgress: (progressEvent) => {
                 const totalLength = 126009591;
@@ -258,7 +258,7 @@ ipcMain.handle('download-microbot-launcher', async (event) => {
     try {
         event.sender.send('progress', {percent: 70, status: 'Downloading Microbot Jagex Launcher...'});
 
-        const response = await axios.get('https://developmentb464.blob.core.windows.net/microbot/launcher/microbot-launcher.jar',
+        const response = await axios.get(url + '/assets/microbot-launcher/microbot-launcher.jar',
             {responseType: 'arraybuffer'})  // Ensure the response is treated as binary data);
 
 
@@ -290,7 +290,7 @@ ipcMain.handle('download-client', async (event, version) => {
 
         const response = await axios({
             method: 'get',
-            url: 'https://developmentb464.blob.core.windows.net/microbot/release/microbot-' + version + '.jar',
+            url: url + 'releases/microbot/stable/microbot-' + version + '.jar',
             responseType: 'arraybuffer',
             onDownloadProgress: (progressEvent) => {
                 const totalLength = 126009591;
@@ -368,7 +368,10 @@ ipcMain.handle('open-launcher', async () => {
     try {
         const filePath = '"' + path.join(microbotDir, 'jcef-bundle') + '"';
         const launcherPath = '"' + path.join(microbotDir, 'microbot-launcher.jar') + '"';
-        jarExecutor.executeJar('java -Djava.library.path=' + filePath + ' -jar ' + launcherPath)
+        jarExecutor.executeJar(
+            ['-Djava.library.path=' + filePath, '-jar', launcherPath],
+            dialog
+        );
     } catch (error) {
         logMessage(error.message)
         return {error: error.message};
@@ -380,7 +383,12 @@ ipcMain.handle('open-client', async (event, version, proxy) => {
         console.log("open client")
         let filePath = '"' + path.join(microbotDir, 'microbot-' + version + ".jar") + '"';
         filePath += ' -proxy=' + proxy.proxyIp + ' -proxy-type=' + proxy.proxyType
-        jarExecutor.checkJavaAndRunJar('java -jar ' + filePath, dialog, shell, mainWindow)
+        jarExecutor.checkJavaAndRunJar(
+            ['-jar', filePath],
+            dialog,
+            shell,
+            mainWindow
+        );
     } catch (error) {
         logMessage(error.message)
         return {error: error.message};
@@ -489,7 +497,7 @@ ipcMain.handle('log-error', async (event, message) => {
 });
 
 async function loadRemoteLibrary(fileName) {
-    const remoteUrl = `https://developmentb464.blob.core.windows.net/microbot/launcher/libs/${fileName}`;
+    const remoteUrl = filestorage + `/assets/microbot-launcher/libs/${fileName}`;
     const localPath = path.join(__dirname, `libs/${fileName}`);
 
     try {

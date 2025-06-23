@@ -11,15 +11,6 @@ module.exports = {
     overwrite: true, // Overwrite existing files if necessary
     icon: join(__dirname, 'images', 'microbot_transparent')
   },
-/*
-    packagerConfig: {
-    asar: true,
-    name: `${process.env.npm_package_name}-x32`, // Include x64 in the .exe name
-    arch: 'ia32',
-    platform: 'win32',
-    overwrite: true, // Overwrite existing files if necessary
-    icon: join(__dirname, 'images', 'microbot_transparent')
-  },*/
 
   rebuildConfig: {},
   makers: [
@@ -28,7 +19,7 @@ module.exports = {
       config: {
         name: 'Microbot',
         setupIcon: join(__dirname, 'images', 'microbot_transparent.ico'),
-        iconUrl: 'https://developmentb464.blob.core.windows.net/microbot/installer/microbot_transparent.ico' // Optional: URL for the icon
+        iconUrl: 'https://files.microbot.cloud/assets/microbot-launcher/microbot_transparent.ico' // Optional: URL for the icon
       },
     },
     {
