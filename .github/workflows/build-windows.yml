@@ -17,15 +17,11 @@ jobs:
       - run: npm ci
       - run: npm run build:x64
 
-      - name: Find EXE filename
-        id: exe
-        run: echo "filename=$(basename $(ls out/make/squirrel.windows/x64/*.exe))" >> $GITHUB_OUTPUT
-
       - name: Upload EXE as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.exe.outputs.filename }}
-          path: out/make/squirrel.windows/x64/${{ steps.exe.outputs.filename }}
+          name: microbot-launcher-exe-latest
+          path: out/make/squirrel.windows/x64/*.exe
 
   upload:
     runs-on: ubuntu-latest
