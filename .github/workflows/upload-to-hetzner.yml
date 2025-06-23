@@ -1,0 +1,33 @@
+name: Upload EXE to Hetzner
+
+on:
+  workflow_run:
+    workflows: ["Build Windows EXE"]
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+  
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: microbot-launcher-exe
+          path: ./artifact
+
+      - name: Upload to Hetzner
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H 138.201.81.246 >> ~/.ssh/known_hosts
+          scp ./artifact/*.exe root@138.201.81.246:/var/www/files/releases/microbot-launcher
