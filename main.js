@@ -161,10 +161,6 @@ app.whenReady().then(async () => {
             mainWindow.show();
         }, 1000);
     }
-
-    app.on('activate', async function () {
-        if (BrowserWindow.getAllWindows().length === 0) await createWindow();
-    });
 });
 
 app.on('window-all-closed', function () {
