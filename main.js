@@ -123,7 +123,7 @@ async function createWindow() {
 app.whenReady().then(async () => {
 
     if (process.env.DEBUG !== 'true') {
-        const updateUrl = filestorage + '/updates'; // Folder containing RELEASES and *.nupkg
+        const updateUrl = filestorage + '/releases/microbot-launcher'; // Folder containing RELEASES and *.nupkg
         autoUpdater.setFeedURL({ url: updateUrl });
         autoUpdater.checkForUpdates();
 
