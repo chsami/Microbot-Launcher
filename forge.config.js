@@ -1,25 +1,19 @@
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
-const {join} = require("node:path");
 
 module.exports = {
   packagerConfig: {
     asar: true,
-    name: `${process.env.npm_package_name}-x64`, // Include x64 in the .exe name
-    arch: 'x64',
-    platform: 'win32',
-    overwrite: true, // Overwrite existing files if necessary
-    icon: join(__dirname, 'images', 'microbot_transparent')
+    icon: './images/microbot_transparent.ico',
   },
-
   rebuildConfig: {},
   makers: [
     {
       name: '@electron-forge/maker-squirrel',
       config: {
-        name: 'Microbot',
-        setupIcon: join(__dirname, 'images', 'microbot_transparent.ico'),
-        iconUrl: 'https://files.microbot.cloud/assets/microbot-launcher/microbot_transparent.ico' // Optional: URL for the icon
+        name: 'microbot_launcher',
+        setupIcon: './images/microbot_transparent.ico',  // This sets the icon for Setup.exe
+        iconUrl: 'https://files.microbot.cloud/assets/microbot-launcher/microbot_transparent.ico', // Required for Squirrel
       },
     },
     {

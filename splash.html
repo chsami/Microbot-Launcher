@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Splash Launcher</title>
+    <link rel="stylesheet" href="https://developmentb464.blob.core.windows.net/microbot/launcher/css/styles.css">
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: url('https://developmentb464.blob.core.windows.net/microbot/launcher/images/microbot_icon.jpg') no-repeat center center;
+            background-size: cover;
+            font-family: Arial, sans-serif;
+            color: #ffffff;
+            overflow: hidden;
+        }
+
+        h1 {
+            background-color: rgba(0, 0, 0, 0.5);
+            /* Optional: to improve text readability */
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        .loading-bar-container {
+            width: 100%;
+            max-width: 400px;
+            height: 20px;
+            background: rgba(30, 60, 30, 0.25);
+            border-radius: 10px;
+            overflow: hidden;
+            position: absolute;
+            bottom: 0;
+            box-shadow: 0 4px 24px 0 rgba(0, 0, 0, 0.25), 0 1.5px 0 0 rgba(0, 255, 128, 0.10) inset;
+            backdrop-filter: blur(8px) saturate(180%);
+            border: 1.5px solid rgba(0, 128, 64, 0.25);
+        }
+
+        .loading-bar {
+            height: 100%;
+            width: 0;
+            background: linear-gradient(90deg, #43e97b 0%, #38f9d7 100%);
+            box-shadow: 0 0 16px 2px rgba(67, 233, 123, 0.18), 0 0 32px 4px rgba(56, 249, 215, 0.10);
+            border-radius: 10px 0 0 10px;
+            transition: width 0.3s cubic-bezier(.4, 2, .6, 1), background 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #progress-info {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1em;
+            color: #fff;
+            text-shadow: 0 0 8px #000, 0 0 2px #000;
+            pointer-events: none;
+            font-weight: 500;
+            letter-spacing: 0.03em;
+            user-select: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="loading-bar-container">
+        <div class="loading-bar"></div>
+        <div id="progress-info"></div>
+    </div>
+    <script>
+        // Listen for update-progress from main process
+        window.electron?.ipcRenderer?.receive?.('update-progress', (event, data) => {
+            const bar = document.querySelector('.loading-bar');
+            const percent = Math.min(data.percent, 100);
+            const totalPercent = Math.min(data.total, 100);
+            bar.style.width = percent + '%';
+            let info = document.getElementById('progress-info');
+            let totalMB = data.total ? (data.total / (1024 * 1024)).toFixed(2) : '0.00';
+            info.innerText = data.percent == 100
+            ? 'Loading...'
+            : `Downloading: ${percent.toFixed(2)}% of ${totalMB} MB`;
+        });
+    </script>
+</body>
+
+</html>

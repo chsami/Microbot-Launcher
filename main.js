@@ -1,15 +1,15 @@
-const {app, BrowserWindow, dialog, shell} = require('electron');
-const {microbotDir} = require("./libs/dir-module");
+const { app, BrowserWindow, dialog, shell, autoUpdater } = require('electron');
+const { microbotDir } = require("./libs/dir-module");
 const path = require('path');
-const {ipcMain} = require('electron');
+const { ipcMain } = require('electron');
 const fs = require('fs');
 const axios = require('axios');
 const https = require('https');
 const AdmZip = require('adm-zip');
-const {readPropertiesFile, writePropertiesFile} = require("./libs/properties");
-const {readAccountsJson, removeAccountsJson, checkFileModification} = require("./libs/accounts-loader");
-const {overwrite} = require("./libs/overwrite-credential-properties");
-const {logMessage, logError} = require("./libs/logger");
+const { readPropertiesFile, writePropertiesFile } = require("./libs/properties");
+const { readAccountsJson, removeAccountsJson, checkFileModification } = require("./libs/accounts-loader");
+const { overwrite } = require("./libs/overwrite-credential-properties");
+const { logMessage, logError } = require("./libs/logger");
 
 
 const url = 'https:/microbot.cloud'
@@ -34,93 +34,23 @@ if (!fs.existsSync(microbotDir)) {
 }
 
 
-// this should be placed at top of main.js to handle setup events quickly
-if (handleSquirrelEvent()) {
-    // squirrel event handled and app will exit in 1000ms, so don't do anything else
-    return;
-}
-
-
-function handleSquirrelEvent() {
-    if (process.argv.length === 1) {
-        return false;
-    }
-
-    const ChildProcess = require('child_process');
-    const path = require('path');
-
-    const appFolder = path.resolve(process.execPath, '..');
-    const rootAtomFolder = path.resolve(appFolder, '..');
-    const updateDotExe = path.resolve(path.join(rootAtomFolder, 'Update.exe'));
-    const exeName = path.basename(process.execPath);
-
-    const spawn = function (command, args) {
-        let spawnedProcess;
-
-        try {
-            spawnedProcess = ChildProcess.spawn(command, args, {detached: true});
-        } catch (error) {
-        }
-
-        return spawnedProcess;
-    };
-
-    const spawnUpdate = function (args) {
-        return spawn(updateDotExe, args);
-    };
-
-    const squirrelEvent = process.argv[1];
-    switch (squirrelEvent) {
-        case '--squirrel-install':
-        case '--squirrel-updated':
-            // Optionally do things such as:
-            // - Add your .exe to the PATH
-            // - Write to the registry for things like file associations and
-            //   explorer context menus
-
-            const iconPath = path.join(__dirname, '../../../app.ico');
-
-            // Install desktop and start menu shortcuts
-            spawnUpdate(['--createShortcut=' + exeName, '--shortcut-locations=StartMenu,Desktop', `--icon=${iconPath}`]);
-
-            setTimeout(app.quit, 1000);
-            return true;
-
-        case '--squirrel-uninstall':
-            // Undo anything you did in the --squirrel-install and
-            // --squirrel-updated handlers
-
-            // Remove desktop and start menu shortcuts
-            spawnUpdate(['--removeShortcut', exeName]);
-
-            setTimeout(app.quit, 1000);
-            return true;
-
-        case '--squirrel-obsolete':
-            // This is called on the outgoing version of your app before
-            // we update to the new version - it's the opposite of
-            // --squirrel-updated
-
-            app.quit();
-            return true;
-    }
-}
-
-
 async function downloadFileFromBlobStorage(blobPath, dir, filename) {
     try {
+        if (process.env.DEBUG === 'true') {
+            return dir + "/" + filename
+        }
         // Construct the URL, including the dir only if it's provided
         const url = dir ? `${blobPath}/${dir}/${filename}` : `${blobPath}/${filename}`;
 
         const response = await axios.get(url,
-            {responseType: 'arraybuffer'})
+            { responseType: 'arraybuffer' })
         // Step 2: Determine the path to save the file
 
         // Ensure the directory exists
         if (dir) {
             const dirPath = path.join(microbotDir, dir);
             if (!fs.existsSync(dirPath)) {
-                fs.mkdirSync(dirPath, {recursive: true});
+                fs.mkdirSync(dirPath, { recursive: true });
             }
             const filePath = path.join(dirPath, filename);
             fs.writeFileSync(filePath, response.data);
@@ -149,12 +79,17 @@ async function createWindow() {
         frame: false,
         alwaysOnTop: true,
         icon: path.join(__dirname, 'images/microbot_transparent.ico'),
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            nodeIntegration: true,
+            contextIsolation: true,
+        },
     });
 
 
-    const splashPath = await downloadFileFromBlobStorage(filestorage + '/assets/microbot-launcher', '', 'splash.html')
+    const splashPath = await downloadFileFromBlobStorage(filestorage + '/assets/microbot-launcher', './', 'splash.html')
 
-    await splash.loadFile(splashPath ? splashPath : 'splash.html');
+    await splash.loadFile(splashPath);
 
     jarExecutor = await loadRemoteLibrary('jar-executor.js')
     accountLoader = await loadRemoteLibrary('accounts-loader.js')
@@ -178,23 +113,66 @@ async function createWindow() {
         },
     });
 
-    await downloadFileFromBlobStorage(filestorage + '/assets/microbot-launcher', 'css', 'styles.css')
-    const indexHtmlPath = await downloadFileFromBlobStorage(filestorage + '/assets/microbot-launcher', '', 'index.html')
+    await downloadFileFromBlobStorage(filestorage + '/assets/microbot-launcher', './css', 'styles.css')
+    const indexHtmlPath = await downloadFileFromBlobStorage(filestorage + '/assets/microbot-launcher', './', 'index.html')
 
-    await mainWindow.loadFile(indexHtmlPath ? indexHtmlPath : 'index.html');
-
-    setTimeout(() => {
-        splash.destroy();
-        mainWindow.show();
-    }, 1000);
+    await mainWindow.loadFile(indexHtmlPath);
 
 }
 
-app.whenReady().then(() => {
-    createWindow();
+app.whenReady().then(async () => {
+
+    if (process.env.DEBUG !== 'true') {
+        const updateUrl = filestorage + '/updates'; // Folder containing RELEASES and *.nupkg
+        autoUpdater.setFeedURL({ url: updateUrl });
+        autoUpdater.checkForUpdates();
+
+        autoUpdater.on('update-not-available', async (info) => {
+            setTimeout(() => {
+                splash.destroy();
+                mainWindow.show();
+            }, 1000);
+        });
+
+        autoUpdater.on('update-available', () => {
+            dialog.showMessageBox({
+                type: 'info',
+                message: 'A new update is available. Downloading now...'
+            });
+        });
+
+        autoUpdater.on('download-progress', (progressObj) => {
+            // Send progress to splash screen
+            if (splash && splash.webContents) {
+                splash.webContents.send('update-progress', {
+                    percent: progressObj.percent,
+                    total: progressObj.total
+                });
+            }
+        });
+
+        autoUpdater.on('update-downloaded', () => {
+            dialog.showMessageBox({
+                type: 'info',
+                message: 'Update downloaded. The app will now restart to install it.'
+            }).then(() => {
+                autoUpdater.quitAndInstall();
+            });
+        });
+    } else {
+        await createWindow();
+         splash.webContents.send('update-progress', {
+                    percent: 100,
+                    speed: 0
+                });
+        setTimeout(() => {
+            //splash.destroy();
+            mainWindow.show();
+        }, 1000);
+    }
 
     app.on('activate', async function () {
-        if (BrowserWindow.getAllWindows().length === 0) createWindow();
+        if (BrowserWindow.getAllWindows().length === 0) await createWindow();
     });
 });
 
@@ -204,7 +182,7 @@ app.on('window-all-closed', function () {
 
 ipcMain.handle('download-jcef', async (event) => {
     try {
-        event.sender.send('progress', {percent: 10, status: 'Downloading...'});
+        event.sender.send('progress', { percent: 10, status: 'Downloading...' });
 
         const response = await axios({
             method: 'get',
@@ -215,14 +193,14 @@ ipcMain.handle('download-jcef', async (event) => {
 
                 const progress = ((progressEvent.loaded * 100) / totalLength).toFixed(2);  // Keep two decimal places
                 let currentPercent = (10 + (progress * 0.4)).toFixed(2);  // Map the progress to 10%-50%
-                event.sender.send('progress', {percent: currentPercent, status: `Downloading... (${progress}%)`});
+                event.sender.send('progress', { percent: currentPercent, status: `Downloading... (${progress}%)` });
             }
         });
 
-        event.sender.send('progress', {percent: 50, status: 'Saving file...'});
+        event.sender.send('progress', { percent: 50, status: 'Saving file...' });
 
 
-        event.sender.send('progress', {percent: 55, status: 'Unpacking file...'});
+        event.sender.send('progress', { percent: 55, status: 'Unpacking file...' });
 
         // Step 2: Determine the path to save the ZIP file
         const zipFilePath = path.join(microbotDir, 'jcef-bundle.zip');
@@ -236,29 +214,29 @@ ipcMain.handle('download-jcef', async (event) => {
 
         zip.extractAllTo(extractPath, true);
 
-        event.sender.send('progress', {percent: 60, status: 'Cleaning up...'});
+        event.sender.send('progress', { percent: 60, status: 'Cleaning up...' });
 
 
         // Optionally, delete the ZIP file after extraction
         fs.unlinkSync(zipFilePath);
 
         // Return a success message or the path where the files were extracted
-        return {success: true, path: extractPath};
+        return { success: true, path: extractPath };
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
 ipcMain.handle('download-microbot-launcher', async (event) => {
     try {
-        event.sender.send('progress', {percent: 70, status: 'Downloading Microbot Jagex Launcher...'});
+        event.sender.send('progress', { percent: 70, status: 'Downloading Microbot Jagex Launcher...' });
 
         const response = await axios.get(url + '/assets/microbot-launcher/microbot-launcher.jar',
-            {responseType: 'arraybuffer'})  // Ensure the response is treated as binary data);
+            { responseType: 'arraybuffer' })  // Ensure the response is treated as binary data);
 
 
-        event.sender.send('progress', {percent: 80, status: 'Finishing...'});
+        event.sender.send('progress', { percent: 80, status: 'Finishing...' });
 
         const filePath = path.join(microbotDir, 'microbot-launcher.jar');
 
@@ -266,23 +244,23 @@ ipcMain.handle('download-microbot-launcher', async (event) => {
         // Step 3: Save the file
         fs.writeFileSync(filePath, response.data);
 
-        event.sender.send('progress', {percent: 80, status: 'Completed!'});
+        event.sender.send('progress', { percent: 80, status: 'Completed!' });
 
         // Return a success message or the path where the file was saved
-        return {success: true, path: filePath};
+        return { success: true, path: filePath };
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
 
 ipcMain.handle('download-client', async (event, version) => {
     try {
-        event.sender.send('progress', {percent: 90, status: 'Downloading Microbot-' + version + ''});
+        event.sender.send('progress', { percent: 90, status: 'Downloading Microbot-' + version + '' });
 
         if (fs.existsSync('microbot-' + version + '.jar'))
-            return {success: true, path: 'microbot-' + version + '.jar'}
+            return { success: true, path: 'microbot-' + version + '.jar' }
 
         const response = await axios({
             method: 'get',
@@ -305,13 +283,13 @@ ipcMain.handle('download-client', async (event, version) => {
         // Step 3: Save the file
         fs.writeFileSync(filePath, response.data);
 
-        event.sender.send('progress', {percent: 100, status: 'Completed!'});
+        event.sender.send('progress', { percent: 100, status: 'Completed!' });
 
         // Return a success message or the path where the file was saved
-        return {success: true, path: filePath};
+        return { success: true, path: filePath };
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
@@ -320,7 +298,7 @@ ipcMain.handle('write-properties', async (event, data) => {
         writePropertiesFile(data)
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
@@ -330,7 +308,7 @@ ipcMain.handle('fetch-launcher-version', async () => {
         return response.data;
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
@@ -340,7 +318,7 @@ ipcMain.handle('fetch-client-version', async () => {
         return response.data;
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
@@ -350,7 +328,7 @@ ipcMain.handle('fetch-launcher-html-version', async () => {
         return response.data;
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
@@ -359,7 +337,7 @@ ipcMain.handle('read-properties', async () => {
         return readPropertiesFile();
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
@@ -378,7 +356,7 @@ ipcMain.handle('open-launcher', async () => {
         );
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
@@ -401,7 +379,7 @@ ipcMain.handle('open-client', async (event, version, proxy) => {
         );
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
@@ -411,7 +389,7 @@ ipcMain.handle('jcef-exists', async () => {
         return fs.existsSync(filePath)
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
@@ -422,7 +400,7 @@ ipcMain.handle('client-exists', async (event, version) => {
         return fs.existsSync(filePath)
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
@@ -432,7 +410,7 @@ ipcMain.handle('launcher-exists', async () => {
         return fs.existsSync(filePath)
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
@@ -441,17 +419,17 @@ ipcMain.handle('read-accounts', async () => {
         return readAccountsJson()
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
 ipcMain.handle('overwrite-credential-properties', async (event, character) => {
     try {
         overwrite(character)
-        return {success: 'Succesfull'}
+        return { success: 'Succesfull' }
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
@@ -460,7 +438,7 @@ ipcMain.handle('remove-accounts', async () => {
         removeAccountsJson()
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
@@ -469,7 +447,7 @@ ipcMain.handle('check-file-change', async () => {
         return checkFileModification()
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
@@ -490,7 +468,7 @@ ipcMain.handle('play-no-jagex-account', async (event, version, proxy) => {
         );
     } catch (error) {
         logMessage(error.message)
-        return {error: error.message};
+        return { error: error.message };
     }
 });
 
@@ -520,7 +498,7 @@ async function loadRemoteLibrary(fileName) {
 
     try {
         if (process.env.DEBUG !== 'true') {
-        await downloadAndSaveFile(remoteUrl, localPath);
+            await downloadAndSaveFile(remoteUrl, localPath);
         }
         return require(localPath);
     } catch (error) {
