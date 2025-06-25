@@ -62,7 +62,9 @@ jobs:
           ssh-keyscan -H 138.201.81.246 >> ~/.ssh/known_hosts
 
           # Upload EXE
-          scp ./artifact/*.exe root@138.201.81.246:/var/www/files/releases/microbot-launcher \
+          scp -r \
+            ./artifact \
+            root@138.201.81.246:/var/www/files/releases/microbot-launcher \
 
           # Upload additional files
           scp -r \
