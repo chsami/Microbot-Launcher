@@ -14,6 +14,7 @@ module.exports = {
         name: 'microbot_launcher',
         setupIcon: './images/microbot_transparent.ico',  // This sets the icon for Setup.exe
         iconUrl: 'https://files.microbot.cloud/assets/microbot-launcher/microbot_transparent.ico', // Required for Squirrel
+        loadingGif: './images/microbot.gif', // Optional loading GIF for Squirrel
       },
     },
     {
