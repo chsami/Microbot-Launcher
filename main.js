@@ -136,10 +136,6 @@ app.whenReady().then(async () => {
         });
 
         autoUpdater.on('update-available', () => {
-            dialog.showMessageBox({
-                type: 'info',
-                message: 'A new update is available. Downloading now...'
-            });
         });
 
         autoUpdater.on('download-progress', (progressObj) => {
@@ -153,12 +149,7 @@ app.whenReady().then(async () => {
         });
 
         autoUpdater.on('update-downloaded', () => {
-            dialog.showMessageBox({
-                type: 'info',
-                message: 'Update downloaded. The app will now restart to install it.'
-            }).then(() => {
-                autoUpdater.quitAndInstall();
-            });
+            autoUpdater.quitAndInstall();
         });
     } else {
         splash.webContents.send('update-progress', {
