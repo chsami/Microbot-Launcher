@@ -34,8 +34,6 @@ jobs:
             index.html
             splash.html
             renderer.js
-            jcef-bundle.zip
-            microbot-launcher.jar
 
   upload:
     runs-on: ubuntu-latest
@@ -74,6 +72,4 @@ jobs:
             ./assets/index.html \
             ./assets/splash.html \
             ./assets/renderer.js \
-            ./assets/jcef-bundle.zip \
-            ./assets/microbot-launcher.jar \
             root@138.201.81.246:/var/www/files/assets/microbot-launcher/
