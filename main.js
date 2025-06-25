@@ -161,10 +161,10 @@ app.whenReady().then(async () => {
             });
         });
     } else {
-         splash.webContents.send('update-progress', {
-                    percent: 100,
-                    speed: 0
-                });
+        splash.webContents.send('update-progress', {
+            percent: 100,
+            speed: 0
+        });
         setTimeout(() => {
             //splash.destroy();
             mainWindow.show();
