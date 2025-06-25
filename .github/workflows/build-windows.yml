@@ -21,7 +21,19 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: microbot-launcher-exe-latest
-          path: out/make/squirrel.windows/x64/*.exe
+          path: out/make/squirrel.windows/x64/**
+
+      - name: Upload project assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: microbot-launcher-assets
+          path: |
+            css/**
+            images/**
+            libs/**
+            index.html
+            splash.html
+            renderer.js
 
   upload:
     runs-on: ubuntu-latest
@@ -34,6 +46,12 @@ jobs:
           name: microbot-launcher-exe-latest
           path: ./artifact
 
+      - name: Download assets
+        uses: actions/download-artifact@v4
+        with:
+          name: microbot-launcher-assets
+          path: ./assets
+
       - name: Upload to Hetzner
         env:
           SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
@@ -42,4 +60,18 @@ jobs:
           echo "$SSH_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H 138.201.81.246 >> ~/.ssh/known_hosts
-          scp ./artifact/*.exe root@138.201.81.246:/var/www/files/releases/microbot-launcher.exe
+
+          # Upload EXE
+          scp -r \
+            ./artifact/* \
+            root@138.201.81.246:/var/www/files/releases/microbot-launcher/
+
+          # Upload additional files
+          scp -r \
+            ./assets/css \
+            ./assets/images \
+            ./assets/libs \
+            ./assets/index.html \
+            ./assets/splash.html \
+            ./assets/renderer.js \
+            root@138.201.81.246:/var/www/files/assets/microbot-launcher/
