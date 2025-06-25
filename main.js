@@ -121,6 +121,7 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
+    await createWindow();
 
     if (process.env.DEBUG !== 'true') {
         const updateUrl = filestorage + '/releases/microbot-launcher'; // Folder containing RELEASES and *.nupkg
@@ -128,7 +129,7 @@ app.whenReady().then(async () => {
         autoUpdater.checkForUpdates();
 
         autoUpdater.on('update-not-available', async (info) => {
-            setTimeout(() => {
+            setTimeout(async () => {
                 splash.destroy();
                 mainWindow.show();
             }, 1000);
@@ -160,7 +161,6 @@ app.whenReady().then(async () => {
             });
         });
     } else {
-        await createWindow();
          splash.webContents.send('update-progress', {
                     percent: 100,
                     speed: 0
