@@ -4,38 +4,13 @@
   "description": "Launcher for the microbot client",
   "main": "main.js",
   "scripts": {
-    "dev": "electron .",
+    "dev": "cross-env DEBUG=true electron .",
     "start": "electron-forge start",
     "test": "echo \"Error: no test specified\" && exit 1",
     "package-windows": "electron-packager . MicrobotLauncher --platform=win32 --arch=x64 --out=dist1",
     "package": "electron-forge package",
-    "build:x64": "electron-forge package --arch=x64 && electron-forge make --arch=x64",
+    "build:x64": "electron-forge make --arch=x64",
     "build:ia32": "electron-forge package --arch=ia32 && electron-forge make --arch=ia32"
-  },
-  "config": {
-    "forge": {
-      "packagerConfig": {
-        "executableName": "microbot-launcher"
-      },
-      "makers": [
-        {
-          "name": "@electron-forge/maker-squirrel",
-          "platforms": ["win32"]
-        },
-        {
-          "name": "@electron-forge/maker-zip",
-          "platforms": ["win32"]
-        },
-        {
-          "name": "@electron-forge/maker-deb",
-          "platforms": ["linux"]
-        },
-        {
-          "name": "@electron-forge/maker-rpm",
-          "platforms": ["linux"]
-        }
-      ]
-    }
   },
   "author": "chsami",
   "license": "ISC",
@@ -48,6 +23,7 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.4.0",
     "@electron-forge/plugin-fuses": "^7.4.0",
     "@electron/fuses": "^1.8.0",
+    "cross-env": "^7.0.3",
     "electron": "^33.2.0"
   },
   "dependencies": {

@@ -53,10 +53,7 @@ function executeJar(commandArgs, dialog) {
     });
 
     jarProcess.stderr.on('data', (data) => {
-        logMessage(`[stderr] ${data}`);
-        if (dialog) {
-            dialog.showErrorBox('Error running jar!', data);
-        }
+        logMessage(`[stddata] ${data}`);
     });
 
     jarProcess.on('error', (err) => {
