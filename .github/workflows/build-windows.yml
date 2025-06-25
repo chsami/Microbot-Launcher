@@ -63,7 +63,7 @@ jobs:
 
           # Upload EXE
           scp -r \
-            ./artifact \
+            ./ \
             root@138.201.81.246:/var/www/files/releases/microbot-launcher/
 
           # Upload additional files
