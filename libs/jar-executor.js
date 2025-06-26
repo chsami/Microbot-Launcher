@@ -2,14 +2,14 @@ const { spawn } = require('child_process');
 const { logMessage } = require('./logger');
 
 // Check Java and run the JAR
-function checkJavaAndRunJar(commandArgs, dialog, shell, mainWindow) {
+function checkJavaAndRunJar(commandArgs, dialog, shell) {
     logMessage(`java ${commandArgs.join(' ')}`);
     isJavaInstalled((isInstalled, error) => {
         if (isInstalled) {
             console.log('Java is installed, running the JAR...');
             executeJar(commandArgs, dialog);
         } else {
-            dialog.showMessageBox(mainWindow, {
+            dialog.showMessageBox( {
                 type: 'error',
                 title: 'Java Not Found',
                 message: 'Java Development Kit (JDK) is required to run this application. Would you like to download it now?',
