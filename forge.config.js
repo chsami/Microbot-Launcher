@@ -5,6 +5,19 @@ module.exports = {
   packagerConfig: {
     asar: true,
     icon: './images/microbot_transparent.ico',
+    ignore: [
+    /^\/dist/,
+    /^\/out/,
+    /^\/artifacts/,
+    /\.log$/,
+    /\.zip$/,
+    /\.exe$/,
+    /\/\.git/,
+    /\/\.github/,
+    /\/test/,
+    /\/node_modules\/\.bin/,
+    /\/node_modules\/.*(electron|webpack|cross-env|@types|eslint).*/,
+    ]
   },
   rebuildConfig: {},
   makers: [

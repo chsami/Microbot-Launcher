@@ -136,28 +136,41 @@ app.whenReady().then(async () => {
         });
 
         autoUpdater.on('update-available', () => {
-        });
+            // generate me a fake progress bar so the user feels like something is happening
+            let progress = 0;
+            const start = Date.now();
 
-        autoUpdater.on('download-progress', (progressObj) => {
-            // Send progress to splash screen
-            if (splash && splash.webContents) {
-                splash.webContents.send('update-progress', {
-                    percent: progressObj.percent,
-                    total: progressObj.total
-                });
+            // since squirrel doesn't support progress, we will use a fake progress bar
+            function sendFakeProgress() {
+                if (progress >= 100) {
+                    splash.webContents.send('update-progress', { percent: 100, total: 154800000 });
+                    setTimeout(() => {
+                        splash.destroy();
+                        mainWindow.show();
+                    }, 500);
+                    return;
+                }
+                // Random increment between 5 and 15 percent
+                const increment = Math.floor(Math.random() * 11) + 5;
+                progress = Math.min(progress + increment, 100);
+
+                splash.webContents.send('update-progress', { percent: progress, total: 154800000 });
+
+                // Random interval between 500ms and 1200ms
+                const interval = Math.floor(Math.random() * 700) + 500;
+                setTimeout(sendFakeProgress, interval);
             }
+
+            sendFakeProgress();
         });
+ 
 
         autoUpdater.on('update-downloaded', () => {
             autoUpdater.quitAndInstall();
         });
     } else {
-        splash.webContents.send('update-progress', {
-            percent: 100,
-            speed: 0
-        });
         setTimeout(() => {
-            //splash.destroy();
+            splash.destroy();
             mainWindow.show();
         }, 1000);
     }
