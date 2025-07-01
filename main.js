@@ -168,21 +168,6 @@ app.on('window-all-closed', function () {
     if (process.platform !== 'darwin') app.quit();
 });
 
-async function loadRemoteLibrary(fileName) {
-    const remoteUrl = filestorage + `/assets/microbot-launcher/libs/${fileName}`;
-    const localPath = path.join(__dirname, `libs/${fileName}`);
-
-    try {
-        if (process.env.DEBUG !== 'true') {
-            await downloadAndSaveFile(remoteUrl, localPath);
-        }
-        return require(localPath);
-    } catch (error) {
-        dialog.showErrorBox('Error', 'Error loading remote module ' + fileName + " with error " + error.message);
-        logError('Error loading module ' + remoteUrl);
-    }
-}
-
 async function downloadAndSaveFile(remoteUrl, localPath) {
     return new Promise((resolve, reject) => {
         const file = fs.createWriteStream(localPath);
