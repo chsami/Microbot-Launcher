@@ -71,7 +71,7 @@ module.exports = function () {
                 return { success: true, path: 'microbot-' + version + '.jar' }
             const response = await axios({
                 method: 'get',
-                url: url + 'releases/microbot/stable/microbot-' + version + '.jar',
+                url: url + '/releases/microbot/stable/microbot-' + version + '.jar',
                 responseType: 'arraybuffer',
                 onDownloadProgress: (progressEvent) => {
                     const totalLength = 126009591;
