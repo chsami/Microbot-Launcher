@@ -40,7 +40,7 @@ module.exports = function () {
             const zip = new AdmZip(zipFilePath);
             const extractPath = microbotDir;
             zip.extractAllTo(extractPath, true);
-            event.sender.send('progress', { per cent: 60, status: 'Cleaning up...' });
+            event.sender.send('progress', { percent: 60, status: 'Cleaning up...' });
             fs.unlinkSync(zipFilePath);
             return { success: true, path: extractPath };
         } catch (error) {

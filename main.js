@@ -124,6 +124,16 @@ app.whenReady().then(async () => {
             }, 1000);
         });
 
+        autoUpdater.on('download-progress', (progressObj) => {
+            let log_message = "Download speed: " + progressObj.bytesPerSecond;
+            log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
+            log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
+            splash.webContents.send('update-progress', {
+                percent: progressObj.percent,
+                total: progressObj.total
+            });
+        });
+
         autoUpdater.on('update-available', () => {
             // generate me a fake progress bar so the user feels like something is happening
             let progress = 0;
@@ -149,7 +159,7 @@ app.whenReady().then(async () => {
                 setTimeout(sendFakeProgress, interval);
             }
 
-            sendFakeProgress();
+           //  sendFakeProgress();
         });
 
 
