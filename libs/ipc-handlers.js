@@ -23,7 +23,7 @@ module.exports = function () {
 
             const response = await axios({
                 method: 'get',
-                url: url + '/assets/microbot-launcher/jcef-bundle.zip',
+                url: filestorage + '/assets/microbot-launcher/jcef-bundle.zip',
                 responseType: 'arraybuffer',
                 onDownloadProgress: (progressEvent) => {
                     const totalLength = 126009591;
@@ -40,7 +40,7 @@ module.exports = function () {
             const zip = new AdmZip(zipFilePath);
             const extractPath = microbotDir;
             zip.extractAllTo(extractPath, true);
-            event.sender.send('progress', { percent: 60, status: 'Cleaning up...' });
+            event.sender.send('progress', { per cent: 60, status: 'Cleaning up...' });
             fs.unlinkSync(zipFilePath);
             return { success: true, path: extractPath };
         } catch (error) {
@@ -52,7 +52,7 @@ module.exports = function () {
     ipcMain.handle('download-microbot-launcher', async (event) => {
         try {
             event.sender.send('progress', { percent: 70, status: 'Downloading Microbot Jagex Launcher...' });
-            const response = await axios.get(url + '/assets/microbot-launcher/microbot-launcher.jar', { responseType: 'arraybuffer' });
+            const response = await axios.get(filestorage + '/assets/microbot-launcher/microbot-launcher.jar', { responseType: 'arraybuffer' });
             event.sender.send('progress', { percent: 80, status: 'Finishing...' });
             const filePath = path.join(microbotDir, 'microbot-launcher.jar');
             fs.writeFileSync(filePath, response.data);
@@ -71,7 +71,7 @@ module.exports = function () {
                 return { success: true, path: 'microbot-' + version + '.jar' }
             const response = await axios({
                 method: 'get',
-                url: url + '/releases/microbot/stable/microbot-' + version + '.jar',
+                url: filestorage + '/releases/microbot/stable/microbot-' + version + '.jar',
                 responseType: 'arraybuffer',
                 onDownloadProgress: (progressEvent) => {
                     const totalLength = 126009591;
