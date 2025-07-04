@@ -125,6 +125,7 @@ app.whenReady().then(async () => {
         });
 
         autoUpdater.on('download-progress', (progressObj) => {
+            alert('Downloading update...');
             let log_message = "Download speed: " + progressObj.bytesPerSecond;
             log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
             log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
@@ -135,6 +136,7 @@ app.whenReady().then(async () => {
         });
 
         autoUpdater.on('update-available', () => {
+            alert('Update available! Downloading...');
             // generate me a fake progress bar so the user feels like something is happening
             let progress = 0;
 
@@ -159,11 +161,12 @@ app.whenReady().then(async () => {
                 setTimeout(sendFakeProgress, interval);
             }
 
-           //  sendFakeProgress();
+           // sendFakeProgress();
         });
 
 
         autoUpdater.on('update-downloaded', () => {
+            alert('done!')
             autoUpdater.quitAndInstall();
         });
     } else {
