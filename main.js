@@ -143,7 +143,6 @@ app.whenReady().then(async () => {
         });
 
         autoUpdater.on('update-available', () => {
-            alert('Update available! Downloading...');
             dialog.showMessageBox({
                 type: 'info',
                 message: 'Update available! Downloading...'
