@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   build-win:
     runs-on: windows-latest
@@ -75,7 +78,7 @@ jobs:
           tag_name: v${{ needs.build-win.outputs.version }}
           name: Release v${{ needs.build-win.outputs.version }}
           files: |
-            ./artifact/Microbot Launcher Setup.exe
+            "./artifact/Microbot Launcher Setup.exe"
             ./artifact/latest.yml
             ./artifact/*.blockmap
         env:
