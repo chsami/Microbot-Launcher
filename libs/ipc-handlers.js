@@ -154,7 +154,7 @@ module.exports = async function (deps) {
 
     ipcMain.handle('client-exists', async (event, version) => {
         try {
-            const filePath = path.join(microbotDir, version);
+            const filePath = path.join(microbotDir, 'microbot-' + version);
             log.info(filePath)
             return fs.existsSync(filePath)
         } catch (error) {

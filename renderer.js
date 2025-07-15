@@ -252,7 +252,7 @@ function playNoJagexAccount() {
         const regex = selectedVersion.match(/\d+\.\d+\.\d+(\.\d+)?/);
         if (regex) {
             const version = regex[0];
-            await downloadClientIfNotExist(version);
+            await downloadClientIfNotExist(version +'.jar');
             await window.electron.playNoJagexAccount(version, proxy)
         } else {
             await downloadClientIfNotExist(version);

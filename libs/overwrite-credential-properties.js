@@ -15,10 +15,10 @@ module.exports = async function (deps) {
             // Generate the file content in the same format
             const fileContent = `#Do not share this file with anyone
 #${new Date().toString()}
-JX_CHARACTER_ID=${characterData.accountId}
-JX_SESSION_ID=${characterData.sessionId}
+JX_CHARACTER_ID=${character.accountId}
+JX_SESSION_ID=${character.sessionId}
 JX_REFRESH_TOKEN=
-JX_DISPLAY_NAME=${characterData.displayName}
+JX_DISPLAY_NAME=${character.displayName}
 JX_ACCESS_TOKEN=
 `;
             // Write the content to the file, overwriting the existing file
