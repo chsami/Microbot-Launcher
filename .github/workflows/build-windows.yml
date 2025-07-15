@@ -62,9 +62,6 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H 138.201.81.246 >> ~/.ssh/known_hosts
 
-          # Clean up release folder before upload
-          ssh root@138.201.81.246 'rm -rf /var/www/files/releases/microbot-launcher/*'
-
           # Upload EXE
           scp -r \
             ./artifact/* \
