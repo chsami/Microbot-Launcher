@@ -1,21 +1,36 @@
-module.exports = function () {
-    const path = require('path');
-    const fs = require('fs');
-    const { ipcMain } = require('electron');
-    const AdmZip = require('adm-zip');
-    const axios = require('axios');
-    const https = require('https');
-    const { BrowserWindow, dialog, shell } = require('electron');
-    const { microbotDir } = require(path.join(__dirname, 'dir-module.js'));
-    const { readPropertiesFile, writePropertiesFile } = require(path.join(__dirname, 'properties.js'));
-    const { overwrite } = require(path.join(__dirname, 'overwrite-credential-properties.js'));
-    const { logMessage, logError } = require(path.join(__dirname, 'logger.js'));
-    const { readAccountsJson, removeAccountsJson, checkFileModification } = require(path.join(__dirname, 'accounts-loader.js'));
-    const jarExecutor = require(path.join(__dirname, 'jar-executor.js'));
-    const packageJson = require(path.join(__dirname, '..', 'package.json'));
-    const packageVersion = packageJson.version;
+module.exports = async function (deps) {
+
+    const {
+        ipcMain,
+        AdmZip,
+        axios,
+        microbotDir,
+        packageJson,
+        downloadAndSaveFile,
+        path,
+        log,
+        fs,
+        projectDir
+    } = deps
+
     const url = 'https:/microbot.cloud';
     const filestorage = 'https://files.microbot.cloud';
+
+    await downloadAndSaveFile(filestorage + '/assets/microbot-launcher/libs/properties.js', path.join(microbotDir, 'libs/properties.js'), path.join(projectDir, 'libs/properties.js'))
+    await downloadAndSaveFile(filestorage + '/assets/microbot-launcher/libs/overwrite-credential-properties.js', path.join(microbotDir, 'libs/overwrite-credential-properties.js'), path.join(projectDir, 'libs/overwrite-credential-properties.js'))
+    await downloadAndSaveFile(filestorage + '/assets/microbot-launcher/libs/accounts-loader.js', path.join(microbotDir, 'libs/accounts-loader.js'), path.join(projectDir, 'libs/accounts-loader.js'))
+    await downloadAndSaveFile(filestorage + '/assets/microbot-launcher/libs/jar-executor.js', path.join(microbotDir, 'libs/jar-executor.js'), path.join(projectDir, 'libs/jar-executor.js'))
+    
+   
+    const propertiesHandler = require(path.join(microbotDir, 'libs/properties.js'));
+    await propertiesHandler(deps)
+    const overwriteCredentialsHandler = require(path.join(microbotDir, 'libs/overwrite-credential-properties.js'));
+    await overwriteCredentialsHandler(deps)
+    const accountLoaderHandler = require(path.join(microbotDir, 'libs/accounts-loader.js'));
+    await accountLoaderHandler(deps)
+    const jarExecutorHandler = require(path.join(microbotDir, 'libs/jar-executor.js'));
+    await jarExecutorHandler(deps)
+    const packageVersion = packageJson.version;
 
     ipcMain.handle('download-jcef', async (event) => {
         try {
@@ -44,7 +59,7 @@ module.exports = function () {
             fs.unlinkSync(zipFilePath);
             return { success: true, path: extractPath };
         } catch (error) {
-            logMessage(error.message)
+            log.error(error.message)
             return { error: error.message };
         }
     });
@@ -59,7 +74,7 @@ module.exports = function () {
             event.sender.send('progress', { percent: 80, status: 'Completed!' });
             return { success: true, path: filePath };
         } catch (error) {
-            logMessage(error.message)
+            log.error(error.message)
             return { error: error.message };
         }
     });
@@ -88,26 +103,19 @@ module.exports = function () {
             event.sender.send('progress', { percent: 100, status: 'Completed!' });
             return { success: true, path: filePath };
         } catch (error) {
-            logMessage(error.message)
+            log.error(error.message)
             return { error: error.message };
         }
     });
 
-    ipcMain.handle('write-properties', async (event, data) => {
-        try {
-            writePropertiesFile(data)
-        } catch (error) {
-            logMessage(error.message)
-            return { error: error.message };
-        }
-    });
+
 
     ipcMain.handle('fetch-launcher-version', async () => {
         try {
             const response = await axios.get(url + '/api/file/launcher');
             return response.data;
         } catch (error) {
-            logMessage(error.message)
+            log.error(error.message)
             return { error: error.message };
         }
     });
@@ -117,7 +125,7 @@ module.exports = function () {
             const response = await axios.get(url + '/api/file/client');
             return response.data;
         } catch (error) {
-            logMessage(error.message)
+            log.error(error.message)
             return { error: error.message };
         }
     });
@@ -127,64 +135,19 @@ module.exports = function () {
             const response = await axios.get(url + '/api/file/html');
             return response.data;
         } catch (error) {
-            logMessage(error.message)
+            log.error(error.message)
             return { error: error.message };
         }
     });
 
-    ipcMain.handle('read-properties', async () => {
-        try {
-            return readPropertiesFile();
-        } catch (error) {
-            logMessage(error.message)
-            return { error: error.message };
-        }
-    });
-
-    ipcMain.handle('open-launcher', async () => {
-        try {
-            const filePath = path.join(microbotDir, 'jcef-bundle');
-            const launcherPath = path.join(microbotDir, 'microbot-launcher.jar');
-            jarExecutor.executeJar(
-                [
-                    `-Djava.library.path=${filePath}`,
-                    '-jar',
-                    launcherPath
-                ],
-                dialog
-            );
-        } catch (error) {
-            logMessage(error.message)
-            return { error: error.message };
-        }
-    });
-
-    ipcMain.handle('open-client', async (event, version, proxy) => {
-        try {
-            const jarPath = path.join(microbotDir, 'microbot-' + version + ".jar");
-            const commandArgs = [
-                '-jar',
-                jarPath,
-                '-proxy=' + proxy.proxyIp,
-                '-proxy-type=' + proxy.proxyType
-            ];
-            jarExecutor.checkJavaAndRunJar(
-                commandArgs,
-                dialog,
-                shell
-            );
-        } catch (error) {
-            logMessage(error.message)
-            return { error: error.message };
-        }
-    });
+  
 
     ipcMain.handle('jcef-exists', async () => {
         try {
             const filePath = path.join(microbotDir, 'jcef-bundle');
             return fs.existsSync(filePath)
         } catch (error) {
-            logMessage(error.message)
+            log.error(error.message)
             return { error: error.message };
         }
     });
@@ -192,9 +155,10 @@ module.exports = function () {
     ipcMain.handle('client-exists', async (event, version) => {
         try {
             const filePath = path.join(microbotDir, version);
+            log.info(filePath)
             return fs.existsSync(filePath)
         } catch (error) {
-            logMessage(error.message)
+            log.error(error.message)
             return { error: error.message };
         }
     });
@@ -204,64 +168,7 @@ module.exports = function () {
             const filePath = path.join(microbotDir, 'microbot-launcher.jar');
             return fs.existsSync(filePath)
         } catch (error) {
-            logMessage(error.message)
-            return { error: error.message };
-        }
-    });
-
-    ipcMain.handle('read-accounts', async () => {
-        try {
-            return readAccountsJson()
-        } catch (error) {
-            logMessage(error.message)
-            return { error: error.message };
-        }
-    });
-
-    ipcMain.handle('overwrite-credential-properties', async (event, character) => {
-        try {
-            overwrite(character)
-            return { success: 'Succesfull' }
-        } catch (error) {
-            logMessage(error.message)
-            return { error: error.message };
-        }
-    });
-
-    ipcMain.handle('remove-accounts', async () => {
-        try {
-            removeAccountsJson()
-        } catch (error) {
-            logMessage(error.message)
-            return { error: error.message };
-        }
-    });
-
-    ipcMain.handle('check-file-change', async () => {
-        try {
-            return checkFileModification()
-        } catch (error) {
-            logMessage(error.message)
-            return { error: error.message };
-        }
-    });
-
-    ipcMain.handle('play-no-jagex-account', async (event, version, proxy) => {
-        try {
-            const jarPath = path.join(microbotDir, 'microbot-' + version + ".jar");
-            jarExecutor.checkJavaAndRunJar(
-                [
-                    '-jar',
-                    jarPath,
-                    '-clean-jagex-launcher',
-                    '-proxy=' + proxy.proxyIp,
-                    '-proxy-type=' + proxy.proxyType
-                ],
-                dialog,
-                shell
-            );
-        } catch (error) {
-            logMessage(error.message)
+            log.error(error.message)
             return { error: error.message };
         }
     });
@@ -281,6 +188,6 @@ module.exports = function () {
     });
 
     ipcMain.handle('log-error', async (event, message) => {
-        logError(message)
+        log.error(message)
     });
 };

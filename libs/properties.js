@@ -1,56 +1,56 @@
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const {microbotDir} = require("./dir-module");
+module.exports = async function (deps) {
 
-const filePath = path.resolve(microbotDir, 'resource_versions.json');
+    const {
+        fs,
+        path,
+        microbotDir,
+        ipcMain,
+        log
+    } = deps
 
-
-// Define your default values here
-const defaultProperties = {
-    launcher: '0.0.0',
-    client: '0.0.0',
-    launcher_html: '0.0.0',
-    version_pref: '0.0.0'
-};
+    const filePath = path.resolve(microbotDir, 'resource_versions.json');
 
 
+    // Define your default values here
+    const defaultProperties = {
+        launcher: '0.0.0',
+        client: '0.0.0',
+        launcher_html: '0.0.0',
+        version_pref: '0.0.0'
+    };
 
-const createDefaultPropertiesFile = (filePath) => {
-    try {
-        fs.writeFileSync(filePath, JSON.stringify(defaultProperties, null, 2), 'utf8');
-        console.log('Properties file created with default values.');
-        return defaultProperties;
-    } catch (err) {
-        console.error('Error creating properties file:', err);
-        return {};
-    }
-};
 
-const readPropertiesFile = () => {
-    try {
-
-        if (fs.existsSync(filePath)) {
-            const data = fs.readFileSync(filePath, 'utf8');
-            return JSON.parse(data);
+    ipcMain.handle('write-properties', async (event, data) => {
+        try {
+            try {
+                fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+            } catch (err) {
+                console.error('Error writing to properties file:', err);
+            }
+        } catch (error) {
+            logMessage(error.message)
+            return { error: error.message };
         }
+    });
 
-        return createDefaultPropertiesFile(filePath)
-    } catch (err) {
-        console.error('Error reading properties file:', err);
-        return {};
-    }
-};
+    ipcMain.handle('read-properties', async () => {
+        try {
+            try {
 
-const writePropertiesFile = (data) => {
-    try {
-        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
-    } catch (err) {
-        console.error('Error writing to properties file:', err);
-    }
-};
-
-module.exports = {
-    readPropertiesFile,
-    writePropertiesFile
-};
+                if (fs.existsSync(filePath)) {
+                    const data = fs.readFileSync(filePath, 'utf8');
+                    return JSON.parse(data);
+                }
+                fs.writeFileSync(filePath, JSON.stringify(defaultProperties, null, 2), 'utf8');
+                log.info('Properties file created with default values.');
+                return defaultProperties;
+            } catch (err) {
+                console.error('Error reading properties file:', err);
+                return {};
+            }
+        } catch (error) {
+            log.error(error.message)
+            return { error: error.message };
+        }
+    });
+}

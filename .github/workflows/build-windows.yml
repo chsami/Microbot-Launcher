@@ -15,25 +15,13 @@ jobs:
           node-version: 20
 
       - run: npm ci
-      - run: npm run build:x64
+      - run: npm run release
 
-      - name: Upload EXE as artifact
+      - name: Upload Release as artifact
         uses: actions/upload-artifact@v4
         with:
           name: microbot-launcher-exe-latest
-          path: out/make/squirrel.windows/x64/**
-
-      - name: Upload project assets
-        uses: actions/upload-artifact@v4
-        with:
-          name: microbot-launcher-assets
-          path: |
-            css/**
-            images/**
-            libs/**
-            index.html
-            splash.html
-            renderer.js
+          path: dist/*
 
   upload:
     runs-on: ubuntu-latest
@@ -45,12 +33,6 @@ jobs:
         with:
           name: microbot-launcher-exe-latest
           path: ./artifact
-
-      - name: Download assets
-        uses: actions/download-artifact@v4
-        with:
-          name: microbot-launcher-assets
-          path: ./assets
 
       - name: Upload to Hetzner
         env:
@@ -68,13 +50,3 @@ jobs:
           scp -r \
             ./artifact/* \
             root@138.201.81.246:/var/www/files/releases/microbot-launcher/
-
-          # Upload additional files
-          scp -r \
-            ./assets/css \
-            ./assets/images \
-            ./assets/libs \
-            ./assets/index.html \
-            ./assets/splash.html \
-            ./assets/renderer.js \
-            root@138.201.81.246:/var/www/files/assets/microbot-launcher/

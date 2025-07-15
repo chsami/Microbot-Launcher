@@ -1,79 +1,79 @@
-const fs = require('fs');
-const os = require('os');
-const path = require("path");
-const {microbotDir} = require("./dir-module");
+module.exports = async function (deps) {
 
-const filePath = path.resolve(microbotDir, 'accounts.json');
+    const {
+        fs,
+        path,
+        microbotDir,
+        ipcMain,
+        log
+    } = deps
 
-const readAccountsJson = () => {
-    try {
+    const filePath = path.resolve(microbotDir, 'accounts.json');
 
-        if (fs.existsSync(filePath)) {
-            const data = fs.readFileSync(filePath, 'utf8');
-            let accounts = JSON.parse(data);
-            accounts.sort((a, b) => new Date(b.createdOn) - new Date(a.createdOn));
-            // Use a Set to track unique display names
-            const uniqueDisplayNames = new Set();
-
-            // Filter the accounts array
-            return accounts.filter(account => {
-                if (uniqueDisplayNames.has(account.displayName)) {
-                    // If the displayName is already in the set, skip this account
-                    return false;
-                } else {
-                    // Otherwise, add the displayName to the set and include this account
-                    if (!account.displayName) {
-                        account.displayName = 'Not set'
-                        return true;
-                    } else {
-                        uniqueDisplayNames.add(account.displayName);
-                        return true;
-                    }
-                }
-            })
-        }
-    } catch (err) {
-        console.error('Error reading properties file:', err);
-        return {};
-    }
-};
-
-const removeAccountsJson = () => {
-    try {
-
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-        }
-    } catch (err) {
-        console.error('Error reading properties file:', err);
-        return {};
-    }
-}
-
-let lastModifiedTime = null;
-
-function checkFileModification() {
-    let val = false;
-    if (fs.existsSync(filePath)) {
+    ipcMain.handle('read-accounts', async () => {
         try {
-            const stats = fs.statSync(filePath);
-            const modifiedTime = stats.mtime;
+            if (fs.existsSync(filePath)) {
+                const data = fs.readFileSync(filePath, 'utf8');
+                let accounts = JSON.parse(data);
+                accounts.sort((a, b) => new Date(b.createdOn) - new Date(a.createdOn));
+                // Use a Set to track unique display names
+                const uniqueDisplayNames = new Set();
 
-            // Check if the modification time has changed
-            if (!lastModifiedTime || modifiedTime > lastModifiedTime) {
-                console.log('File has been modified!');
-                lastModifiedTime = modifiedTime; // Update the last modification time
-                val = true;
+                // Filter the accounts array
+                return accounts.filter(account => {
+                    if (uniqueDisplayNames.has(account.displayName)) {
+                        // If the displayName is already in the set, skip this account
+                        return false;
+                    } else {
+                        // Otherwise, add the displayName to the set and include this account
+                        if (!account.displayName) {
+                            account.displayName = 'Not set'
+                            return true;
+                        } else {
+                            uniqueDisplayNames.add(account.displayName);
+                            return true;
+                        }
+                    }
+                })
             }
-        } catch (err) {
-            console.error(`Error checking file: ${err.message}`);
+        } catch (error) {
+            log.error(error.message)
+            return { error: error.message };
         }
-    }
-    return val;
-}
+    });
 
-module.exports = {
-    readAccountsJson,
-    removeAccountsJson,
-    checkFileModification
+
+    ipcMain.handle('remove-accounts', async () => {
+        try {
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
+        } catch (error) {
+            log.error(error.message)
+            return { error: error.message };
+        }
+    });
+
+    let lastModifiedTime = null;
+
+    ipcMain.handle('check-file-change', async () => {
+        try {
+            let val = false;
+            if (fs.existsSync(filePath)) {
+                const stats = fs.statSync(filePath);
+                const modifiedTime = stats.mtime;
+
+                // Check if the modification time has changed
+                if (!lastModifiedTime || modifiedTime > lastModifiedTime) {
+                    log.info('File has been modified!');
+                    lastModifiedTime = modifiedTime; // Update the last modification time
+                    val = true;
+                }
+            }
+            return val;
+        } catch (error) {
+            log.error(error.message)
+            return { error: error.message };
+        }
+    });
 }

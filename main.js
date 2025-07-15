@@ -1,21 +1,28 @@
-const { app, BrowserWindow, dialog, shell, autoUpdater } = require('electron');
+const { app, BrowserWindow, dialog, shell } = require('electron');
 const { microbotDir } = require("./libs/dir-module");
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
 const https = require('https');
+const { autoUpdater } = require('electron-updater');
+const log = require('electron-log');
+const { ipcMain } = require('electron');
+const AdmZip = require('adm-zip');
+const packageJson = require(path.join(__dirname, 'package.json'));
+const { spawn } = require('child_process');
 
+process.on('uncaughtException', (error) => {
+    log.error('Uncaught Exception:', error);
+});
 
 const filestorage = 'https://files.microbot.cloud'
 
-let splash;
 let mainWindow;
 
 // Ensure the .microbot directory exists
 if (!fs.existsSync(microbotDir)) {
     fs.mkdirSync(microbotDir);
 }
-
 
 async function downloadFileFromBlobStorage(blobPath, dir, filename) {
     try {
@@ -46,7 +53,7 @@ async function downloadFileFromBlobStorage(blobPath, dir, filename) {
 
         return filePath
     } catch (err) {
-        logError(err)
+        log.error(err)
     }
 
     return ""
@@ -54,39 +61,40 @@ async function downloadFileFromBlobStorage(blobPath, dir, filename) {
 
 async function loadLibraries() {
     // Load remote ipc-handlers.js from filestorage
-    const ipcHandlersPath = path.join(__dirname, 'libs/ipc-handlers.js');
+    log.info('load libraries...');
+    const ipcHandlersPath = path.join(microbotDir, 'libs/ipc-handlers.js');
     const remoteIpcHandlersUrl = filestorage + '/assets/microbot-launcher/libs/ipc-handlers.js';
-    if (process.env.DEBUG !== 'true') {
-        await downloadAndSaveFile(remoteIpcHandlersUrl, ipcHandlersPath);
+    await downloadAndSaveFile(remoteIpcHandlersUrl, ipcHandlersPath, path.join(__dirname, 'libs/ipc-handlers.js'));
+    try {
+        log.info('require ipchandler...');
+        const handler = require(ipcHandlersPath);
+        const deps = {
+            AdmZip: AdmZip,
+            axios: axios,
+            ipcMain: ipcMain,
+            microbotDir: microbotDir,
+            packageJson: packageJson,
+            path: path,
+            downloadAndSaveFile: downloadAndSaveFile,
+            log: log,
+            spawn: spawn,
+            dialog: dialog,
+            shell: shell,
+            projectDir: __dirname,
+            fs: fs
+        };
+        if (typeof handler === 'function') {
+            await handler(deps);
+        } else {
+            log.error('ipcHandlers does not export a function');
+        }
+        log.info('done require ipchandler...');
+    } catch (error) {
+        log.error('Error requiring ipcHandlers:', error);
     }
-    await require(ipcHandlersPath)();
 }
 
 async function createWindow() {
-
-    await loadLibraries();
-
-    // Create the splash screen window
-    splash = new BrowserWindow({
-        width: 400,
-        height: 300,
-        transparent: true,
-        frame: false,
-        alwaysOnTop: true,
-        icon: path.join(__dirname, 'images/microbot_transparent.ico'),
-        webPreferences: {
-            preload: path.join(__dirname, 'preload.js'),
-            nodeIntegration: true,
-            contextIsolation: true,
-        },
-    });
-
-
-    const splashPath = await downloadFileFromBlobStorage(filestorage + '/assets/microbot-launcher', './', 'splash.html')
-
-    await splash.loadFile(splashPath);
-
-   
 
     // Create the main window, but don't show it yet
     mainWindow = new BrowserWindow({
@@ -105,88 +113,52 @@ async function createWindow() {
 
     await downloadFileFromBlobStorage(filestorage + '/assets/microbot-launcher', './css', 'styles.css')
     const indexHtmlPath = await downloadFileFromBlobStorage(filestorage + '/assets/microbot-launcher', './', 'index.html')
-
     await mainWindow.loadFile(indexHtmlPath);
 }
 
+
+
+autoUpdater.autoDownload = false;
+autoUpdater.disableWebInstaller = true;
+
+autoUpdater.on('update-available', (info) => {
+    dialog.showMessageBox({
+        type: 'info',
+        title: 'Update available',
+        message: `Version ${info.version} of the launcher is available. Do you want to download it now?`,
+        buttons: ['Yes', 'Later']
+    }).then(result => {
+        dialog.showMessageBox({
+            type: 'info',
+            title: 'Downloading',
+            message: `Downloading version ${info.version} of the launcher...`,
+        })
+        if (result.response === 0) {
+            autoUpdater.downloadUpdate();
+        }
+    });
+});
+
+autoUpdater.on('update-downloaded', () => {
+    dialog.showMessageBox({
+        title: 'Install Updates',
+        message: 'Updates downloaded. The application will now quit and install the updates.'
+    }).then(() => {
+        autoUpdater.quitAndInstall();
+    });
+});
+
 app.whenReady().then(async () => {
+    log.info('App starting...');
+
+    await loadLibraries();
     await createWindow();
 
     if (process.env.DEBUG !== 'true') {
-        const updateUrl = filestorage + '/releases/microbot-launcher'; // Folder containing RELEASES and *.nupkg
-        autoUpdater.setFeedURL({ url: updateUrl });
+        mainWindow.show();
         autoUpdater.checkForUpdates();
-
-        autoUpdater.on('update-not-available', async (info) => {
-            dialog.showMessageBox({
-                type: 'info',
-                message: 'Update not available...'
-            });
-            setTimeout(async () => {
-                splash.destroy();
-                mainWindow.show();
-            }, 1000);
-        });
-
-        autoUpdater.on('download-progress', (progressObj) => {
-            dialog.showMessageBox({
-                type: 'info',
-                message: 'Downloading update...'
-            });
-            let log_message = "Download speed: " + progressObj.bytesPerSecond;
-            log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
-            log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
-            splash.webContents.send('update-progress', {
-                percent: progressObj.percent,
-                total: progressObj.total
-            });
-        });
-
-        autoUpdater.on('update-available', () => {
-            dialog.showMessageBox({
-                type: 'info',
-                message: 'Update available! Downloading...'
-            });
-            // generate me a fake progress bar so the user feels like something is happening
-            let progress = 0;
-
-            // since squirrel doesn't support progress, we will use a fake progress bar
-            function sendFakeProgress() {
-                if (progress >= 100) {
-                    splash.webContents.send('update-progress', { percent: 100, total: 154800000 });
-                    setTimeout(() => {
-                        splash.destroy();
-                        mainWindow.show();
-                    }, 500);
-                    return;
-                }
-                // Random increment between 5 and 15 percent
-                const increment = Math.floor(Math.random() * 11) + 5;
-                progress = Math.min(progress + increment, 100);
-
-                splash.webContents.send('update-progress', { percent: progress, total: 154800000 });
-
-                // Random interval between 500ms and 1200ms
-                const interval = Math.floor(Math.random() * 700) + 500;
-                setTimeout(sendFakeProgress, interval);
-            }
-
-           // sendFakeProgress();
-        });
-
-
-        autoUpdater.on('update-downloaded', () => {
-            dialog.showMessageBox({
-                type: 'info',
-                message: 'Done!'
-            });
-            autoUpdater.quitAndInstall();
-        });
     } else {
-        setTimeout(() => {
-            splash.destroy();
-            mainWindow.show();
-        }, 1000);
+        mainWindow.show();
     }
 });
 
@@ -194,8 +166,19 @@ app.on('window-all-closed', function () {
     if (process.platform !== 'darwin') app.quit();
 });
 
-async function downloadAndSaveFile(remoteUrl, localPath) {
+async function downloadAndSaveFile(remoteUrl, localPath, srcPath) {
+    if (process.env.DEBUG === 'true') {
+        const destDir = path.join(microbotDir, 'libs');
+        fs.mkdirSync(destDir, { recursive: true });
+        fs.copyFileSync(srcPath, localPath);
+        log.info("sucesfully copied " + localPath)
+        return new Promise((resolve, reject) => { resolve() })
+    }
     return new Promise((resolve, reject) => {
+        // Ensure parent directory exists
+        const dir = path.dirname(localPath);
+        fs.mkdirSync(dir, { recursive: true });
+
         const file = fs.createWriteStream(localPath);
         https.get(remoteUrl, (response) => {
             if (response.statusCode === 200) {
@@ -205,7 +188,7 @@ async function downloadAndSaveFile(remoteUrl, localPath) {
                 });
             } else {
                 dialog.showErrorBox('Failed to load js files!', 'Failed to load ' + localPath)
-                reject(new Error(`Failed to download file: ${response.statusCode}`));
+                reject(new Error(`Failed to download file: ${response.statusCode} - ${localPath}`));
             }
         }).on('error', (err) => {
             fs.unlink(localPath, () => reject(err));

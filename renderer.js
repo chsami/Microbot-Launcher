@@ -18,10 +18,8 @@ async function openLauncher() {
 }
 
 async function openClient(version) {
-    if (!await window.electron.clientExists()) {
-        document.getElementById('loader-container').style.display = 'block';
-        await window.electron.downloadClient(version)
-    }
+ 
+    await downloadClientIfNotExist(version);
 
     const proxy = getProxyValues()
 
@@ -96,7 +94,7 @@ window.addEventListener("error", function (e) {
         window.electron.logError(e.error.stack)
     } else if (e.reason) {
         alert("Error occured: " + e.reason.stack + " - Version 1.0.5");//or any message
-        window.electron.logError( e.reason.stack)
+        window.electron.logError(e.reason.stack)
     }
     return false;
 })
@@ -104,7 +102,7 @@ window.addEventListener("error", function (e) {
 window.addEventListener("unhandledrejection", (event) => {
     event.preventDefault(); // This will not print the error in the console });
     alert("Error occured: " + event.reason.stack + " - Version 1.0.5");//or any message
-    window.electron.logError( event.reason.stack)
+    window.electron.logError(event.reason.stack)
 });
 
 window.addEventListener('load', async () => {
@@ -196,14 +194,14 @@ function addSelectElement(selectId, option) {
     // Get the select element by its ID
     const selectElement = document.getElementById(selectId);
 
-// Create a new option element
+    // Create a new option element
     const newOption = document.createElement('option');
 
-// Set the value and text of the new option
+    // Set the value and text of the new option
     newOption.value = option;
     newOption.text = option;
 
-// Add the new option to the select element
+    // Add the new option to the select element
     selectElement.appendChild(newOption);
 }
 
@@ -212,10 +210,10 @@ function populateAccountSelector(characters = []) {
     // Get the select element by its ID
     const characterSelect = document.getElementById('character');
 
-// Clear any existing options (optional)
+    // Clear any existing options (optional)
     characterSelect.innerHTML = "";
 
-// Iterate over the characters array and create option elements
+    // Iterate over the characters array and create option elements
     characters.forEach(character => {
         const option = document.createElement('option');
         option.value = character.accountId; // Set sessionId as the value
@@ -247,16 +245,27 @@ function addAccountsButton() {
 
 function playNoJagexAccount() {
     document.querySelector('#play-no-jagex-account').addEventListener('click', async () => {
+
+
         const proxy = getProxyValues()
         const selectedVersion = document.getElementById('client').value
         const regex = selectedVersion.match(/\d+\.\d+\.\d+(\.\d+)?/);
         if (regex) {
             const version = regex[0];
+            await downloadClientIfNotExist(version);
             await window.electron.playNoJagexAccount(version, proxy)
         } else {
+            await downloadClientIfNotExist(version);
             await window.electron.playNoJagexAccount(selectedVersion, proxy)
         }
     })
+}
+
+async function downloadClientIfNotExist(version) {
+    if (!await window.electron.clientExists(version)) {
+        document.getElementById('loader-container').style.display = 'block';
+        await window.electron.downloadClient(version)
+    }
 }
 
 function updateNowBtn() {
@@ -284,7 +293,7 @@ function getProxyValues() {
     // Get the value of the proxy IP
     var proxyIp = document.getElementById('proxy-ip').value;
 
-// Get the selected value of the proxy type
+    // Get the selected value of the proxy type
     var proxyType = document.getElementById('proxy-type').value;
 
     return {

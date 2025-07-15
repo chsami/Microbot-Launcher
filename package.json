@@ -1,17 +1,13 @@
 {
   "name": "microbot-launcher",
-  "version": "1.2.7",
+  "version": "1.2.4",
   "description": "Launcher for the microbot client",
   "main": "main.js",
   "scripts": {
-    "dev": "cross-env DEBUG=true electron .",
+    "dev": "cross-env DEBUG=false electron .",
     "start": "electron-forge start",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "package-windows": "electron-packager . MicrobotLauncher --platform=win32 --arch=x64 --out=dist1",
-    "package": "electron-forge package",
-    "build:x64": "electron-forge make --arch=x64",
-    "build:ia32": "electron-forge package --arch=ia32 && electron-forge make --arch=ia32",
-    "make": "electron-forge make"
+    "release": "electron-builder --publish always"
   },
   "author": "Mocrosoft",
   "license": "ISC",
@@ -25,29 +21,50 @@
     "@electron-forge/plugin-fuses": "^7.8.1",
     "@electron/fuses": "^1.8.0",
     "cross-env": "^7.0.3",
-    "electron": "^33.2.0"
+    "electron": "^33.2.0",
+    "electron-builder": "^26.0.12"
   },
   "dependencies": {
     "adm-zip": "^0.5.15",
     "applicationinsights": "^2.9.6",
     "axios": "^1.7.2",
-    "electron-squirrel-startup": "^1.0.1",
+    "electron-log": "^5.4.1",
+    "electron-updater": "^6.1.8",
     "update-electron-app": "^3.0.0"
   },
   "build": {
-    "appId": "MicrobotLauncher",
-    "productName": "MicrobotLauncher",
+    "asar": "true",
+    "appId": "com.microbot.launcher",
+    "productName": "Microbot Launcher",
+    "files": [
+      "main.js",
+      "renderer.js",
+      "preload.js",
+      "package.json",
+      "!**/*.map",
+      "images/**",
+      "libs/dir-module.js"
+    ],
     "directories": {
-      "buildResources": "images"
+      "buildResources": "build"
     },
     "win": {
-      "target": "squirrel"
+      "target": "nsis",
+      "icon": "images/microbot_transparent.ico"
     },
-    "mac": {
-      "target": "dmg"
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Microbot Launcher"
     },
-    "linux": {
-      "target": "AppImage"
+    "publish": {
+      "provider": "generic",
+      "url": "https://files.microbot.cloud/releases/microbot-launcher/"
+    },
+    "extraMetadata": {
+      "version": "2.0.0"
     }
   }
 }
