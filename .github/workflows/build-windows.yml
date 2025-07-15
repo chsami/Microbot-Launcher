@@ -7,6 +7,8 @@ on:
 jobs:
   build-win:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
 
     steps:
       - uses: actions/checkout@v4
@@ -16,6 +18,13 @@ jobs:
 
       - run: npm ci
       - run: npm run release
+
+      - name: Get version from package.json
+        id: version
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+        shell: pwsh
 
       - name: Copy only files from dist/ to filtered/
         shell: pwsh
@@ -60,19 +69,11 @@ jobs:
           path: ./assets
 
 
-      - name: Get version from package.json
-        id: version
-        run: |
-          $version = (Get-Content package.json | ConvertFrom-Json).version
-          echo "version=$version" >> $env:GITHUB_OUTPUT
-        shell: pwsh
-
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: Release v${{ steps.version.outputs.version }}
+          tag_name: v${{ needs.build-win.outputs.version }}
+          name: Release v${{ needs.build-win.outputs.version }}
           files: |
             ./artifact/Microbot Launcher Setup.exe
             ./artifact/latest.yml
