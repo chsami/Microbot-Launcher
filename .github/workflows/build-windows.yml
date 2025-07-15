@@ -17,10 +17,14 @@ jobs:
       - run: npm ci
       - run: npm run release
 
-      - name: Upload only files from dist/
+      - name: Copy only files from dist/ to filtered/
+        shell: pwsh
         run: |
-          mkdir filtered
-          find dist -maxdepth 1 -type f -exec cp {} filtered/ \;
+          New-Item -ItemType Directory -Path filtered
+          Get-ChildItem -Path dist -File | ForEach-Object {
+            Copy-Item $_.FullName -Destination filtered
+          }
+          
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
