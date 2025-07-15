@@ -74,6 +74,5 @@ jobs:
             ./assets/images \
             ./assets/libs \
             ./assets/index.html \
-            ./assets/splash.html \
             ./assets/renderer.js \
             root@138.201.81.246:/var/www/files/assets/microbot-launcher/
