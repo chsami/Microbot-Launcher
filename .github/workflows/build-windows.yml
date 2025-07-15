@@ -17,13 +17,15 @@ jobs:
       - run: npm ci
       - run: npm run release
 
-      - name: Upload Release as artifact
+      - name: Upload only files from dist/
+        run: |
+          mkdir filtered
+          find dist -maxdepth 1 -type f -exec cp {} filtered/ \;
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: microbot-launcher-exe-latest
-          path: |
-            dist/* 
-            !dist/**/
+          path: filtered/
 
       - name: Upload project assets
         uses: actions/upload-artifact@v4
