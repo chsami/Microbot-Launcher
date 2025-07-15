@@ -7,7 +7,8 @@
     "dev": "cross-env DEBUG=false electron .",
     "start": "electron-forge start",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "release": "electron-builder --publish always"
+    "release": "electron-builder --publish always",
+    "linux": "electron-builder --linux"
   },
   "author": "Mocrosoft",
   "license": "ISC",
