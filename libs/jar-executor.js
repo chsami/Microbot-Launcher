@@ -17,8 +17,8 @@ module.exports = async function (deps) {
             const commandArgs = [
                 '-jar',
                 jarPath,
-                ' -proxy=' + proxy.proxyIp,
-                ' -proxy-type=' + proxy.proxyType
+                '-proxy=' + proxy.proxyIp,
+                '-proxy-type=' + proxy.proxyType
             ];
             checkJavaAndRunJar(
                 commandArgs,
