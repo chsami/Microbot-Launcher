@@ -11,7 +11,7 @@ jobs:
   build-win:
     runs-on: windows-latest
     outputs:
-      version: ${{ steps.get_version.outputs.version }}
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - uses: actions/checkout@v4
@@ -54,16 +54,42 @@ jobs:
             index.html
             renderer.js
 
-  upload:
+  build-linux:
     runs-on: ubuntu-latest
     needs: build-win
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Build AppImage
+        run: npm run linux
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: microbot-launcher-linux-latest
+          path: dist/*.AppImage
+
+  upload:
+    runs-on: ubuntu-latest
+    needs: [build-win, build-linux]
 
     steps:
-      - name: Download artifact
+      - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
           name: microbot-launcher-exe-latest
           path: ./artifact
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: microbot-launcher-linux-latest
+          path: ./linux
 
       - name: Download assets
         uses: actions/download-artifact@v4
@@ -71,16 +97,16 @@ jobs:
           name: microbot-launcher-assets
           path: ./assets
 
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.build-win.outputs.version }}
           name: Release v${{ needs.build-win.outputs.version }}
           files: |
-            "./artifact/Microbot Launcher Setup.exe"
+            ./artifact/Microbot Launcher Setup.exe
             ./artifact/latest.yml
             ./artifact/*.blockmap
+            ./linux/*.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -94,9 +120,10 @@ jobs:
           ssh-keyscan -H 138.201.81.246 >> ~/.ssh/known_hosts
 
           # Upload EXE
-          scp -r \
-            ./artifact/* \
-            root@138.201.81.246:/var/www/files/releases/microbot-launcher/
+          scp -r ./artifact/* root@138.201.81.246:/var/www/files/releases/microbot-launcher/
+
+          # Upload AppImage
+          scp -r ./linux/*.AppImage root@138.201.81.246:/var/www/files/releases/microbot-launcher/
 
           # Upload additional files
           scp -r \
