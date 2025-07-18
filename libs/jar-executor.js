@@ -119,13 +119,14 @@ module.exports = async function (deps) {
         try {
             const filePath = path.join(microbotDir, 'jcef-bundle');
             const launcherPath = path.join(microbotDir, 'microbot-launcher.jar');
-            executeJar(
+            checkJavaAndRunJar(
                 [
                     `-Djava.library.path=${filePath}`,
                     '-jar',
                     launcherPath
                 ],
-                dialog
+                dialog,
+                shell
             );
         } catch (error) {
             log.error(error.message)
