@@ -69,11 +69,7 @@ module.exports = async function (deps) {
     function executeJar(commandArgs, dialog) {
         log.info(`java ${commandArgs.join(' ')}`);
 
-        // execute it detached so when closing the launcher, doesn't close the clients.
-        const jarProcess = spawn('java', commandArgs, {
-        	detached: true,
-        	stdio: ['ignore', 'pipe', 'pipe']
-    	});
+        const jarProcess = spawn('java', commandArgs);
 
         jarProcess.stdout.on('data', (data) => {
             log.info(`[stdout] ${data}`);
