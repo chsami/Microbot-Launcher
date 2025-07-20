@@ -2,10 +2,11 @@
   "name": "microbot-launcher",
   "version": "2.0.0",
   "description": "Launcher for the microbot client",
-  "main": "main.js",
+  "main": "dist/main.js",
   "scripts": {
-    "dev": "cross-env DEBUG=true electron .",
-    "start": "electron-forge start",
+    "build": "tsc",
+    "dev": "npm run build && cross-env DEBUG=true electron .",
+    "start": "npm run build && electron-forge start",
     "test": "echo \"Error: no test specified\" && exit 1",
     "release": "electron-builder --publish always",
     "linux": "electron-builder --linux"
@@ -23,7 +24,8 @@
     "@electron/fuses": "^1.8.0",
     "cross-env": "^7.0.3",
     "electron": "^33.2.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.4.5"
   },
   "dependencies": {
     "adm-zip": "^0.5.15",
@@ -38,13 +40,13 @@
     "appId": "com.microbot.launcher",
     "productName": "Microbot Launcher",
     "files": [
-      "main.js",
-      "renderer.js",
-      "preload.js",
+      "dist/main.js",
+      "dist/renderer.js",
+      "dist/preload.js",
       "package.json",
       "!**/*.map",
       "images/**",
-      "libs/dir-module.js"
+      "dist/libs/dir-module.js"
     ],
     "directories": {
       "buildResources": "build"

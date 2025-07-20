@@ -1,3 +1,4 @@
+// @ts-nocheck
 const { app, BrowserWindow, dialog, shell } = require('electron');
 const { microbotDir } = require("./libs/dir-module");
 const path = require('path');

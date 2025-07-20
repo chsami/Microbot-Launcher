@@ -1,3 +1,4 @@
+// @ts-nocheck
 let accounts = []
 let iii = null
 
