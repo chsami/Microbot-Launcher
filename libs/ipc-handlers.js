@@ -36,9 +36,11 @@ module.exports = async function (deps) {
         try {
             event.sender.send('progress', { percent: 10, status: 'Downloading...' });
 
+            const url = process.platform === 'linux' ? filestorage + '/assets/microbot-launcher/linux-amd64.tar.gz' : filestorage + '/assets/microbot-launcher/jcef-bundle.zip'
+
             const response = await axios({
                 method: 'get',
-                url: filestorage + '/assets/microbot-launcher/jcef-bundle.zip',
+                url: url,
                 responseType: 'arraybuffer',
                 onDownloadProgress: (progressEvent) => {
                     const totalLength = 126009591;
@@ -50,7 +52,7 @@ module.exports = async function (deps) {
 
             event.sender.send('progress', { percent: 50, status: 'Saving file...' });
             event.sender.send('progress', { percent: 55, status: 'Unpacking file...' });
-            const zipFilePath = path.join(microbotDir, 'jcef-bundle.zip');
+            const zipFilePath = path.join(microbotDir, process.platform === 'linux' ? 'linux-amd64.tar.gz' : 'jcef-bundle.zip');
             fs.writeFileSync(zipFilePath, response.data);
             const zip = new AdmZip(zipFilePath);
             const extractPath = microbotDir;
@@ -112,7 +114,7 @@ module.exports = async function (deps) {
 
     ipcMain.handle('fetch-launcher-version', async () => {
         try {
-            const response = await axios.get(url + '/api/file/launcher');
+            const response = await axios.get(url + '/api/version/launcher');
             return response.data;
         } catch (error) {
             log.error(error.message)
@@ -122,7 +124,7 @@ module.exports = async function (deps) {
 
     ipcMain.handle('fetch-client-version', async () => {
         try {
-            const response = await axios.get(url + '/api/file/client');
+            const response = await axios.get(url + '/api/version/client');
             return response.data;
         } catch (error) {
             log.error(error.message)
