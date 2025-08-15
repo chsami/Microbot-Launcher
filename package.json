@@ -26,7 +26,6 @@
     "electron-builder": "^26.0.12"
   },
   "dependencies": {
-    "adm-zip": "^0.5.15",
     "applicationinsights": "^2.9.6",
     "axios": "^1.7.2",
     "electron-log": "^5.4.1",

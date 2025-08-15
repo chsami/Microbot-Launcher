@@ -2,7 +2,6 @@ module.exports = async function (deps) {
 
     const {
         ipcMain,
-        AdmZip,
         axios,
         microbotDir,
         packageJson,
@@ -31,55 +30,6 @@ module.exports = async function (deps) {
     const jarExecutorHandler = require(path.join(microbotDir, 'libs/jar-executor.js'));
     await jarExecutorHandler(deps)
     const packageVersion = packageJson.version;
-
-    ipcMain.handle('download-jcef', async (event) => {
-        try {
-            event.sender.send('progress', { percent: 10, status: 'Downloading...' });
-
-            const url = process.platform === 'linux' ? filestorage + '/assets/microbot-launcher/linux-amd64.tar.gz' : filestorage + '/assets/microbot-launcher/jcef-bundle.zip'
-
-            const response = await axios({
-                method: 'get',
-                url: url,
-                responseType: 'arraybuffer',
-                onDownloadProgress: (progressEvent) => {
-                    const totalLength = 126009591;
-                    const progress = ((progressEvent.loaded * 100) / totalLength).toFixed(2);
-                    let currentPercent = (10 + (progress * 0.4)).toFixed(2);
-                    event.sender.send('progress', { percent: currentPercent, status: `Downloading... (${progress}%)` });
-                }
-            });
-
-            event.sender.send('progress', { percent: 50, status: 'Saving file...' });
-            event.sender.send('progress', { percent: 55, status: 'Unpacking file...' });
-            const zipFilePath = path.join(microbotDir, process.platform === 'linux' ? 'linux-amd64.tar.gz' : 'jcef-bundle.zip');
-            fs.writeFileSync(zipFilePath, response.data);
-            const zip = new AdmZip(zipFilePath);
-            const extractPath = microbotDir;
-            zip.extractAllTo(extractPath, true);
-            event.sender.send('progress', { percent: 60, status: 'Cleaning up...' });
-            fs.unlinkSync(zipFilePath);
-            return { success: true, path: extractPath };
-        } catch (error) {
-            log.error(error.message)
-            return { error: error.message };
-        }
-    });
-
-    ipcMain.handle('download-microbot-launcher', async (event) => {
-        try {
-            event.sender.send('progress', { percent: 70, status: 'Downloading Microbot Jagex Launcher...' });
-            const response = await axios.get(filestorage + '/assets/microbot-launcher/microbot-launcher.jar', { responseType: 'arraybuffer' });
-            event.sender.send('progress', { percent: 80, status: 'Finishing...' });
-            const filePath = path.join(microbotDir, 'microbot-launcher.jar');
-            fs.writeFileSync(filePath, response.data);
-            event.sender.send('progress', { percent: 80, status: 'Completed!' });
-            return { success: true, path: filePath };
-        } catch (error) {
-            log.error(error.message)
-            return { error: error.message };
-        }
-    });
 
     ipcMain.handle('download-client', async (event, version) => {
         try {
@@ -142,32 +92,10 @@ module.exports = async function (deps) {
         }
     });
 
-  
-
-    ipcMain.handle('jcef-exists', async () => {
-        try {
-            const filePath = path.join(microbotDir, 'jcef-bundle');
-            return fs.existsSync(filePath)
-        } catch (error) {
-            log.error(error.message)
-            return { error: error.message };
-        }
-    });
-
     ipcMain.handle('client-exists', async (event, version) => {
         try {
             const filePath = path.join(microbotDir, 'microbot-' + version);
             log.info(filePath)
-            return fs.existsSync(filePath)
-        } catch (error) {
-            log.error(error.message)
-            return { error: error.message };
-        }
-    });
-
-    ipcMain.handle('launcher-exists', async () => {
-        try {
-            const filePath = path.join(microbotDir, 'microbot-launcher.jar');
             return fs.existsSync(filePath)
         } catch (error) {
             log.error(error.message)

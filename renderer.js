@@ -1,22 +1,6 @@
 let accounts = []
 let iii = null
 
-async function openLauncher() {
-
-    if (!await window.electron.jcefExists()) {
-        document.getElementById('loader-container').style.display = 'block';
-        await window.electron.downloadJcef()
-    }
-
-    if (!await window.electron.launcherExists()) {
-        document.getElementById('loader-container').style.display = 'block';
-        await window.electron.downloadMicrobotLauncher()
-    }
-
-    document.getElementById('loader-container').style.display = 'none';
-    await window.electron.openLauncher()
-}
-
 async function openClient(version) {
  
     await downloadClientIfNotExist(version);
@@ -120,9 +104,6 @@ window.addEventListener('load', async () => {
 
     if (properties['launcher'] !== launcherVersion) {
         document.getElementById('loader-container').style.display = 'block';
-        if (!await window.electron.jcefExists()) {
-            await window.electron.downloadJcef()
-        }
         properties['launcher'] = launcherVersion
         await window.electron.downloadMicrobotLauncher()
     }
@@ -149,7 +130,7 @@ window.addEventListener('load', async () => {
             const selectedVersion = document.getElementById('client').value
             await openClient(selectedVersion, proxy)
         } else {
-            await openLauncher()
+            alert('open playwright instance here')
         }
     })
 
@@ -237,9 +218,9 @@ function logoutButton() {
 }
 
 function addAccountsButton() {
-    const addAccounts = document.getElementById('add-accounts');
-    addAccounts?.addEventListener('click', async () => {
-        await openLauncher()
+    const addAccountsBtn = document.getElementById('add-accounts');
+    addAccountsBtn?.addEventListener('click', async () => {
+        alert('Open playwright instance here')
     })
 }
 

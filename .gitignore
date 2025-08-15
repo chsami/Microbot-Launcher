@@ -129,3 +129,4 @@ dist
 .pnp.*
 jcef-bundle
 microbot-*.jar
+index_debug.html

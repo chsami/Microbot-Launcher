@@ -1,7 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electron', {
-    downloadJcef: () => ipcRenderer.invoke('download-jcef'),
     downloadMicrobotLauncher: () => ipcRenderer.invoke('download-microbot-launcher'),
     downloadClient: (version) => ipcRenderer.invoke('download-client', version),
     downloadLauncherHtml: () => ipcRenderer.invoke('download-client'),
@@ -10,11 +9,9 @@ contextBridge.exposeInMainWorld('electron', {
     fetchLauncherVersion: () => ipcRenderer.invoke('fetch-launcher-version'), //jagex launcher
     fetchClientVersion: () => ipcRenderer.invoke('fetch-client-version'),
     fetchLauncherHtmlVersion: () => ipcRenderer.invoke('fetch-launcher-html-version'),
-    openLauncher: () => ipcRenderer.invoke('open-launcher'),
     openClient: (version, proxy) => ipcRenderer.invoke('open-client', version, proxy),
     readAccounts: () => ipcRenderer.invoke('read-accounts'),
     removeAccounts: () => ipcRenderer.invoke('remove-accounts'),
-    jcefExists: () => ipcRenderer.invoke('jcef-exists'),
     clientExists: (version) => ipcRenderer.invoke('client-exists', version),
     launcherExists: () => ipcRenderer.invoke('launcher-exists'),
     overwriteCredentialProperties: (character) => ipcRenderer.invoke('overwrite-credential-properties', character),

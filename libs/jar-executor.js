@@ -114,25 +114,6 @@ module.exports = async function (deps) {
             }
         });
     }
-
-    ipcMain.handle('open-launcher', async () => {
-        try {
-            const filePath = path.join(microbotDir, 'jcef-bundle');
-            const launcherPath = path.join(microbotDir, 'microbot-launcher.jar');
-            checkJavaAndRunJar(
-                [
-                    `-Djava.library.path=${filePath}`,
-                    '-jar',
-                    launcherPath
-                ],
-                dialog,
-                shell
-            );
-        } catch (error) {
-            log.error(error.message)
-            return { error: error.message };
-        }
-    });
 }
 
 

@@ -7,7 +7,6 @@ const https = require('https');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 const { ipcMain } = require('electron');
-const AdmZip = require('adm-zip');
 const packageJson = require(path.join(__dirname, 'package.json'));
 const { spawn } = require('child_process');
 
@@ -69,7 +68,6 @@ async function loadLibraries() {
         log.info('require ipchandler...');
         const handler = require(ipcHandlersPath);
         const deps = {
-            AdmZip: AdmZip,
             axios: axios,
             ipcMain: ipcMain,
             microbotDir: microbotDir,
@@ -102,7 +100,7 @@ async function createWindow() {
         height: 800,
         show: false, // Don't show the main window immediately
         title: 'Microbot Launcher',
-        autoHideMenuBar: true,
+        autoHideMenuBar: false,
         icon: path.join(__dirname, 'images/microbot_transparent.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
@@ -113,7 +111,23 @@ async function createWindow() {
 
     await downloadFileFromBlobStorage(filestorage + '/assets/microbot-launcher', './css', 'styles.css')
     const indexHtmlPath = await downloadFileFromBlobStorage(filestorage + '/assets/microbot-launcher', './', 'index.html')
-    await mainWindow.loadFile(indexHtmlPath);
+
+     // Before loading the HTML, modify it if in debug mode
+    if (process.env.DEBUG === 'true') {
+        let htmlContent = fs.readFileSync(indexHtmlPath, 'utf8');
+        htmlContent = htmlContent.replace(
+            '<script src="https://files.microbot.cloud/assets/microbot-launcher/renderer.js?version=2.0.0"></script>',
+            '<script src="renderer.js"></script>'
+        );
+        
+        // Write the modified HTML to a temporary file
+        const tempHtmlPath = path.join('./', 'index_debug.html');
+        fs.writeFileSync(tempHtmlPath, htmlContent);
+        
+        await mainWindow.loadFile(tempHtmlPath);
+    } else {
+        await mainWindow.loadFile(indexHtmlPath);
+    }
 }
 
 
