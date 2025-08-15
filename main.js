@@ -100,7 +100,7 @@ async function createWindow() {
         height: 800,
         show: false, // Don't show the main window immediately
         title: 'Microbot Launcher',
-        autoHideMenuBar: false,
+        autoHideMenuBar: process.env.DEBUG !== 'true',
         icon: path.join(__dirname, 'images/microbot_transparent.ico'),
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
