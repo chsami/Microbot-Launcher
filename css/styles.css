@@ -4,6 +4,13 @@ body {
     font-family: Arial, sans-serif;
     background-color: #1a1d29;
     color: white;
+    border-radius: 20px;
+}
+
+iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
 }
 
 .container {
@@ -40,7 +47,6 @@ body {
 
 .content {
     flex: 2;
-    padding: 20px;
     overflow-y: auto;
 }
 
@@ -51,6 +57,18 @@ body {
     margin-bottom: 20px;
 }
 
+.featured {
+    display: flex;
+    position: fixed;
+    width: 100%;
+    background: #1a1d29;
+    bottom: 0;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0px 0px 10px 3px #000000d1;
+    z-index: 100;
+}
+
 h2 {
     margin-bottom: 15px;
     font-size: 20px;
@@ -59,6 +77,7 @@ h2 {
 .recent-updates {
     display: flex;
     gap: 15px;
+    height: 100%;
     flex-wrap: wrap;
 }
 
@@ -104,7 +123,6 @@ h2 {
 .game-logo img {
     width: 200px;
     height: auto;
-    margin-bottom: 20px;
 }
 
 .refresh-btn {
@@ -132,6 +150,13 @@ h2 {
     width: 100%;
 }
 
+.play-buttons {
+    display: block;
+    flex-direction: row;
+    gap: 10px;
+    width: 100%;
+}
+
 .logout-button {
     background-color: rgba(255, 0, 0, 0.6);
     color: white;
@@ -142,7 +167,7 @@ h2 {
     cursor: pointer;
     margin-bottom: 20px;
     width: 100%;
-    display:none;
+    display: none;
 }
 
 .add-accounts {
@@ -155,17 +180,19 @@ h2 {
     cursor: pointer;
     margin-bottom: 20px;
     width: 100%;
-    display:none;
+    display: none;
 }
 
-.logout-button:hover, .play-button:hover, .add-accounts:hover {
-    opacity:0.9;
+.logout-button:hover,
+.play-button:hover,
+.add-accounts:hover {
+    opacity: 0.9;
 }
 
 .game-info {
     width: 100%;
     margin-bottom: 20px;
-    display:none;
+    display: none;
 }
 
 .proxy-section {
@@ -194,6 +221,7 @@ h2 {
     background-color: #242a3b;
     color: #ffffff;
 }
+
 .proxy-section select {
     width: 100%;
     padding: 10px;
@@ -203,6 +231,7 @@ h2 {
     background-color: #242a3b;
     color: #ffffff;
 }
+
 .proxy-section input {
     width: 95%;
     padding: 10px;
@@ -212,6 +241,7 @@ h2 {
     background-color: #242a3b;
     color: #ffffff;
 }
+
 .pegi-rating img {
     width: 100px;
     height: auto;
@@ -231,7 +261,8 @@ h2 {
     background-color: #f3f3f3;
     border-radius: 4px;
     margin-top: 20px;
-    overflow: hidden; /* Ensure the bar stays within the container */
+    overflow: hidden;
+    /* Ensure the bar stays within the container */
 }
 
 #progress-bar {
@@ -257,13 +288,15 @@ h2 {
     background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
     opacity: 0.5;
     filter: blur(10px);
-    animation: glowing 2s linear infinite; /* Animate the glow moving to the right */
+    animation: glowing 2s linear infinite;
+    /* Animate the glow moving to the right */
 }
 
 @keyframes glowing {
     0% {
         left: -100%;
     }
+
     100% {
         left: 100%;
     }
@@ -276,17 +309,29 @@ h2 {
 }
 
 #loader-container {
-    display:none;
-}
-
-
-.splash-image {
-
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    background: #242a3b;
+    z-index: 125;
+    width: 40%;
+    margin: 1rem;
+    border-radius: 10px;
+    box-shadow: 3px 3px 3px 3px #00000040;
+    padding: 2rem;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
 }
 
 
 #update-available {
-    display:none;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
 .modal-actions {
@@ -297,7 +342,7 @@ h2 {
 
 #remind-me-later-btn {
     background-color: #1a1d29;
-    border:1px solid white;
+    border: 1px solid white;
     color: white;
     padding: 10px 20px;
     border-radius: 5px;
@@ -305,6 +350,12 @@ h2 {
     cursor: pointer;
     margin-bottom: 20px;
     width: 200px;
+
+    transition: scale 0.3s ease;
+
+    &:hover {
+        scale: 1.02;
+    }
 }
 
 #update-now-btn {
@@ -317,6 +368,12 @@ h2 {
     cursor: pointer;
     margin-bottom: 20px;
     width: 200px;
+
+    transition: scale 0.3s ease;
+
+    &:hover {
+        scale: 1.02;
+    }
 }
 
 .loadingButton {
@@ -347,7 +404,82 @@ h2 {
     animation: spin 1s linear infinite;
 }
 
+.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+    user-select: none;
+}
+
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.titlebar {
+    height: 30px;
+    background: #242a3b;
+    color: white;
+    display: grid;
+    app-region: drag;
+    width: 100%;
+    padding: 0%;
+
+    .titlebar-title {
+        grid-column: 1;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-left: 8px;
+        overflow: hidden;
+        font-size: 14px;
+    }
+
+    .titlebar-controls {
+        display: grid;
+        grid-template-columns: repeat(3, 30px);
+        position: absolute;
+        top: 0;
+        right: 0;
+        height: 30px;
+        -webkit-app-region: no-drag;
+    }
+
+    button {
+        grid-row: 1 / span 1;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        height: 100%;
+        user-select: none;
+        background: transparent;
+        border: none;
+
+        &:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        &:active {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        z-index: 1000;
+    }
+
+    #minimize-btn {
+        grid-column: 1;
+    }
+
+    #maximize-btn {
+        grid-column: 2;
+    }
+
+    #close-btn {
+        grid-column: 3;
+    }
 }

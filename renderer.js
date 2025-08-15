@@ -1,7 +1,8 @@
 let accounts = [];
 let iii = null;
 
-async function openClient(version) {
+async function openClient() {
+    const version = extractVersion(document.getElementById('client').value);
     await downloadClientIfNotExist(version);
 
     const proxy = getProxyValues();
@@ -19,15 +20,7 @@ async function openClient(version) {
     );
     if (selectedAccount) {
         await window.electron.overwriteCredentialProperties(selectedAccount);
-        const selectedVersion = document.getElementById('client').value;
-        const regex = selectedVersion.match(/\d+\.\d+\.\d+(\.\d+)?/);
-        if (regex) {
-            const version = regex[0];
-            console.log(version[0]);
-            await window.electron.openClient(version, proxy);
-        } else {
-            await window.electron.openClient(selectedVersion, proxy);
-        }
+        await window.electron.openClient(version, proxy, selectedAccount);
     } else {
         alert('Account not found. Please restart your client.');
     }
@@ -48,23 +41,21 @@ function updateProgress(percent, status) {
     statusText.textContent = status;
 }
 
-async function handleJagexAccountLogic(clientVersion) {
+async function handleJagexAccountLogic(properties) {
     setInterval(async () => {
         const hasChanged = await window.electron.checkFileChange();
         if (hasChanged) {
-            document.getElementById('play').innerHTML =
-                'Play With Jagex Account';
-            document.getElementById('logout').style.display = 'block';
-            document.getElementById('add-accounts').style.display = 'block';
             accounts = await window.electron.readAccounts();
-            populateAccountSelector(accounts);
-            logoutButton();
-            addAccountsButton();
-            accounts = await window.electron.readAccounts();
-            populateAccountSelector(accounts);
-            populateSelectElement('client', [clientVersion + '.jar']);
-            document.getElementById('logout').style.display = 'block';
-            document.getElementById('add-accounts').style.display = 'block';
+            const selectedProfile = document.getElementById('profile')?.value;
+
+            setupSidebarLayout(accounts.length);
+
+            populateSelectElement('client', await window.electron.listJars());
+            populateProfileSelector(
+                await window.electron.listProfiles(),
+                selectedProfile
+            );
+            await setVersionPreference(properties);
         }
     }, 1000);
 }
@@ -96,15 +87,15 @@ window.addEventListener('load', async () => {
 
     const launcherVersion = await window.electron.fetchLauncherVersion(); // jagex launcher version
     const clientVersion = await window.electron.fetchClientVersion();
-    const launcherHtmlVersion =
-        await window.electron.fetchLauncherHtmlVersion();
 
     const microbotLauncherVersion = await window.electron.launcherVersion();
 
-    document.title = 'Microbot Launcher ' + microbotLauncherVersion;
+    document.querySelector('.titlebar-title').innerText =
+        'Microbot Launcher - ' + microbotLauncherVersion;
 
     if (properties['launcher'] !== launcherVersion) {
         document.getElementById('loader-container').style.display = 'block';
+
         properties['launcher'] = launcherVersion;
         await window.electron.downloadMicrobotLauncher();
     }
@@ -113,12 +104,6 @@ window.addEventListener('load', async () => {
         document.getElementById('loader-container').style.display = 'block';
         properties['client'] = clientVersion;
         await window.electron.downloadClient(clientVersion);
-    }
-
-    if (properties['launcher_html'] !== launcherHtmlVersion) {
-        document.getElementById('loader-container').style.display = 'block';
-        properties['launcher_html'] = launcherHtmlVersion;
-        await window.electron.downloadLauncherHtml();
     }
 
     document.getElementById('loader-container').style.display = 'none';
@@ -130,13 +115,62 @@ window.addEventListener('load', async () => {
             document.getElementById('play')?.innerText.toLowerCase() ===
             'Play With Jagex Account'.toLowerCase()
         ) {
-            const proxy = getProxyValues();
-            const selectedVersion = document.getElementById('client').value;
-            await openClient(selectedVersion, proxy);
+            await openClient();
         } else {
-            alert('open playwright instance here');
+            document.getElementById('play').classList.add('disabled');
+            await window.electron.startAuthFlow();
+            document.getElementById('play').classList.remove('disabled');
         }
     });
+
+    /*
+     * Whenever the profile select changes, we set the "preferred" profile on accounts.json
+     * for the current selected account, if no jagex account is selected, we set on
+     * the non-jagex-preferred-profile.json
+     */
+    document
+        .getElementById('profile')
+        .addEventListener('change', async (event) => {
+            const selectedProfile = event.target.value;
+            const selectedAccount = document.getElementById('character')?.value;
+            if (selectedAccount && selectedAccount !== 'none') {
+                await window.electron.setProfileJagexAccount(
+                    selectedAccount,
+                    selectedProfile
+                );
+            } else {
+                await window.electron.setProfileNoJagexAccount(selectedProfile);
+            }
+        });
+
+    /*
+     * Whenever the character select changes, we attempt to set the "preferred" profile
+     * for the selected account if it exists, otherwise we set the profile
+     * to the default
+     */
+    document
+        .getElementById('character')
+        .addEventListener('change', async (event) => {
+            const selectedAccount = event.target.value;
+            const accounts = await window.electron.readAccounts();
+
+            if (selectedAccount && selectedAccount !== 'none') {
+                const account = accounts.find(
+                    (x) => x.accountId === selectedAccount
+                );
+                if (account) {
+                    const profile = account.profile || 'default';
+                    document.getElementById('profile').value = profile;
+                }
+            } else {
+                // If no account is selected, set the profile to the preferred non-Jagex account profile
+                // If no profile is set, default to "default"
+                const nonJagexProfile =
+                    await window.electron.readNonJagexProfile();
+                const profile = nonJagexProfile || 'default';
+                document.getElementById('profile').value = profile;
+            }
+        });
 
     //Init buttons and UI
     await initUI(properties);
@@ -148,7 +182,7 @@ window.addEventListener('load', async () => {
         await checkForClientUpdate(properties);
     }, 5 * 60 * 1000); // 5 minutes
 
-    await handleJagexAccountLogic(clientVersion);
+    await handleJagexAccountLogic(properties);
 
     document.querySelectorAll('.loadingButton').forEach((button) => {
         button.addEventListener('click', startLoading);
@@ -165,12 +199,7 @@ function populateSelectElement(selectId, options) {
     selectElement.innerHTML = '';
 
     // Add each option from the array to the select element
-    options.forEach((optionText) => {
-        const optionElement = document.createElement('option');
-        optionElement.value = optionText;
-        optionElement.textContent = optionText;
-        selectElement.appendChild(optionElement);
-    });
+    options.forEach((optionText) => addSelectElement(selectId, optionText));
 }
 
 function addSelectElement(selectId, option) {
@@ -188,12 +217,41 @@ function addSelectElement(selectId, option) {
     selectElement.appendChild(newOption);
 }
 
-function populateAccountSelector(characters = []) {
+function populateProfileSelector(profiles = [], selectedProfile = null) {
+    // Get the select element by its ID
+    const profileSelect = document.getElementById('profile');
+
+    // Clear any existing options (optional)
+    profileSelect.innerHTML = '';
+
+    // Create a default "default" option
+    const defaultOption = document.createElement('option');
+    defaultOption.value = 'default';
+    defaultOption.textContent = 'Default';
+    profileSelect.appendChild(defaultOption);
+
+    // Iterate over the profiles array and create option elements
+    profiles.forEach((profile) => {
+        addSelectElement('profile', profile);
+    });
+
+    if (selectedProfile) {
+        profileSelect.value = selectedProfile;
+    }
+}
+
+function populateAccountSelector(characters = [], selectedAccount = null) {
     // Get the select element by its ID
     const characterSelect = document.getElementById('character');
 
     // Clear any existing options (optional)
     characterSelect.innerHTML = '';
+
+    // Create a default "none" option
+    const defaultOption = document.createElement('option');
+    defaultOption.value = 'none';
+    defaultOption.textContent = 'None';
+    characterSelect.appendChild(defaultOption);
 
     // Iterate over the characters array and create option elements
     characters.forEach((character) => {
@@ -202,9 +260,13 @@ function populateAccountSelector(characters = []) {
         option.textContent = character.displayName; // Set displayName as the text
         characterSelect.appendChild(option); // Add the option to the select element
     });
+
+    if (selectedAccount) {
+        characterSelect.value = selectedAccount;
+    }
 }
 
-function logoutButton() {
+function setupLogoutButton() {
     const logoutBtn = document.getElementById('logout');
     logoutBtn?.addEventListener('click', async () => {
         const userConfirmed = confirm('Are you sure you want to proceed?');
@@ -218,11 +280,54 @@ function logoutButton() {
     });
 }
 
-function addAccountsButton() {
-    const addAccountsBtn = document.getElementById('add-accounts');
-    addAccountsBtn?.addEventListener('click', async () => {
-        alert('Open playwright instance here');
+function setupSidebarLayout(amountOfAccounts) {
+    const selectedAccount = document.getElementById('character')?.value;
+    const playJagexButton = document.getElementById('play');
+    const playButtonsDiv = document.querySelector('.play-buttons');
+    const logoutButton = document.getElementById('logout');
+    const addAccountsButton = document.getElementById('add-accounts');
+    const characterSelect = document.getElementById('character');
+    const characterSelectLabel = document.querySelector(
+        'label[for="character"]'
+    );
+
+    if (amountOfAccounts > 0) {
+        playJagexButton.innerHTML = 'Play With Jagex Account';
+        logoutButton.style.display = 'block';
+        playButtonsDiv.style.display = 'flex';
+        characterSelectLabel.style.display = 'block';
+        characterSelect.style.display = 'block';
+        addAccountsButton.style.display = 'block';
+        populateAccountSelector(accounts, selectedAccount);
+        setupLogoutButton();
+        setupAddAccountsButton();
+    } else {
+        playJagexButton.innerHTML = 'Login Jagex Account';
+        logoutButton.style.display = 'none';
+        playButtonsDiv.style.display = 'none';
+        characterSelectLabel.style.display = 'none';
+        characterSelect.style.display = 'none';
+        addAccountsButton.style.display = 'none';
+    }
+}
+
+function setupAddAccountsButton() {
+    const addAccountsButton = document.getElementById('add-accounts');
+    addAccountsButton?.addEventListener('click', async () => {
+        document.getElementById('add-accounts').classList.add('disabled');
+        await window.electron.startAuthFlow();
+        document.getElementById('add-accounts').classList.remove('disabled');
     });
+}
+
+/**
+ * Extracts the version number from a string.
+ * e.g., "microbot-1.1.1.1.jar" becomes "1.9.6.1"
+ * @param {string} versionString - The string containing the version.
+ * @returns {string} The extracted version number.
+ */
+function extractVersion(versionString) {
+    return versionString.replace(/^microbot-/, '').replace(/\.jar$/, '');
 }
 
 function playNoJagexAccount() {
@@ -231,26 +336,26 @@ function playNoJagexAccount() {
         .addEventListener('click', async () => {
             const proxy = getProxyValues();
             const selectedVersion = document.getElementById('client').value;
-            const regex = selectedVersion.match(/\d+\.\d+\.\d+(\.\d+)?/);
-            if (regex) {
-                const version = regex[0];
-                await downloadClientIfNotExist(version + '.jar');
-                await window.electron.playNoJagexAccount(version, proxy);
-            } else {
-                await downloadClientIfNotExist(version);
-                await window.electron.playNoJagexAccount(
-                    selectedVersion,
-                    proxy
-                );
-            }
+            const version = extractVersion(selectedVersion);
+
+            const selectedProfile =
+                document.getElementById('profile').value || 'default';
+            await window.electron.setProfileNoJagexAccount(selectedProfile);
+
+            await downloadClientIfNotExist(version);
+            await window.electron.playNoJagexAccount(version, proxy);
         });
 }
 
 async function downloadClientIfNotExist(version) {
     if (!(await window.electron.clientExists(version))) {
+        window.electron.logError(
+            `Client ${version} does not exist. Downloading...`
+        );
         document.getElementById('loader-container').style.display = 'block';
         await window.electron.downloadClient(version);
     }
+    window.electron.logError(`Client ${version} is ready.`);
 }
 
 function updateNowBtn() {
@@ -317,25 +422,55 @@ async function setVersionPreference(properties) {
         });
 }
 
+async function titlebarButtons() {
+    document.getElementById('minimize-btn').addEventListener('click', () => {
+        window.electron.minimizeWindow();
+    });
+
+    document.getElementById('maximize-btn').addEventListener('click', () => {
+        window.electron.maximizeWindow();
+    });
+
+    document.getElementById('close-btn').addEventListener('click', () => {
+        window.electron.closeLauncher();
+    });
+}
+
 async function initUI(properties) {
     updateNowBtn();
     reminderMeLaterBtn();
     playNoJagexAccount();
-    const listOfJars = await window.electron.listJars();
-    populateSelectElement('client', listOfJars);
+    titlebarButtons();
+
+    const accounts = await window.electron.readAccounts();
+    await setupSidebarLayout(accounts.length || 0);
+
+    populateSelectElement('client', await window.electron.listJars());
+    populateSelectElement('profile', await window.electron.listProfiles());
     await setVersionPreference(properties);
     document.querySelector('.game-info').style = 'display:block';
 }
 
 async function checkForClientUpdate(properties) {
     const clientVersion = await window.electron.fetchClientVersion();
+    window.electron.logError(
+        `Current client version: ${clientVersion}, properties client version: ${properties['client']}`
+    );
     const listOfJars = await window.electron.listJars();
-
+    if (listOfJars.length === 0) {
+        window.electron.logError(
+            'No client jars found. Please download a client.'
+        );
+    } else {
+        window.electron.logError(
+            `Available client jars: ${listOfJars.join(', ')}`
+        );
+    }
     if (
         properties['client'] !== clientVersion &&
         listOfJars.every((file) => file.indexOf(clientVersion) < 0)
     ) {
-        document.querySelector('#update-available').style = 'display:block';
+        document.querySelector('#update-available').style = 'display:flex';
     } else if (properties['client'] !== clientVersion) {
         properties['client'] = clientVersion;
         await window.electron.writeProperties(properties);

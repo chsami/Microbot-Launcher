@@ -1,18 +1,35 @@
 module.exports = async function (deps) {
-    const { spawn, path, dialog, shell, log, microbotDir, ipcMain } = deps;
+    const { spawn, path, dialog, shell, log, fs, microbotDir, ipcMain } = deps;
 
-    ipcMain.handle('open-client', async (event, version, proxy) => {
+    ipcMain.handle('open-client', async (event, version, proxy, account) => {
         try {
-            const jarPath = path.join(
-                microbotDir,
-                'microbot-' + version + '.jar'
-            );
-            const commandArgs = [
-                '-jar',
-                jarPath,
-                '-proxy=' + proxy.proxyIp,
-                '-proxy-type=' + proxy.proxyType
-            ];
+            const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
+            const commandArgs = ['-jar', jarPath];
+
+            if (proxy && proxy.proxyIp !== '') {
+                commandArgs.push(`-proxy=${proxy.proxyIp}`);
+                commandArgs.push(`-proxy-type=${proxy.proxyType}`);
+            }
+
+            if (account) {
+                const accounts = await window.electron.readAccounts();
+                const selectedAccount = accounts?.find(
+                    (x) => x.accountId === account
+                );
+                if (selectedAccount) {
+                    commandArgs.push(`-profile=${selectedAccount.profile}`);
+                }
+            }
+
+            if (process.platform === 'darwin') {
+                commandArgs.unshift(
+                    '--add-opens=java.desktop/com.apple.eawt=ALL-UNNAMED'
+                );
+                commandArgs.unshift(
+                    '--add-opens=java.desktop/sun.awt=ALL-UNNAMED'
+                );
+            }
+
             checkJavaAndRunJar(commandArgs, dialog, shell);
         } catch (error) {
             log.error(error.message);
@@ -21,14 +38,35 @@ module.exports = async function (deps) {
     });
 
     ipcMain.handle('play-no-jagex-account', async (event, version, proxy) => {
-        const jarPath = path.join(microbotDir, 'microbot-' + version + '.jar');
-        const commandArgs = [
-            '-jar',
-            jarPath,
-            '-clean-jagex-launcher',
-            '-proxy=' + proxy.proxyIp,
-            '-proxy-type=' + proxy.proxyType
-        ];
+        const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
+        const commandArgs = ['-jar', jarPath, '-clean-jagex-launcher'];
+
+        if (proxy) {
+            commandArgs.push(`-proxy=${proxy.proxyIp}`);
+            commandArgs.push(`-proxy-type=${proxy.proxyType}`);
+        }
+
+        if (
+            fs.existsSync(
+                path.join(microbotDir, 'non-jagex-preferred-profile.json')
+            )
+        ) {
+            const profileData = JSON.parse(
+                fs.readFileSync(
+                    path.join(microbotDir, 'non-jagex-preferred-profile.json'),
+                    'utf8'
+                )
+            );
+            if (profileData.profile && profileData.profile !== 'default') {
+                commandArgs.push(`-profile=${profileData.profile}`);
+            }
+        }
+        if (process.platform === 'darwin') {
+            commandArgs.unshift(
+                '--add-opens=java.desktop/com.apple.eawt=ALL-UNNAMED'
+            );
+            commandArgs.unshift('--add-opens=java.desktop/sun.awt=ALL-UNNAMED');
+        }
         checkJavaAndRunJar(commandArgs, dialog, shell);
     });
 
@@ -53,7 +91,7 @@ module.exports = async function (deps) {
     function executeJar(commandArgs, dialog) {
         log.info(`java ${commandArgs.join(' ')}`);
 
-        const jarProcess = spawn('java', commandArgs);
+        const jarProcess = spawn('java', commandArgs, { detached: true });
 
         jarProcess.stdout.on('data', (data) => {
             log.info(`[stdout] ${data}`);
