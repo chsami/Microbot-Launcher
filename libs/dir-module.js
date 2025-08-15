@@ -8,4 +8,4 @@ const microbotDir = path.join(homeDir, '.microbot');
 
 module.exports = {
     microbotDir
-}
+};

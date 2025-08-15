@@ -1,5 +1,5 @@
 const { app, BrowserWindow, dialog, shell } = require('electron');
-const { microbotDir } = require("./libs/dir-module");
+const { microbotDir } = require('./libs/dir-module');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
@@ -14,7 +14,7 @@ process.on('uncaughtException', (error) => {
     log.error('Uncaught Exception:', error);
 });
 
-const filestorage = 'https://files.microbot.cloud'
+const filestorage = 'https://files.microbot.cloud';
 
 let mainWindow;
 
@@ -26,13 +26,14 @@ if (!fs.existsSync(microbotDir)) {
 async function downloadFileFromBlobStorage(blobPath, dir, filename) {
     try {
         if (process.env.DEBUG === 'true') {
-            return dir + "/" + filename
+            return dir + '/' + filename;
         }
         // Construct the URL, including the dir only if it's provided
-        const url = dir ? `${blobPath}/${dir}/${filename}` : `${blobPath}/${filename}`;
+        const url = dir
+            ? `${blobPath}/${dir}/${filename}`
+            : `${blobPath}/${filename}`;
 
-        const response = await axios.get(url,
-            { responseType: 'arraybuffer' })
+        const response = await axios.get(url, { responseType: 'arraybuffer' });
         // Step 2: Determine the path to save the file
 
         // Ensure the directory exists
@@ -43,27 +44,32 @@ async function downloadFileFromBlobStorage(blobPath, dir, filename) {
             }
             const filePath = path.join(dirPath, filename);
             fs.writeFileSync(filePath, response.data);
-            return filePath
+            return filePath;
         }
 
         // Step 3: Save the file
         const filePath = path.join(microbotDir, filename);
         fs.writeFileSync(filePath, response.data);
 
-        return filePath
+        return filePath;
     } catch (err) {
-        log.error(err)
+        log.error(err);
     }
 
-    return ""
+    return '';
 }
 
 async function loadLibraries() {
     // Load remote ipc-handlers.js from filestorage
     log.info('load libraries...');
     const ipcHandlersPath = path.join(microbotDir, 'libs/ipc-handlers.js');
-    const remoteIpcHandlersUrl = filestorage + '/assets/microbot-launcher/libs/ipc-handlers.js';
-    await downloadAndSaveFile(remoteIpcHandlersUrl, ipcHandlersPath, path.join(__dirname, 'libs/ipc-handlers.js'));
+    const remoteIpcHandlersUrl =
+        filestorage + '/assets/microbot-launcher/libs/ipc-handlers.js';
+    await downloadAndSaveFile(
+        remoteIpcHandlersUrl,
+        ipcHandlersPath,
+        path.join(__dirname, 'libs/ipc-handlers.js')
+    );
     try {
         log.info('require ipchandler...');
         const handler = require(ipcHandlersPath);
@@ -93,7 +99,6 @@ async function loadLibraries() {
 }
 
 async function createWindow() {
-
     // Create the main window, but don't show it yet
     mainWindow = new BrowserWindow({
         width: 1280,
@@ -105,61 +110,72 @@ async function createWindow() {
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: true,
-            contextIsolation: true,
-        },
+            contextIsolation: true
+        }
     });
 
-    await downloadFileFromBlobStorage(filestorage + '/assets/microbot-launcher', './css', 'styles.css')
-    const indexHtmlPath = await downloadFileFromBlobStorage(filestorage + '/assets/microbot-launcher', './', 'index.html')
+    await downloadFileFromBlobStorage(
+        filestorage + '/assets/microbot-launcher',
+        './css',
+        'styles.css'
+    );
+    const indexHtmlPath = await downloadFileFromBlobStorage(
+        filestorage + '/assets/microbot-launcher',
+        './',
+        'index.html'
+    );
 
-     // Before loading the HTML, modify it if in debug mode
+    // Before loading the HTML, modify it if in debug mode
     if (process.env.DEBUG === 'true') {
         let htmlContent = fs.readFileSync(indexHtmlPath, 'utf8');
         htmlContent = htmlContent.replace(
             '<script src="https://files.microbot.cloud/assets/microbot-launcher/renderer.js?version=2.0.0"></script>',
             '<script src="renderer.js"></script>'
         );
-        
+
         // Write the modified HTML to a temporary file
         const tempHtmlPath = path.join('./', 'index_debug.html');
         fs.writeFileSync(tempHtmlPath, htmlContent);
-        
+
         await mainWindow.loadFile(tempHtmlPath);
     } else {
         await mainWindow.loadFile(indexHtmlPath);
     }
 }
 
-
-
 autoUpdater.autoDownload = false;
 autoUpdater.disableWebInstaller = true;
 
 autoUpdater.on('update-available', (info) => {
-    dialog.showMessageBox({
-        type: 'info',
-        title: 'Update available',
-        message: `Version ${info.version} of the launcher is available. Do you want to download it now?`,
-        buttons: ['Yes', 'Later']
-    }).then(result => {
-        dialog.showMessageBox({
+    dialog
+        .showMessageBox({
             type: 'info',
-            title: 'Downloading',
-            message: `Downloading version ${info.version} of the launcher...`,
+            title: 'Update available',
+            message: `Version ${info.version} of the launcher is available. Do you want to download it now?`,
+            buttons: ['Yes', 'Later']
         })
-        if (result.response === 0) {
-            autoUpdater.downloadUpdate();
-        }
-    });
+        .then((result) => {
+            dialog.showMessageBox({
+                type: 'info',
+                title: 'Downloading',
+                message: `Downloading version ${info.version} of the launcher...`
+            });
+            if (result.response === 0) {
+                autoUpdater.downloadUpdate();
+            }
+        });
 });
 
 autoUpdater.on('update-downloaded', () => {
-    dialog.showMessageBox({
-        title: 'Install Updates',
-        message: 'Updates downloaded. The application will now quit and install the updates.'
-    }).then(() => {
-        autoUpdater.quitAndInstall();
-    });
+    dialog
+        .showMessageBox({
+            title: 'Install Updates',
+            message:
+                'Updates downloaded. The application will now quit and install the updates.'
+        })
+        .then(() => {
+            autoUpdater.quitAndInstall();
+        });
 });
 
 app.whenReady().then(async () => {
@@ -186,8 +202,10 @@ async function downloadAndSaveFile(remoteUrl, localPath, srcPath) {
         const destDir = path.join(microbotDir, 'libs');
         fs.mkdirSync(destDir, { recursive: true });
         fs.copyFileSync(srcPath, localPath);
-        log.info("sucesfully copied " + localPath)
-        return new Promise((resolve, reject) => { resolve() })
+        log.info('sucesfully copied ' + localPath);
+        return new Promise((resolve, reject) => {
+            resolve();
+        });
     }
     return new Promise((resolve, reject) => {
         // Ensure parent directory exists
@@ -195,40 +213,51 @@ async function downloadAndSaveFile(remoteUrl, localPath, srcPath) {
         fs.mkdirSync(dir, { recursive: true });
 
         const file = fs.createWriteStream(localPath);
-        https.get(remoteUrl, (response) => {
-            if (response.statusCode === 200) {
-                response.pipe(file);
-                file.on('finish', () => {
-                    file.close(resolve);
-                });
-            } else {
-                dialog.showErrorBox('Failed to load js files!', 'Failed to load ' + localPath)
-                reject(new Error(`Failed to download file: ${response.statusCode} - ${localPath}`));
-            }
-        }).on('error', (err) => {
-            fs.unlink(localPath, () => reject(err));
-        });
+        https
+            .get(remoteUrl, (response) => {
+                if (response.statusCode === 200) {
+                    response.pipe(file);
+                    file.on('finish', () => {
+                        file.close(resolve);
+                    });
+                } else {
+                    dialog.showErrorBox(
+                        'Failed to load js files!',
+                        'Failed to load ' + localPath
+                    );
+                    reject(
+                        new Error(
+                            `Failed to download file: ${response.statusCode} - ${localPath}`
+                        )
+                    );
+                }
+            })
+            .on('error', (err) => {
+                fs.unlink(localPath, () => reject(err));
+            });
     });
 }
 
 async function checkLinuxVersion() {
     if (process.platform === 'linux') {
-    // Check for new version on Linux
-    try {
-        const response = await axios.get('https://microbot.cloud/api/file/launcher');
-        const remoteVersion = response.data;
-        const currentVersion = packageJson.version;
-        
-        if (remoteVersion !== currentVersion) {
-            dialog.showMessageBox({
-                type: 'info',
-                title: 'New Version Available',
-                message: `A new version (${remoteVersion}) of Microbot Launcher is available. Your current version is ${currentVersion}. Please download the latest version from https://themicrobot.com`,
-                buttons: ['OK']
-            });
+        // Check for new version on Linux
+        try {
+            const response = await axios.get(
+                'https://microbot.cloud/api/file/launcher'
+            );
+            const remoteVersion = response.data;
+            const currentVersion = packageJson.version;
+
+            if (remoteVersion !== currentVersion) {
+                dialog.showMessageBox({
+                    type: 'info',
+                    title: 'New Version Available',
+                    message: `A new version (${remoteVersion}) of Microbot Launcher is available. Your current version is ${currentVersion}. Please download the latest version from https://themicrobot.com`,
+                    buttons: ['OK']
+                });
+            }
+        } catch (error) {
+            log.error('Failed to check for new version:', error);
         }
-    } catch (error) {
-        log.error('Failed to check for new version:', error);
     }
-}
 }

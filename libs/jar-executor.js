@@ -1,51 +1,35 @@
-
 module.exports = async function (deps) {
-
-    const {
-        spawn,
-        path,
-        dialog,
-        shell,
-        log,
-        microbotDir,
-        ipcMain
-    } = deps
+    const { spawn, path, dialog, shell, log, microbotDir, ipcMain } = deps;
 
     ipcMain.handle('open-client', async (event, version, proxy) => {
         try {
-            const jarPath = path.join(microbotDir, 'microbot-' + version + ".jar");
+            const jarPath = path.join(
+                microbotDir,
+                'microbot-' + version + '.jar'
+            );
             const commandArgs = [
                 '-jar',
                 jarPath,
                 '-proxy=' + proxy.proxyIp,
                 '-proxy-type=' + proxy.proxyType
             ];
-            checkJavaAndRunJar(
-                commandArgs,
-                dialog,
-                shell
-            );
+            checkJavaAndRunJar(commandArgs, dialog, shell);
         } catch (error) {
-            log.error(error.message)
+            log.error(error.message);
             return { error: error.message };
         }
     });
 
     ipcMain.handle('play-no-jagex-account', async (event, version, proxy) => {
-        const jarPath = path.join(microbotDir, 'microbot-' + version + ".jar");
+        const jarPath = path.join(microbotDir, 'microbot-' + version + '.jar');
         const commandArgs = [
             '-jar',
             jarPath,
             '-clean-jagex-launcher',
             '-proxy=' + proxy.proxyIp,
             '-proxy-type=' + proxy.proxyType
-            
         ];
-        checkJavaAndRunJar(
-            commandArgs,
-            dialog,
-            shell
-        );
+        checkJavaAndRunJar(commandArgs, dialog, shell);
     });
 
     function isJavaInstalled(callback) {
@@ -91,7 +75,6 @@ module.exports = async function (deps) {
         });
     }
 
-
     function checkJavaAndRunJar(commandArgs, dialog, shell) {
         log.info(`java ${commandArgs.join(' ')}`);
         isJavaInstalled((isInstalled, error) => {
@@ -99,22 +82,24 @@ module.exports = async function (deps) {
                 log.info('Java is installed, running the JAR...');
                 executeJar(commandArgs, dialog);
             } else {
-                dialog.showMessageBox({
-                    type: 'error',
-                    title: 'Java Not Found',
-                    message: 'Java Development Kit (JDK) is required to run this application. Would you like to download it now?',
-                    buttons: ['Yes, Download JDK', 'Cancel']
-                }).then((result) => {
-                    if (result.response === 0) {
-                        shell.openExternal('https://www.oracle.com/java/technologies/downloads/');
-                    } else {
-                        log.info('User chose not to download Java.');
-                    }
-                });
+                dialog
+                    .showMessageBox({
+                        type: 'error',
+                        title: 'Java Not Found',
+                        message:
+                            'Java Development Kit (JDK) is required to run this application. Would you like to download it now?',
+                        buttons: ['Yes, Download JDK', 'Cancel']
+                    })
+                    .then((result) => {
+                        if (result.response === 0) {
+                            shell.openExternal(
+                                'https://www.oracle.com/java/technologies/downloads/'
+                            );
+                        } else {
+                            log.info('User chose not to download Java.');
+                        }
+                    });
             }
         });
     }
-}
-
-
-
+};
