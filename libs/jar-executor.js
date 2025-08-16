@@ -102,7 +102,9 @@ module.exports = async function (deps) {
         if (!process.env.DEBUG)
             extraArgs = { stdio: 'ignore', windowsHide: true };
 
-        const jarProcess = spawn('java', commandArgs, {
+        // use javaw on windows to avoid console window popping up
+        const javaCommand = process.platform === 'win32' ? 'javaw' : 'java';
+        const jarProcess = spawn(javaCommand, commandArgs, {
             detached: true,
             ...extraArgs
         });
