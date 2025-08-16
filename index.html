@@ -70,7 +70,9 @@
             <div class="main-content">
                 <div class="content">
                     <div class="recent-updates">
-                        <iframe id="website" loading="lazy"> </iframe>
+                        <!-- Using webview instead of iframe for greater control over injected CSS/JS -->
+                        <webview id="website" src="" allowpopups="" disablewebsecurity=""></webview>
+                        <div id="embed-overlay"></div>
                     </div>
                 </div>
                 <!-- Sidebar -->

@@ -122,7 +122,8 @@ async function createWindow() {
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: true,
-            contextIsolation: true
+            contextIsolation: true,
+            webviewTag: true
         },
         titleBarStyle: 'hidden',
         frame: false

@@ -197,8 +197,7 @@ window.addEventListener('load', async () => {
         button.addEventListener('click', startLoading);
     });
 
-    document.getElementById('website').src =
-        'https://www.themicrobot.com?source=launcher';
+    loadLandingPageWebview();
 });
 
 function populateSelectElement(selectId, options) {
@@ -496,5 +495,67 @@ async function checkForClientUpdate(properties) {
     } else if (properties['client'] !== clientVersion) {
         properties['client'] = clientVersion;
         await window.electron.writeProperties(properties);
+    }
+}
+
+/**
+ * Initialize the webview for the embedded site.
+ * This webview will load the Microbot landing page and manipulate some elements
+ * so it looks more integrated with the launcher.
+ */
+function loadLandingPageWebview() {
+    const webview = document.getElementById('website');
+    const webviewOverlay = document.getElementById('embed-overlay');
+    if (webview) {
+        webview.src = 'https://www.themicrobot.com?source=launcher';
+        webview.addEventListener('dom-ready', () => {
+            try {
+                webview
+                    .executeJavaScript(
+                        `(() => {
+                            try {
+                                const topDiscordHeaderContainer = document.querySelector("body > header > div.c-events-block.py-2 > div");
+                                if (topDiscordHeaderContainer) topDiscordHeaderContainer.remove();
+                                const topSeparator = document.querySelector("body > header > div.c-border-red.mb-2");
+                                if (topSeparator) topSeparator.remove();
+                                const cookieBanner = document.getElementById("cookie-banner");
+                                if (cookieBanner) cookieBanner.remove();
+                                const navContainer = document.querySelector("body > header > nav > div");
+                                if (navContainer) navContainer.style.maxWidth = "100%";
+                                const bodyHero = document.querySelector("body > main > section.c-main-header.c-main-header--home.py-5.d-flex.flex-column.justify-content-center");
+                                if (bodyHero) bodyHero.style.minHeight = "600px";
+                            } catch (err) {
+                                console.error('Webview DOM manipulation error:', err);
+                            }
+                            return true; // signal completion
+                        })();`
+                    )
+                    .then(() => {
+                        setTimeout(() => {
+                            if (webviewOverlay) {
+                                webviewOverlay.classList.add('hidden');
+                                const removeAfter = () => {
+                                    webviewOverlay?.removeEventListener(
+                                        'transitionend',
+                                        removeAfter
+                                    );
+                                };
+                                webviewOverlay.addEventListener(
+                                    'transitionend',
+                                    removeAfter
+                                );
+                            }
+                        }, 50);
+                    })
+                    .catch((err) =>
+                        console.error('executeJavaScript failed', err)
+                    );
+            } catch (injectionError) {
+                console.error('Failed to inject into webview:', injectionError);
+                if (webviewOverlay) {
+                    webviewOverlay.classList.add('hidden');
+                }
+            }
+        });
     }
 }
