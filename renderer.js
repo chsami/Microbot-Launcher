@@ -239,10 +239,12 @@ function populateProfileSelector(profiles = [], selectedProfile = null) {
     defaultOption.textContent = 'Default';
     profileSelect.appendChild(defaultOption);
 
-    // Iterate over the profiles array and create option elements
-    profiles.forEach((profile) => {
-        addSelectElement('profile', profile);
-    });
+    // Only try to populate if profiles are available and not empty
+    if (Array.isArray(profiles) && profiles.length > 0) {
+        profiles.forEach((profile) => {
+            addSelectElement('profile', profile);
+        });
+    }
 
     if (selectedProfile) {
         profileSelect.value = selectedProfile;
@@ -466,7 +468,7 @@ async function initUI(properties) {
     await setupSidebarLayout(accounts?.length || 0);
 
     populateSelectElement('client', await window.electron.listJars());
-    populateSelectElement('profile', await window.electron.listProfiles());
+    populateProfileSelector(await window.electron.listProfiles(), null);
     await setVersionPreference(properties);
     document.querySelector('.game-info').style = 'display:block';
 }
