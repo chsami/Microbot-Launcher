@@ -164,7 +164,7 @@ async function createWindow() {
     } else {
         const indexHtmlPath = await downloadFileFromBlobStorage(
             filestorage + '/assets/microbot-launcher',
-            path.join(microbotDir, 'assets'),
+            './',
             'index.html'
         );
 
