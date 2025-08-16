@@ -130,3 +130,7 @@ dist
 jcef-bundle
 microbot-*.jar
 index_debug.html
+
+# lockfile , etc
+...
+package-lock.json

@@ -1,15 +1,7 @@
 module.exports = async function (deps) {
-
-    const {
-        fs,
-        path,
-        microbotDir,
-        ipcMain,
-        log
-    } = deps
+    const { fs, path, microbotDir, ipcMain, log } = deps;
 
     const filePath = path.resolve(microbotDir, 'resource_versions.json');
-
 
     // Define your default values here
     const defaultProperties = {
@@ -19,16 +11,19 @@ module.exports = async function (deps) {
         version_pref: '0.0.0'
     };
 
-
     ipcMain.handle('write-properties', async (event, data) => {
         try {
             try {
-                fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+                fs.writeFileSync(
+                    filePath,
+                    JSON.stringify(data, null, 2),
+                    'utf8'
+                );
             } catch (err) {
                 console.error('Error writing to properties file:', err);
             }
         } catch (error) {
-            logMessage(error.message)
+            logMessage(error.message);
             return { error: error.message };
         }
     });
@@ -36,12 +31,15 @@ module.exports = async function (deps) {
     ipcMain.handle('read-properties', async () => {
         try {
             try {
-
                 if (fs.existsSync(filePath)) {
                     const data = fs.readFileSync(filePath, 'utf8');
                     return JSON.parse(data);
                 }
-                fs.writeFileSync(filePath, JSON.stringify(defaultProperties, null, 2), 'utf8');
+                fs.writeFileSync(
+                    filePath,
+                    JSON.stringify(defaultProperties, null, 2),
+                    'utf8'
+                );
                 log.info('Properties file created with default values.');
                 return defaultProperties;
             } catch (err) {
@@ -49,8 +47,8 @@ module.exports = async function (deps) {
                 return {};
             }
         } catch (error) {
-            log.error(error.message)
+            log.error(error.message);
             return { error: error.message };
         }
     });
-}
+};

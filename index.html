@@ -1,73 +1,126 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Microbot Launcher</title>
-    <link rel="stylesheet" href="css/styles.css">
-</head>
-<body>
-<div id="loader-container">
-    <h1>Download and Unpack Progress</h1>
-    <div id="loader">
-        <div id="progress-bar">0%</div>
-    </div>
-    <div id="status"></div>
-</div>
+<!DOCTYPE html><html lang="en"><head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="Microbot Launcher - Download, update, and manage your Microbot client easily.">
+        <meta name="keywords" content="Microbot, Launcher, Download, Update, Jagex, Account, Game, Proxy">
+        <title>Microbot Launcher</title>
+        <link rel="stylesheet" href="css/styles.css">
+    </head>
+    <body>
+        <div id="loader-container">
+            <h1>Download and Unpack Progress</h1>
+            <div id="loader">
+                <div id="progress-bar">0%</div>
+            </div>
+            <div id="status"></div>
+        </div>
 
-
-<div id="main-container" class="container">
-    <!-- Navbar -->
-    <nav class="navbar">
-    </nav>
-
-    <!-- Main Content -->
-    <div class="main-content">
-        <div class="content">
-            <div class="featured">
-                <div id="update-available">
-                    <h2>New Update Available!</h2>
-                    <p>A new version of <strong>Microbot</strong> is available. It includes exciting new features and improvements.</p>
-                    <div class="modal-actions">
-                        <button id="update-now-btn" class="loadingButton">Update Now</button>
-                        <button id="remind-me-later-btn" class="loadingButton">Reminder me later</button>
-                    </div>
-                    <hr />
+        <div class="featured">
+            <div id="update-available">
+                <h2>New Update Available!</h2>
+                <p>
+                    A new version of <strong>Microbot</strong> is available. It
+                    includes exciting new features and improvements.
+                </p>
+                <div class="modal-actions">
+                    <button id="update-now-btn" class="loadingButton">
+                        Update Now
+                    </button>
+                    <button id="remind-me-later-btn" class="loadingButton">
+                        Reminder me later
+                    </button>
                 </div>
             </div>
-            <div class="recent-updates">
-                <iframe id="website" style="width:100%;height:85vh" loading="lazy">
-                </iframe>
+        </div>
+
+        <div id="main-container" class="container">
+            <div class="titlebar">
+                <span class="titlebar-title">Microbot Launcher - 0.0.0.0</span>
+                <div class="titlebar-controls">
+                    <button class="titlebar-button" id="minimize-btn">
+                        <svg width="20px" height="20px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#ffffff" stroke="#ffffff">
+                            <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                            <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
+                            <g id="SVGRepo_iconCarrier">
+                                <path d="M14 8v1H3V8h11z"></path>
+                            </g>
+                        </svg>
+                    </button>
+                    <button class="titlebar-button" id="maximize-btn">
+                        <svg width="20px" height="20px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#ffffff" stroke="#ffffff">
+                            <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                            <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
+                            <g id="SVGRepo_iconCarrier">
+                                <path d="M3 3v10h10V3H3zm9 9H4V4h8v8z"></path>
+                            </g>
+                        </svg>
+                    </button>
+                    <button class="titlebar-button" id="close-btn">
+                        <svg width="20px" height="20px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#ffffff" stroke="#ffffff">
+                            <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                            <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
+                            <g id="SVGRepo_iconCarrier">
+                                <path fill-rule="evenodd" clip-rule="evenodd" d="M7.116 8l-4.558 4.558.884.884L8 8.884l4.558 4.558.884-.884L8.884 8l4.558-4.558-.884-.884L8 7.116 3.442 2.558l-.884.884L7.116 8z"></path>
+                            </g>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <!-- Main Content -->
+            <div class="main-content">
+                <div class="content">
+                    <div class="recent-updates">
+                        <!-- Using webview instead of iframe for greater control over injected CSS/JS -->
+                        <webview id="website" src="" allowpopups="" disablewebsecurity=""></webview>
+                        <div id="embed-overlay"></div>
+                    </div>
+                </div>
+                <!-- Sidebar -->
+                <aside class="sidebar">
+                    <div class="game-logo">
+                        <img alt="Microbot Logo" src="images/microbot_transparent.png" width="100" height="100">
+                    </div>
+                    <div class="play-buttons">
+                        <button id="play-no-jagex-account" class="play-button loadingButton">
+                            Play Normal Account
+                        </button>
+                        <button id="play" class="play-button loadingButton">
+                            Login Jagex Account
+                        </button>
+                    </div>
+                    <button id="add-accounts" class="add-accounts loadingButton">
+                        Add accounts
+                    </button>
+                    <button id="logout" class="logout-button loadingButton">
+                        Remove All Accounts
+                    </button>
+                    <div class="game-info">
+                        <label for="client">Version</label>
+                        <select id="client"></select>
+                        <label for="character">Jagex Account</label>
+                        <select id="character"></select>
+                        <label for="profile">Profile</label>
+                        <select id="profile">
+                            <option value="default">Default</option>
+                        </select>
+                    </div>
+                    <div class="proxy-section">
+                        <label for="proxy-ip">Proxy settings (user and password only work for
+                            SOCKS)</label>
+                        <input id="proxy-ip" type="text" placeholder="ip:port:user:password">
+                        <select id="proxy-type">
+                            <option value="http">HTTP</option>
+                            <option value="socks">SOCKS</option>
+                        </select>
+                    </div>
+                </aside>
             </div>
         </div>
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="game-logo">
-                <img alt="Microbot Logo" src="https://files.microbot.cloud/assets/microbot-launcher/images/microbot_transparent.png" />
-            </div>
-            <button id="play-no-jagex-account" class="play-button loadingButton">Play Normal Account</button>
-            <button id="play" class="play-button loadingButton">Login Jagex Account</button>
-            <button id="add-accounts" class="add-accounts loadingButton">Add accounts</button>
-            <button id="logout" class="logout-button loadingButton">Remove All Accounts</button>
-            <div class="game-info">
-                <label for="client">Version</label>
-                <select id="client">
-                </select>
-                <label for="character">Jagex Accounts</label>
-                <select id="character">
-                </select>
-            </div>
-            <div class="proxy-section">
-                <label for="proxy-ip">Proxy settings (user and password only work for SOCKS)</label>
-                <input id="proxy-ip" type="text" placeholder="ip:port:user:password" />
-                <select id="proxy-type">
-                    <option value="http">HTTP</option>
-                    <option value="socks">SOCKS</option>
-                </select>
-            </div>
-        </aside>
-    </div>
-</div>
-<script src="https://files.microbot.cloud/assets/microbot-launcher/renderer.js?version=2.0.0"></script>
-</body>
-</html>
+        <script>
+            const script = document.createElement('script');
+            script.src = `renderer.js?cache-bust=${Date.now()}`;
+            document.head.appendChild(script);
+        </script>
+    
+
+</body></html>
