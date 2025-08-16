@@ -91,7 +91,21 @@ module.exports = async function (deps) {
     function executeJar(commandArgs, dialog) {
         log.info(`java ${commandArgs.join(' ')}`);
 
-        const jarProcess = spawn('java', commandArgs, { detached: true });
+        /**
+         * Additional arguments for spawn library.
+         * With those arguments, we detach clients from the launcher,
+         * guaranteeing that they will continue to run when the launcher is closed.
+         * If not in debug mode, we use windowsHide to attempt suppressing the console window,
+         * and we ignore the output streams as backup.
+         */
+        let extraArgs = {};
+        if (!process.env.DEBUG)
+            extraArgs = { stdio: 'ignore', windowsHide: true };
+
+        const jarProcess = spawn('java', commandArgs, {
+            detached: true,
+            ...extraArgs
+        });
 
         jarProcess.stdout.on('data', (data) => {
             log.info(`[stdout] ${data}`);

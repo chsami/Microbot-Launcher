@@ -234,6 +234,14 @@ async function startAuthFlow() {
 
         console.log('Starting authentication flow...');
 
+        /**
+         * Handles the unexpected closure of the authentication flow.
+         */
+        page.once('close', () => {
+            browser.close();
+            reject(new Error('Authentication flow closed unexpectedly.'));
+        });
+
         page.on('framenavigated', async (frame) => {
             const url = frame.url();
 
