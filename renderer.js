@@ -316,7 +316,6 @@ function setupSidebarLayout(amountOfAccounts) {
     } else {
         playJagexButton.innerHTML = 'Login Jagex Account';
         logoutButton.style.display = 'none';
-        playButtonsDiv.style.display = 'none';
         characterSelectLabel.style.display = 'none';
         characterSelect.style.display = 'none';
         addAccountsButton.style.display = 'none';
@@ -464,7 +463,7 @@ async function initUI(properties) {
     titlebarButtons();
 
     const accounts = await window.electron.readAccounts();
-    await setupSidebarLayout(accounts.length || 0);
+    await setupSidebarLayout(accounts?.length || 0);
 
     populateSelectElement('client', await window.electron.listJars());
     populateSelectElement('profile', await window.electron.listProfiles());
