@@ -41,6 +41,24 @@ function updateProgress(percent, status) {
     statusText.textContent = status;
 }
 
+async function playButtonClickHandler() {
+    if (
+        document.getElementById('play')?.innerText.toLowerCase() ===
+        'Play With Jagex Account'.toLowerCase()
+    ) {
+        await openClient();
+    } else {
+        document.getElementById('play').classList.add('disabled');
+        try {
+            await window.electron.startAuthFlow();
+        } catch (error) {
+            alert('Authentication flow ended unexpectedly.');
+            window.electron.logError(error);
+        }
+        document.getElementById('play').classList.remove('disabled');
+    }
+}
+
 async function handleJagexAccountLogic(properties) {
     setInterval(async () => {
         const hasChanged = await window.electron.checkFileChange();
@@ -110,18 +128,9 @@ window.addEventListener('load', async () => {
 
     await window.electron.writeProperties(properties);
 
-    document.getElementById('play').addEventListener('click', async () => {
-        if (
-            document.getElementById('play')?.innerText.toLowerCase() ===
-            'Play With Jagex Account'.toLowerCase()
-        ) {
-            await openClient();
-        } else {
-            document.getElementById('play').classList.add('disabled');
-            await window.electron.startAuthFlow();
-            document.getElementById('play').classList.remove('disabled');
-        }
-    });
+    const playButton = document.getElementById('play');
+    playButton?.removeEventListener('click', playButtonClickHandler);
+    playButton?.addEventListener('click', playButtonClickHandler);
 
     /*
      * Whenever the profile select changes, we set the "preferred" profile on accounts.json
@@ -266,18 +275,21 @@ function populateAccountSelector(characters = [], selectedAccount = null) {
     }
 }
 
+async function removeAccountsHandler() {
+    const userConfirmed = confirm('Are you sure you want to proceed?');
+    if (!userConfirmed) return;
+    await window.electron.removeAccounts();
+    document.getElementById('play').innerHTML = 'Login Jagex Account';
+    document.querySelector('#add-accounts').style = 'display:none';
+    document.querySelector('#logout').style = 'display:none';
+    accounts = [];
+    populateAccountSelector([]);
+}
+
 function setupLogoutButton() {
     const logoutBtn = document.getElementById('logout');
-    logoutBtn?.addEventListener('click', async () => {
-        const userConfirmed = confirm('Are you sure you want to proceed?');
-        if (!userConfirmed) return;
-        await window.electron.removeAccounts();
-        document.getElementById('play').innerHTML = 'Login Jagex Account';
-        document.querySelector('#add-accounts').style = 'display:none';
-        document.querySelector('#logout').style = 'display:none';
-        accounts = [];
-        populateAccountSelector([]);
-    });
+    logoutBtn?.removeEventListener('click', removeAccountsHandler);
+    logoutBtn?.addEventListener('click', removeAccountsHandler);
 }
 
 function setupSidebarLayout(amountOfAccounts) {
@@ -311,13 +323,22 @@ function setupSidebarLayout(amountOfAccounts) {
     }
 }
 
+async function addAccountsHandler() {
+    const addAccountsButton = document.getElementById('add-accounts');
+    addAccountsButton.classList.add('disabled');
+    try {
+        await window.electron.startAuthFlow();
+    } catch (error) {
+        alert('Authentication flow ended unexpectedly.');
+        window.electron.logError(error);
+    }
+    document.getElementById('add-accounts').classList.remove('disabled');
+}
+
 function setupAddAccountsButton() {
     const addAccountsButton = document.getElementById('add-accounts');
-    addAccountsButton?.addEventListener('click', async () => {
-        document.getElementById('add-accounts').classList.add('disabled');
-        await window.electron.startAuthFlow();
-        document.getElementById('add-accounts').classList.remove('disabled');
-    });
+    addAccountsButton?.removeEventListener('click', addAccountsHandler);
+    addAccountsButton?.addEventListener('click', addAccountsHandler);
 }
 
 /**

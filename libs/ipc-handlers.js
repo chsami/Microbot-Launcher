@@ -24,13 +24,7 @@ module.exports = async function (deps) {
     ));
 
     ipcMain.handle('start-auth-flow', async () => {
-        try {
-            await startAuthFlow();
-            return { success: true };
-        } catch (error) {
-            log.error(error.message);
-            return { error: error.message };
-        }
+        return await startAuthFlow();
     });
 
     ipcMain.handle('is-browser-downloaded', async () => {

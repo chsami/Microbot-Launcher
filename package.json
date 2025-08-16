@@ -1,6 +1,6 @@
 {
     "name": "microbot-launcher",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "description": "Launcher for the microbot client",
     "main": "main.js",
     "scripts": {
