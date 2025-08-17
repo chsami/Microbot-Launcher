@@ -22,11 +22,10 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
-            - name: Prepare build scripts
+            - name: Prepare helper (AppleScript) and resources
               run: |
-                  chmod +x build/mac-fix-permissions.command
-                  # Ensure it has Unix line endings
-                  sed -i "" 's/\r$//' build/mac-fix-permissions.command
+                  # Compile AppleScript helper app
+                  osacompile -o "build/Fix Microbot.app" build/FixQuarantine.applescript
 
             - name: Build macOS app (dmg & zip)
               run: npm run mac

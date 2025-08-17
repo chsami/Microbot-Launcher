@@ -62,38 +62,34 @@
         },
         "mac": {
             "category": "public.app-category.utilities",
-            "identity": null,
             "target": "default",
             "icon": "images/microbot_transparent.icns"
         },
         "dmg": {
             "icon": "images/microbot_transparent.icns",
             "background": "images/dmg-background.png",
+            "backgroundColor": "#000000",
+            "title": "${productName} Installer",
+            "iconSize": 128,
             "window": {
-                "height": 720,
-                "width": 1056
+                "height": 400,
+                "width": 600
             },
             "contents": [
                 {
-                    "x": 130,
-                    "y": 220,
+                    "x": 110,
+                    "y": 200,
                     "type": "file",
-                    "path": "./build/mac-fix-permissions.command"
+                    "path": "./build/Fix Microbot.app"
                 },
                 {
-                    "x": 410,
-                    "y": 220,
-                    "type": "file",
-                    "path": "./build/README.md"
-                },
-                {
-                    "x": 130,
-                    "y": 450,
+                    "x": 300,
+                    "y": 200,
                     "type": "file"
                 },
                 {
-                    "x": 410,
-                    "y": 450,
+                    "x": 470,
+                    "y": 200,
                     "type": "link",
                     "path": "/Applications"
                 }
