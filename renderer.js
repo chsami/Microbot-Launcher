@@ -63,17 +63,33 @@ async function handleJagexAccountLogic(properties) {
     setInterval(async () => {
         const hasChanged = await window.electron.checkFileChange();
         if (hasChanged) {
+            const oldNumberOfAccounts = accounts.length;
             accounts = await window.electron.readAccounts();
+            const newNumberOfAccounts = accounts.length;
+
             const selectedProfile = document.getElementById('profile')?.value;
+            const selectedCharacter =
+                document.getElementById('character')?.value;
 
             setupSidebarLayout(accounts.length);
 
-            populateSelectElement('client', await window.electron.listJars());
+            const orderedClientJars = await orderClientJarsByVersion();
+            populateSelectElement('client', orderedClientJars);
             populateProfileSelector(
                 await window.electron.listProfiles(),
                 selectedProfile
             );
             await setVersionPreference(properties);
+
+            if (oldNumberOfAccounts !== newNumberOfAccounts) {
+                const latestAccount = accounts[0];
+                if (latestAccount) {
+                    document.getElementById('character').value =
+                        latestAccount.accountId;
+                }
+            } else {
+                document.getElementById('character').value = selectedCharacter;
+            }
         }
     }, 1000);
 }
@@ -466,7 +482,8 @@ async function initUI(properties) {
     const accounts = await window.electron.readAccounts();
     await setupSidebarLayout(accounts?.length || 0);
 
-    populateSelectElement('client', await window.electron.listJars());
+    const orderedClientJars = await orderClientJarsByVersion();
+    populateSelectElement('client', orderedClientJars);
     populateProfileSelector(await window.electron.listProfiles(), null);
     await setVersionPreference(properties);
     document.querySelector('.game-info').style = 'display:block';
@@ -558,4 +575,31 @@ function loadLandingPageWebview() {
             }
         });
     }
+}
+
+/**
+ * Order the client jars by version from latest to oldest.
+ * @returns {Promise<string[]>} A promise that resolves to the ordered list of client jar file names.
+ */
+async function orderClientJarsByVersion() {
+    const clientJars = await window.electron.listJars();
+    clientJars.sort((a, b) => {
+        const versionA_match = a.match(/-([\d\.]+)\.jar$/);
+        const versionB_match = b.match(/-([\d\.]+)\.jar$/);
+
+        if (versionA_match && versionB_match) {
+            const partsA = versionA_match[1].split('.').map(Number);
+            const partsB = versionB_match[1].split('.').map(Number);
+
+            for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+                const partA = partsA[i] || 0;
+                const partB = partsB[i] || 0;
+                if (partA !== partB) {
+                    return partB - partA; // Sort descending
+                }
+            }
+        }
+        return 0;
+    });
+    return clientJars;
 }
