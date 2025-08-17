@@ -8,7 +8,8 @@
         "start": "electron-forge start",
         "test": "echo \"Error: no test specified\" && exit 1",
         "release": "electron-builder --publish always",
-        "linux": "electron-builder --linux"
+        "linux": "electron-builder --linux",
+        "mac": "electron-builder --mac"
     },
     "author": "Mocrosoft",
     "license": "ISC",
@@ -27,9 +28,9 @@
     },
     "dependencies": {
         "adm-zip": "^0.5.15",
-        "cheerio": "1.1.2",
         "applicationinsights": "^2.9.6",
         "axios": "^1.7.2",
+        "cheerio": "1.1.2",
         "detect-browsers": "^6.1.0",
         "electron-log": "^5.4.1",
         "electron-updater": "^6.1.8",
@@ -59,6 +60,10 @@
             "target": "nsis",
             "icon": "images/microbot_transparent.ico"
         },
+        "mac": {
+            "identity": null,
+            "target": "dmg"
+        },
         "nsis": {
             "oneClick": false,
             "allowToChangeInstallationDirectory": true,
@@ -73,5 +78,8 @@
         "extraMetadata": {
             "version": "3.0.0"
         }
+    },
+    "optionalDependencies": {
+        "fsevents": "^2.3.2"
     }
 }
