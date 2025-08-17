@@ -215,6 +215,7 @@ async function writeAccountsToFile(sessionId) {
  */
 async function startAuthFlow() {
     return new Promise(async (resolve, reject) => {
+        let finished = false;
         const availableBrowser = await getAvailableBrowser();
 
         if (!availableBrowser) {
@@ -238,6 +239,7 @@ async function startAuthFlow() {
          * Handles the unexpected closure of the authentication flow.
          */
         page.once('close', () => {
+            if (finished) return;
             browser.close();
             reject(new Error('Authentication flow closed unexpectedly.'));
         });
@@ -260,6 +262,7 @@ async function startAuthFlow() {
                         console.log(
                             'Authentication flow complete. Closing browser.'
                         );
+                        finished = true;
                         await browser.close();
                         resolve('Authentication successful.');
                     }
