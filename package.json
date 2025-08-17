@@ -51,7 +51,8 @@
             "images/**",
             "libs/**",
             "index.html",
-            "css/**"
+            "css/**",
+            "build/READ THIS BEFORE INSTALL.html"
         ],
         "directories": {
             "buildResources": "build"
@@ -67,23 +68,25 @@
         },
         "dmg": {
             "icon": "images/microbot_transparent.icns",
+            "background": "images/dmg-background.png",
             "title": "${productName} Installer",
+            "iconSize": 128,
             "contents": [
                 {
-                    "x": 300,
-                    "y": 110,
+                    "x": 520,
+                    "y": 210,
                     "type": "file",
                     "path": "./build/READ THIS BEFORE INSTALL.html"
                 },
                 {
-                    "x": 200,
-                    "y": 400,
+                    "x": 328,
+                    "y": 512,
                     "type": "file",
                     "path": "Microbot Launcher.app"
                 },
                 {
-                    "x": 400,
-                    "y": 400,
+                    "x": 730,
+                    "y": 512,
                     "type": "link",
                     "path": "/Applications"
                 }
