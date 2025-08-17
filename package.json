@@ -80,12 +80,12 @@
                 },
                 {
                     "x": 328,
-                    "y": 507,
+                    "y": 495,
                     "type": "file"
                 },
                 {
                     "x": 730,
-                    "y": 507,
+                    "y": 495,
                     "type": "link",
                     "path": "/Applications"
                 }
