@@ -74,18 +74,18 @@
             "contents": [
                 {
                     "x": 530,
-                    "y": 205,
+                    "y": 195,
                     "type": "file",
                     "path": "./build/READ THIS BEFORE INSTALL.html"
                 },
                 {
                     "x": 328,
-                    "y": 520,
+                    "y": 510,
                     "type": "file"
                 },
                 {
                     "x": 730,
-                    "y": 520,
+                    "y": 510,
                     "type": "link",
                     "path": "/Applications"
                 }
