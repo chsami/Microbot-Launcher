@@ -70,23 +70,22 @@
             "icon": "images/microbot_transparent.icns",
             "background": "images/dmg-background.png",
             "title": "${productName} Installer",
-            "iconSize": 128,
+            "iconSize": 124,
             "contents": [
                 {
-                    "x": 520,
-                    "y": 210,
+                    "x": 530,
+                    "y": 205,
                     "type": "file",
                     "path": "./build/READ THIS BEFORE INSTALL.html"
                 },
                 {
                     "x": 328,
-                    "y": 512,
-                    "type": "file",
-                    "path": "Microbot Launcher.app"
+                    "y": 507,
+                    "type": "file"
                 },
                 {
                     "x": 730,
-                    "y": 512,
+                    "y": 507,
                     "type": "link",
                     "path": "/Applications"
                 }
