@@ -67,7 +67,6 @@
         },
         "dmg": {
             "icon": "images/microbot_transparent.icns",
-            "background": "images/dmg-background.png",
             "backgroundColor": "#000000",
             "title": "${productName} Installer",
             "iconSize": 128,
