@@ -11,22 +11,41 @@ jobs:
 
         steps:
             - name: Checkout code
-              uses: actions/checkout@v2
+              uses: actions/checkout@v4
 
             - name: Set up Node.js
-              uses: actions/setup-node@v2
+              uses: actions/setup-node@v4
               with:
-                  node-version: '18'
+                  node-version: 18
+                  cache: 'npm'
 
             - name: Install dependencies
-              run: npm install
+              run: npm ci
 
-            - name: Build macOS app
+            - name: Build macOS app (dmg & zip)
               run: npm run mac
 
-            - name: Get app version
-              id: get_version
-              run: echo "APP_VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
+            - name: Capture version & resolve artifact paths
+              id: resolve
+              run: |
+                  set -euo pipefail
+                  APP_VERSION=$(node -p "require('./package.json').version")
+                  echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
+                  echo "App version: $APP_VERSION"
+                  echo "Dist contents:"; ls -1 dist || true
+                  DMG_PATH=$(ls -1 "dist"/*.dmg 2>/dev/null | head -n1 || true)
+                  ZIP_PATH=$(ls -1 "dist"/*-mac.zip 2>/dev/null | head -n1 || true)
+                  if [ -z "$DMG_PATH" ]; then
+                    echo "::error::No DMG file found in dist/"; exit 1; fi
+                  if [ -z "$ZIP_PATH" ]; then
+                    echo "::error::No mac zip file found in dist/"; exit 1; fi
+                  echo "DMG_PATH=$DMG_PATH" >> $GITHUB_ENV
+                  echo "ZIP_PATH=$ZIP_PATH" >> $GITHUB_ENV
+                  echo "Resolved DMG: $DMG_PATH"; echo "Resolved ZIP: $ZIP_PATH"
+                  # set outputs for GH expressions
+                  echo "version=$APP_VERSION" >> $GITHUB_OUTPUT
+                  echo "dmg=$DMG_PATH" >> $GITHUB_OUTPUT
+                  echo "zip=$ZIP_PATH" >> $GITHUB_OUTPUT
 
             - name: Create Release
               id: create_release
@@ -34,8 +53,8 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
-                  tag_name: v${{ env.APP_VERSION }}-${{ github.run_number }}
-                  release_name: Release v${{ env.APP_VERSION }}-${{ github.run_number }}
+                  tag_name: v${{ steps.resolve.outputs.version }}-${{ github.run_number }}
+                  release_name: Release v${{ steps.resolve.outputs.version }}-${{ github.run_number }}
                   draft: false
                   prerelease: false
 
@@ -45,22 +64,16 @@ jobs:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
                   upload_url: ${{ steps.create_release.outputs.upload_url }}
-                  asset_path: ./dist/Microbot Launcher-${{ env.APP_VERSION }}.dmg
-                  asset_name: Microbot-Launcher.dmg
+                  asset_path: ${{ steps.resolve.outputs.dmg }}
+                  asset_name: Microbot-Launcher-${{ steps.resolve.outputs.version }}.dmg
                   asset_content_type: application/octet-stream
 
-            - name: Zip the .app
-              run: |
-                  cd dist/mac
-                  zip -r ../../Microbot-Launcher.app.zip "Microbot Launcher.app"
-                  cd ../..
-
-            - name: Upload App Artifact
+            - name: Upload ZIP Artifact
               uses: actions/upload-release-asset@v1
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
                   upload_url: ${{ steps.create_release.outputs.upload_url }}
-                  asset_path: ./Microbot-Launcher.app.zip
-                  asset_name: Microbot-Launcher.app.zip
+                  asset_path: ${{ steps.resolve.outputs.zip }}
+                  asset_name: Microbot-Launcher-${{ steps.resolve.outputs.version }}.zip
                   asset_content_type: application/zip
