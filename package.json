@@ -70,22 +70,22 @@
             "icon": "images/microbot_transparent.icns",
             "background": "images/dmg-background.png",
             "title": "${productName} Installer",
-            "iconSize": 112,
+            "iconSize": 108,
             "contents": [
                 {
                     "x": 530,
-                    "y": 195,
+                    "y": 192,
                     "type": "file",
                     "path": "./build/READ THIS BEFORE INSTALL.html"
                 },
                 {
                     "x": 328,
-                    "y": 510,
+                    "y": 507,
                     "type": "file"
                 },
                 {
                     "x": 730,
-                    "y": 510,
+                    "y": 507,
                     "type": "link",
                     "path": "/Applications"
                 }
