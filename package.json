@@ -70,7 +70,7 @@
             "icon": "images/microbot_transparent.icns",
             "background": "images/dmg-background.png",
             "title": "${productName} Installer",
-            "iconSize": 124,
+            "iconSize": 112,
             "contents": [
                 {
                     "x": 530,
@@ -80,12 +80,12 @@
                 },
                 {
                     "x": 328,
-                    "y": 507,
+                    "y": 520,
                     "type": "file"
                 },
                 {
                     "x": 730,
-                    "y": 507,
+                    "y": 520,
                     "type": "link",
                     "path": "/Applications"
                 }
