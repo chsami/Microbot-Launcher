@@ -22,6 +22,12 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
+            - name: Prepare build scripts
+              run: |
+                  chmod +x build/mac-fix-permissions.command
+                  # Ensure it has Unix line endings
+                  sed -i "" 's/\r$//' build/mac-fix-permissions.command
+
             - name: Build macOS app (dmg & zip)
               run: npm run mac
 

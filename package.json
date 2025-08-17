@@ -61,6 +61,7 @@
             "icon": "images/microbot_transparent.ico"
         },
         "mac": {
+            "category": "public.app-category.utilities",
             "identity": null,
             "target": "default",
             "icon": "images/microbot_transparent.icns"
@@ -71,7 +72,32 @@
             "window": {
                 "height": 720,
                 "width": 1056
-            }
+            },
+            "contents": [
+                {
+                    "x": 130,
+                    "y": 220,
+                    "type": "file",
+                    "path": "./build/mac-fix-permissions.command"
+                },
+                {
+                    "x": 410,
+                    "y": 220,
+                    "type": "file",
+                    "path": "./build/README-MAC.md"
+                },
+                {
+                    "x": 130,
+                    "y": 450,
+                    "type": "file"
+                },
+                {
+                    "x": 410,
+                    "y": 450,
+                    "type": "link",
+                    "path": "/Applications"
+                }
+            ]
         },
         "nsis": {
             "oneClick": false,
