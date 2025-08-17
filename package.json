@@ -68,11 +68,6 @@
         "dmg": {
             "icon": "images/microbot_transparent.icns",
             "title": "${productName} Installer",
-            "iconSize": 128,
-            "window": {
-                "height": 600,
-                "width": 600
-            },
             "contents": [
                 {
                     "x": 300,
