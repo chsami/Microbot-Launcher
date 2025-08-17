@@ -22,11 +22,6 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
-            - name: Prepare helper (AppleScript) and resources
-              run: |
-                  # Compile AppleScript helper app
-                  osacompile -o "build/Fix Microbot.app" build/FixQuarantine.applescript
-
             - name: Build macOS app (dmg & zip)
               run: npm run mac
 

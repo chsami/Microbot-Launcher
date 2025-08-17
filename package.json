@@ -67,28 +67,29 @@
         },
         "dmg": {
             "icon": "images/microbot_transparent.icns",
-            "backgroundColor": "#000000",
+            "backgroundColor": "#FFFFFF",
             "title": "${productName} Installer",
             "iconSize": 128,
             "window": {
-                "height": 400,
+                "height": 600,
                 "width": 600
             },
             "contents": [
                 {
-                    "x": 110,
-                    "y": 200,
-                    "type": "file",
-                    "path": "./build/Fix Microbot.app"
-                },
-                {
                     "x": 300,
-                    "y": 200,
-                    "type": "file"
+                    "y": 110,
+                    "type": "file",
+                    "path": "./build/READ THIS BEFORE INSTALL.html"
                 },
                 {
-                    "x": 470,
-                    "y": 200,
+                    "x": 200,
+                    "y": 400,
+                    "type": "file",
+                    "path": "Microbot Launcher.app"
+                },
+                {
+                    "x": 400,
+                    "y": 400,
                     "type": "link",
                     "path": "/Applications"
                 }

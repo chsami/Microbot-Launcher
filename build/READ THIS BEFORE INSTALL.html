@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            name="description"
+            content="Instructions for installing and launching Microbot Launcher on macOS, including steps to remove the quarantine flag."
+        />
+        <meta
+            name="keywords"
+            content="Microbot Launcher, macOS, install, quarantine, xattr, application, open source"
+        />
+        <title>READ THIS BEFORE INSTALL</title>
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue',
+                    Arial, sans-serif;
+                line-height: 1.45;
+                padding: 18px;
+                color: #111;
+                background: #fff;
+                width: 560px;
+            }
+            h1 {
+                font-size: 20px;
+                margin: 0 0 12px;
+            }
+            ol {
+                padding-left: 20px;
+            }
+            code,
+            .code {
+                background: #f3f3f3;
+                padding: 2px 5px;
+                border-radius: 4px;
+                font-family: Menlo, monospace;
+                font-size: 13px;
+            }
+            .cmd {
+                display: block;
+                background: #000;
+                color: #0f0;
+                padding: 10px 12px;
+                border-radius: 6px;
+                font-family: Menlo, monospace;
+                margin: 8px 0 14px;
+                font-size: 13px;
+            }
+            .note {
+                background: #fff9d8;
+                border: 1px solid #e2d799;
+                padding: 10px 12px;
+                border-radius: 6px;
+                font-size: 13px;
+            }
+            .why {
+                background: #eef6ff;
+                border: 1px solid #c5defa;
+                padding: 10px 12px;
+                border-radius: 6px;
+                font-size: 13px;
+            }
+            .small {
+                font-size: 12px;
+                color: #555;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Before You Install Microbot Launcher</h1>
+        <div class="why">
+            <strong>Why these steps?</strong><br />
+            The app is open source and not signed with Apple (paid)
+            certificates. macOS adds a "quarantine" flag to downloaded apps.
+            Removing that flag stops the "damaged / cannot be opened" warning.
+        </div>
+        <ol>
+            <li>
+                <strong>On the Microbot Launcher Installer</strong> window, drag
+                <em>Microbot Launcher.app</em> on <em>Applications</em> folder
+                shortcut.
+            </li>
+            <li>
+                <strong>Open Terminal:</strong><br />
+                Press <code>Command (⌘) + Space</code>, type
+                <code>Terminal</code>, press <code>Enter</code>.
+            </li>
+            <li>
+                <strong>Run this command exactly (copy & paste):</strong>
+                <pre class="cmd">
+xattr -cr "/Applications/Microbot Launcher.app"</pre
+                >
+                (It silently removes the quarantine flag. No output means
+                success.)
+            </li>
+            <li>
+                <strong>Launch the app:</strong> Open <em>Launchpad</em> or
+                Finder → Applications → Microbot Launcher.
+            </li>
+        </ol>
+        <div class="note">
+            <strong>Alternative (one-time):</strong> You can also right-click
+            the app → Open → Open. If you still get the damaged message, run the
+            command above.
+        </div>
+        <p class="small">
+            You only need to do this once per version. Future updates you
+            download manually may require repeating the command.
+        </p>
+    </body>
+</html>
