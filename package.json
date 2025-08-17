@@ -61,8 +61,13 @@
             "icon": "images/microbot_transparent.ico"
         },
         "mac": {
-            "identity": null,
-            "target": "dmg"
+            "identity": "-",
+            "target": "default",
+            "icon": "images/microbot_transparent.icns"
+        },
+        "dmg": {
+            "icon": "images/microbot_transparent.icns",
+            "background": "images/dmg-background.png"
         },
         "nsis": {
             "oneClick": false,

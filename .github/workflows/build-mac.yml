@@ -1,0 +1,66 @@
+name: Build and Release macOS App
+
+on:
+    push:
+        branches:
+            - mac-os-testing
+
+jobs:
+    build:
+        runs-on: macos-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v2
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v2
+              with:
+                  node-version: '18'
+
+            - name: Install dependencies
+              run: npm install
+
+            - name: Build macOS app
+              run: npm run mac
+
+            - name: Get app version
+              id: get_version
+              run: echo "APP_VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
+
+            - name: Create Release
+              id: create_release
+              uses: actions/create-release@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  tag_name: v${{ env.APP_VERSION }}-${{ github.run_number }}
+                  release_name: Release v${{ env.APP_VERSION }}-${{ github.run_number }}
+                  draft: false
+                  prerelease: false
+
+            - name: Upload DMG Artifact
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ steps.create_release.outputs.upload_url }}
+                  asset_path: ./dist/Microbot Launcher-${{ env.APP_VERSION }}.dmg
+                  asset_name: Microbot-Launcher.dmg
+                  asset_content_type: application/octet-stream
+
+            - name: Zip the .app
+              run: |
+                  cd dist/mac
+                  zip -r ../../Microbot-Launcher.app.zip "Microbot Launcher.app"
+                  cd ../..
+
+            - name: Upload App Artifact
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ steps.create_release.outputs.upload_url }}
+                  asset_path: ./Microbot-Launcher.app.zip
+                  asset_name: Microbot-Launcher.app.zip
+                  asset_content_type: application/zip
