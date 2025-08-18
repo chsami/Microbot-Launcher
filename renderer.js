@@ -69,6 +69,21 @@ async function playButtonClickHandler() {
     }
 }
 
+/**
+ * Helper function to update character select and trigger profile update
+ * @param {string} accountId - The account ID to select
+ * @returns {void}
+ */
+function updateCharacterSelection(accountId) {
+    const characterSelect = document.getElementById('character');
+    if (characterSelect) {
+        characterSelect.value = accountId;
+        // Manually dispatch a change event to trigger the onChange handler
+        const changeEvent = new Event('change');
+        characterSelect.dispatchEvent(changeEvent);
+    }
+}
+
 async function handleJagexAccountLogic(properties) {
     setInterval(async () => {
         const hasChanged = await window.electron.checkFileChange();
@@ -81,7 +96,7 @@ async function handleJagexAccountLogic(properties) {
             const selectedCharacter =
                 document.getElementById('character')?.value;
 
-            setupSidebarLayout(accounts.length);
+            await setupSidebarLayout(accounts.length);
 
             const orderedClientJars = await orderClientJarsByVersion();
             populateSelectElement('client', orderedClientJars);
@@ -94,11 +109,10 @@ async function handleJagexAccountLogic(properties) {
             if (oldNumberOfAccounts !== newNumberOfAccounts) {
                 const latestAccount = accounts[0];
                 if (latestAccount) {
-                    document.getElementById('character').value =
-                        latestAccount.accountId;
+                    updateCharacterSelection(latestAccount.accountId);
                 }
             } else {
-                document.getElementById('character').value = selectedCharacter;
+                updateCharacterSelection(selectedCharacter);
             }
         }
     }, 1000);
@@ -298,7 +312,7 @@ function populateAccountSelector(characters = [], selectedAccount = null) {
     });
 
     if (selectedAccount) {
-        characterSelect.value = selectedAccount;
+        updateCharacterSelection(selectedAccount);
     }
 }
 
@@ -319,7 +333,7 @@ function setupLogoutButton() {
     logoutBtn?.addEventListener('click', removeAccountsHandler);
 }
 
-function setupSidebarLayout(amountOfAccounts) {
+async function setupSidebarLayout(amountOfAccounts) {
     const selectedAccount = document.getElementById('character')?.value;
     const playJagexButton = document.getElementById('play');
     const playButtonsDiv = document.querySelector('.play-buttons');
@@ -338,6 +352,8 @@ function setupSidebarLayout(amountOfAccounts) {
         characterSelect.style.display = 'block';
         addAccountsButton.style.display = 'block';
         populateAccountSelector(accounts, selectedAccount);
+        // Note: populateAccountSelector uses updateCharacterSelection which
+        // triggers the profile update via the change event
         setupLogoutButton();
         setupAddAccountsButton();
     } else {
@@ -507,6 +523,30 @@ async function titlebarButtons() {
     });
 }
 
+/**
+ * Updates the profile selector based on the selected character or default settings
+ * @returns {Promise<void>}
+ */
+async function updateProfileBasedOnCharacter() {
+    const characterSelect = document.getElementById('character');
+    const selectedAccountId = characterSelect?.value;
+
+    if (selectedAccountId && selectedAccountId !== 'none') {
+        const selectedAccount = accounts.find(
+            (acc) => acc.accountId === selectedAccountId
+        );
+        if (selectedAccount && selectedAccount.profile) {
+            document.getElementById('profile').value = selectedAccount.profile;
+        }
+    } else {
+        // If no account is selected, use the non-Jagex preferred profile
+        const nonJagexProfile = await window.electron.readNonJagexProfile();
+        if (nonJagexProfile) {
+            document.getElementById('profile').value = nonJagexProfile;
+        }
+    }
+}
+
 async function initUI(properties) {
     updateNowBtn();
     reminderMeLaterBtn();
@@ -518,7 +558,14 @@ async function initUI(properties) {
 
     const orderedClientJars = await orderClientJarsByVersion();
     populateSelectElement('client', orderedClientJars);
-    populateProfileSelector(await window.electron.listProfiles(), null);
+
+    // Get profiles and initialize profile selector
+    const profiles = await window.electron.listProfiles();
+    populateProfileSelector(profiles, null);
+
+    // Update the profile based on the selected character
+    await updateProfileBasedOnCharacter();
+
     await setVersionPreference(properties);
     document.querySelector('.game-info').style = 'display:block';
 }
