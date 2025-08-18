@@ -96,6 +96,16 @@ async function handleJagexAccountLogic(properties) {
             const selectedCharacter =
                 document.getElementById('character')?.value;
 
+            // If accounts were deleted externally, ensure UI is updated properly
+            if (oldNumberOfAccounts > 0 && newNumberOfAccounts === 0) {
+                window.electron.logError(
+                    'All accounts were removed externally'
+                );
+                // Force UI update for removed accounts
+                document.getElementById('play').innerHTML =
+                    'Login Jagex Account';
+            }
+
             await setupSidebarLayout(accounts.length);
 
             const orderedClientJars = await orderClientJarsByVersion();
@@ -106,13 +116,32 @@ async function handleJagexAccountLogic(properties) {
             );
             await setVersionPreference(properties);
 
-            if (oldNumberOfAccounts !== newNumberOfAccounts) {
+            if (newNumberOfAccounts === 0) {
+                /**
+                 * All accounts were removed
+                 * Profile will be updated by setupSidebarLayout
+                 * which calls populateAccountSelector with empty accounts
+                 */
+                await updateProfileBasedOnCharacter();
+            } else if (oldNumberOfAccounts !== newNumberOfAccounts) {
                 const latestAccount = accounts[0];
                 if (latestAccount) {
                     updateCharacterSelection(latestAccount.accountId);
                 }
             } else {
-                updateCharacterSelection(selectedCharacter);
+                // Check if the selectedCharacter still exists in the accounts array
+                const characterExists = accounts.some(
+                    (acc) => acc.accountId === selectedCharacter
+                );
+                if (characterExists) {
+                    updateCharacterSelection(selectedCharacter);
+                } else if (accounts.length > 0) {
+                    // If character no longer exists but there are accounts, select the first one
+                    window.electron.logError(
+                        'Selected character no longer exists, selecting first available'
+                    );
+                    updateCharacterSelection(accounts[0].accountId);
+                }
             }
         }
     }, 1000);
@@ -319,12 +348,21 @@ function populateAccountSelector(characters = [], selectedAccount = null) {
 async function removeAccountsHandler() {
     const userConfirmed = confirm('Are you sure you want to proceed?');
     if (!userConfirmed) return;
+
+    // Remove accounts via the Electron API
     await window.electron.removeAccounts();
-    document.getElementById('play').innerHTML = 'Login Jagex Account';
-    document.querySelector('#add-accounts').style = 'display:none';
-    document.querySelector('#logout').style = 'display:none';
+
+    // Update the global accounts array
     accounts = [];
-    populateAccountSelector([]);
+
+    // Reset UI to show no accounts state
+    await setupSidebarLayout(0);
+
+    // Update the profile to non-Jagex profile or default
+    await updateProfileBasedOnCharacter();
+
+    // Update the play button text
+    document.getElementById('play').innerHTML = 'Login Jagex Account';
 }
 
 function setupLogoutButton() {
@@ -357,11 +395,19 @@ async function setupSidebarLayout(amountOfAccounts) {
         setupLogoutButton();
         setupAddAccountsButton();
     } else {
+        // Reset UI for no accounts state
         playJagexButton.innerHTML = 'Login Jagex Account';
         logoutButton.style.display = 'none';
+        playButtonsDiv.style.display = 'block';
         characterSelectLabel.style.display = 'none';
         characterSelect.style.display = 'none';
         addAccountsButton.style.display = 'none';
+
+        // Clear character selector and make sure 'none' is selected
+        populateAccountSelector([], 'none');
+
+        // Also update the profile to use non-Jagex profile or default
+        updateProfileBasedOnCharacter();
     }
 }
 
@@ -530,19 +576,30 @@ async function titlebarButtons() {
 async function updateProfileBasedOnCharacter() {
     const characterSelect = document.getElementById('character');
     const selectedAccountId = characterSelect?.value;
+    const profileSelect = document.getElementById('profile');
 
-    if (selectedAccountId && selectedAccountId !== 'none') {
+    if (
+        selectedAccountId &&
+        selectedAccountId !== 'none' &&
+        accounts.length > 0
+    ) {
         const selectedAccount = accounts.find(
             (acc) => acc.accountId === selectedAccountId
         );
         if (selectedAccount && selectedAccount.profile) {
-            document.getElementById('profile').value = selectedAccount.profile;
+            profileSelect.value = selectedAccount.profile;
+        } else {
+            // If account exists but has no profile preference, use default
+            profileSelect.value = 'default';
         }
     } else {
-        // If no account is selected, use the non-Jagex preferred profile
+        // If no account is selected or no accounts exist, use the non-Jagex preferred profile
         const nonJagexProfile = await window.electron.readNonJagexProfile();
         if (nonJagexProfile) {
-            document.getElementById('profile').value = nonJagexProfile;
+            profileSelect.value = nonJagexProfile;
+        } else {
+            // If no non-Jagex profile preference exists, use default
+            profileSelect.value = 'default';
         }
     }
 }
