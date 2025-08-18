@@ -14,6 +14,98 @@ const codeVerifier = generateCodeVerifier(45);
 const codeChallenge = getCodeChallenge(codeVerifier);
 
 /**
+ * Auth complete HTML to better show the user that the auth process is complete
+ * and soon gonna be redirected to the launcher.
+ */
+const AUTH_COMPLETE_HTML =
+    /* HTML */
+    `<!DOCTYPE html>
+        <html lang="en">
+            <head>
+                <meta charset="UTF-8" />
+                <title>Authentication Complete</title>
+                <meta
+                    name="viewport"
+                    content="width=device-width, initial-scale=1"
+                />
+                <style>
+                    html,
+                    body {
+                        height: 100%;
+                        margin: 0;
+                        font-family: system-ui, -apple-system, Segoe UI, Roboto,
+                            Helvetica, Arial, sans-serif;
+                        background: #0d1117;
+                        color: #e6edf3;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    .container {
+                        text-align: center;
+                        max-width: 760px;
+                        padding: 2rem;
+                    }
+                    h1 {
+                        font-size: 2.4rem;
+                        margin: 0 0 1rem;
+                        letter-spacing: 0.5px;
+                    }
+                    p {
+                        font-size: 1.15rem;
+                        margin: 0;
+                        opacity: 0.85;
+                    }
+                    .spinner {
+                        width: 54px;
+                        height: 54px;
+                        border: 6px solid #2d333b;
+                        border-top-color: #2f81f7;
+                        border-radius: 50%;
+                        animation: spin 1s linear infinite;
+                        margin: 2.25rem auto 0;
+                    }
+                    @keyframes spin {
+                        to {
+                            transform: rotate(360deg);
+                        }
+                    }
+                    .fade-in {
+                        animation: fade 0.6s ease-in-out;
+                    }
+                    @keyframes fade {
+                        from {
+                            opacity: 0;
+                            transform: translateY(6px);
+                        }
+                        to {
+                            opacity: 1;
+                            transform: translateY(0);
+                        }
+                    }
+                </style>
+                <script>
+                    // Try to close automatically after a short delay (ignored in most browsers unless opened programmatically)
+                    setTimeout(function () {
+                        try {
+                            window.close();
+                        } catch (_) {}
+                    }, 2600);
+                </script>
+            </head>
+            <body>
+                <div class="container fade-in">
+                    <h1>Authentication Complete</h1>
+                    <p>
+                        Successfully completed the authentication, returning to
+                        the launcher...
+                    </p>
+                    <div class="spinner" aria-hidden="true"></div>
+                </div>
+            </body>
+        </html>`;
+
+/**
  * Generates a cryptographically secure random string.
  * @param {number} length The length of the random string.
  * @returns {string} The generated random string.
@@ -216,11 +308,20 @@ async function writeAccountsToFile(sessionId) {
 async function startAuthFlow() {
     return new Promise(async (resolve, reject) => {
         let finished = false;
+
+        function fail(err) {
+            if (finished) return;
+            finished = true;
+            reject(err);
+        }
+
         const availableBrowser = await getAvailableBrowser();
 
         if (!availableBrowser) {
-            return reject(
-                new Error('No supported browser found on the system.')
+            return fail(
+                new Error(
+                    'No supported browser found on the system, please have a Chromium-based browser installed.'
+                )
             );
         }
 
@@ -241,10 +342,15 @@ async function startAuthFlow() {
         page.once('close', () => {
             if (finished) return;
             browser.close();
-            reject(new Error('Authentication flow closed unexpectedly.'));
+            fail(
+                new Error(
+                    'Browser was closed before authentication flow completed.'
+                )
+            );
         });
 
         page.on('framenavigated', async (frame) => {
+            if (finished) return;
             const url = frame.url();
 
             try {
@@ -293,21 +399,26 @@ async function startAuthFlow() {
                 }
             } catch (error) {
                 await browser.close();
-                reject(error);
+                fail(
+                    new Error(
+                        'An error occurred during the authentication flow.'
+                    )
+                );
             }
         });
 
         await page.route('http://localhost/', async (route) => {
+            if (finished) return;
             console.log('Intercepted navigation to localhost.');
 
             await page.waitForTimeout(50); // Small delay to ensure the URL is updated
             finalUrl = page.url();
 
-            // Fulfill with a dummy page to make the browser "land" successfully.
+            // Fulfill with the auth complete HTML which indicates the auth process is complete
             await route.fulfill({
                 status: 200,
                 contentType: 'text/html',
-                body: '<html><body>Successfully captured the localhost redirect... continuing with the authentication flow.</body></html>'
+                body: AUTH_COMPLETE_HTML
             });
         });
 

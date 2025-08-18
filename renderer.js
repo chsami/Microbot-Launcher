@@ -49,11 +49,9 @@ async function playButtonClickHandler() {
         await openClient();
     } else {
         document.getElementById('play').classList.add('disabled');
-        try {
-            await window.electron.startAuthFlow();
-        } catch (error) {
-            alert('Authentication flow ended unexpectedly.');
-            window.electron.logError(error);
+        const result = await window.electron.startAuthFlow();
+        if (result.error) {
+            window.electron.errorAlert(result.error);
         }
         document.getElementById('play').classList.remove('disabled');
     }
@@ -342,11 +340,9 @@ function setupSidebarLayout(amountOfAccounts) {
 async function addAccountsHandler() {
     const addAccountsButton = document.getElementById('add-accounts');
     addAccountsButton.classList.add('disabled');
-    try {
-        await window.electron.startAuthFlow();
-    } catch (error) {
-        alert('Authentication flow ended unexpectedly.');
-        window.electron.logError(error);
+    const result = await window.electron.startAuthFlow();
+    if (result.error) {
+        window.electron.errorAlert(result.error);
     }
     document.getElementById('add-accounts').classList.remove('disabled');
 }
