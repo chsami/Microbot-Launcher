@@ -5,6 +5,10 @@ on:
         branches:
             - mac-os-testing
 
+concurrency:
+    group: mac-build-${{ github.ref_name }}
+    cancel-in-progress: true
+
 jobs:
     build:
         runs-on: macos-latest
@@ -42,38 +46,32 @@ jobs:
                   echo "DMG_PATH=$DMG_PATH" >> $GITHUB_ENV
                   echo "ZIP_PATH=$ZIP_PATH" >> $GITHUB_ENV
                   echo "Resolved DMG: $DMG_PATH"; echo "Resolved ZIP: $ZIP_PATH"
-                  # set outputs for GH expressions
+                  # outputs for reuse
                   echo "version=$APP_VERSION" >> $GITHUB_OUTPUT
                   echo "dmg=$DMG_PATH" >> $GITHUB_OUTPUT
                   echo "zip=$ZIP_PATH" >> $GITHUB_OUTPUT
 
-            - name: Create Release
-              id: create_release
-              uses: actions/create-release@v1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Detect existing tag
+              id: tag_check
+              run: |
+                  set -euo pipefail
+                  TAG="v${{ steps.resolve.outputs.version }}"
+                  if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
+                    echo "exists=true" >> $GITHUB_OUTPUT
+                  else
+                    echo "exists=false" >> $GITHUB_OUTPUT
+                  fi
+
+            - name: Create or Update Release (single tag per version)
+              if: steps.tag_check.outputs.exists == 'false'
+              uses: ncipollo/release-action@v1
               with:
-                  tag_name: v${{ steps.resolve.outputs.version }}-${{ github.run_number }}
-                  release_name: Release v${{ steps.resolve.outputs.version }}-${{ github.run_number }}
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  tag: v${{ steps.resolve.outputs.version }}
+                  name: Release v${{ steps.resolve.outputs.version }}
                   draft: false
                   prerelease: false
-
-            - name: Upload DMG Artifact
-              uses: actions/upload-release-asset@v1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  upload_url: ${{ steps.create_release.outputs.upload_url }}
-                  asset_path: ${{ steps.resolve.outputs.dmg }}
-                  asset_name: Microbot-Launcher-${{ steps.resolve.outputs.version }}.dmg
-                  asset_content_type: application/octet-stream
-
-            - name: Upload ZIP Artifact
-              uses: actions/upload-release-asset@v1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  upload_url: ${{ steps.create_release.outputs.upload_url }}
-                  asset_path: ${{ steps.resolve.outputs.zip }}
-                  asset_name: Microbot-Launcher-${{ steps.resolve.outputs.version }}.zip
-                  asset_content_type: application/zip
+                  makeLatest: true
+                  allowUpdates: true # if a re-run occurs after partial failure, allow updating
+                  replacesArtifacts: true # replace old assets if present
+                  artifacts: '${{ steps.resolve.outputs.dmg }},${{ steps.resolve.outputs.zip }}'
