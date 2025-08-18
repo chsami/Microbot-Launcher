@@ -85,14 +85,6 @@ const AUTH_COMPLETE_HTML =
                         }
                     }
                 </style>
-                <script>
-                    // Try to close automatically after a short delay (ignored in most browsers unless opened programmatically)
-                    setTimeout(function () {
-                        try {
-                            window.close();
-                        } catch (_) {}
-                    }, 2600);
-                </script>
             </head>
             <body>
                 <div class="container fade-in">
