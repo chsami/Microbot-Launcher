@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const axios = require('axios');
 const fs = require('fs').promises;
 const path = require('path');
+const log = require('electron-log');
 const { getAvailableBrowser } = require('./browser-util.js');
 
 const userHome = process.env.HOME || process.env.USERPROFILE;
@@ -153,7 +154,7 @@ function extractIdTokenFromUrl(url) {
         }
         return null;
     } catch (error) {
-        console.error('Error parsing URL fragment for id_token:', error);
+        log.error(`Error parsing URL fragment for id_token: ${error.message}`);
         return null;
     }
 }
@@ -169,7 +170,7 @@ function extractCodeFromUrl(url) {
         const params = new URLSearchParams(urlObject.search);
         return params.get('code');
     } catch (error) {
-        console.error('Error parsing URL for code:', error);
+        log.error(`Error parsing URL for code: ${error.message}`);
         return null;
     }
 }
@@ -180,7 +181,7 @@ function extractCodeFromUrl(url) {
  * @returns {Promise<string|null>} The ID token or null on failure.
  */
 async function getToken(code) {
-    console.log('Exchanging authorization code for token...');
+    log.info('Exchanging authorization code for token...');
     try {
         const response = await axios.post(
             'https://account.jagex.com/oauth2/token',
@@ -196,14 +197,15 @@ async function getToken(code) {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
             }
         );
-        console.log('Token exchange successful.');
-        console.log('ID Token:', response.data.id_token);
+        log.info('Token exchange successful.');
+        log.info(`ID Token: ${response.data.id_token}`);
         // Return the ID token
         return response.data.id_token;
     } catch (error) {
-        console.error(
-            'Error getting token:',
-            error.response ? error.response.data : error.message
+        log.error(
+            `Error getting token: ${
+                error.response ? error.response.data : error.message
+            }`
         );
         return null;
     }
@@ -215,19 +217,20 @@ async function getToken(code) {
  * @returns {Promise<string|null>} The session ID or null on failure.
  */
 async function getSessionId(idToken) {
-    console.log('Fetching game session ID...');
+    log.info('Fetching game session ID...');
     try {
         const response = await axios.post(
             'https://auth.jagex.com/game-session/v1/sessions',
             { idToken },
             { headers: { 'Content-Type': 'application/json' } }
         );
-        console.log('Session ID fetched successfully.');
+        log.info('Session ID fetched successfully.');
         return response.data.sessionId;
     } catch (error) {
-        console.error(
-            'Error getting session ID:',
-            error.response ? error.response.data : error.message
+        log.error(
+            `Error getting session ID: ${
+                error.response ? error.response.data : error.message
+            }`
         );
         return null;
     }
@@ -238,7 +241,7 @@ async function getSessionId(idToken) {
  * @param {string} sessionId The game session ID.
  */
 async function writeAccountsToFile(sessionId) {
-    console.log('Fetching account information...');
+    log.info('Fetching account information...');
     try {
         const response = await axios.get(
             'https://auth.jagex.com/game-session/v1/accounts',
@@ -261,7 +264,7 @@ async function writeAccountsToFile(sessionId) {
             existingAccounts = JSON.parse(fileContent);
         } catch (e) {
             if (e.code !== 'ENOENT') {
-                console.error('Error reading existing accounts file:', e);
+                log.error(`Error reading existing accounts file: ${e}`);
             }
         }
 
@@ -281,17 +284,14 @@ async function writeAccountsToFile(sessionId) {
                 ACCOUNTS_FILE_PATH,
                 JSON.stringify(allAccounts, null, 2)
             );
-            console.log(
+            log.info(
                 `Successfully wrote ${nonDuplicateNewAccounts.length} new account(s) to ${ACCOUNTS_FILE_PATH}`
             );
         } else {
-            console.log('No new accounts to add.');
+            log.info('No new accounts to add.');
         }
     } catch (error) {
-        console.error(
-            'Error writing accounts to file:',
-            error.response ? error.response.data : error.message
-        );
+        log.error(`Error writing accounts to file: ${error.message}`);
     }
 }
 
@@ -334,19 +334,19 @@ async function startAuthFlow() {
 
         const initialUrl = `https://account.jagex.com/oauth2/auth?auth_method=&login_type=&flow=launcher&response_type=code&client_id=com_jagex_auth_desktop_launcher&redirect_uri=https%3A%2F%2Fsecure.runescape.com%2Fm%3Dweblogin%2Flauncher-redirect&code_challenge=${codeChallenge}&code_challenge_method=S256&prompt=login&scope=openid+offline+gamesso.token.create+user.profile.read&state=${state}`;
 
-        console.log('Starting authentication flow...');
+        log.info('Starting authentication flow...');
 
         /**
          * Handles the unexpected closure of the authentication flow.
          */
         page.once('close', () => {
             if (finished) return;
-            browser.close();
             fail(
                 new Error(
                     'Browser was closed before authentication flow completed.'
                 )
             );
+            browser.close();
         });
 
         page.on('framenavigated', async (frame) => {
@@ -355,7 +355,7 @@ async function startAuthFlow() {
 
             try {
                 if (url.includes('id_token=')) {
-                    console.log(
+                    log.info(
                         'Found the URL with the id_token query parameter.'
                     );
                     const idToken = extractIdTokenFromUrl(url);
@@ -365,7 +365,7 @@ async function startAuthFlow() {
                             await writeAccountsToFile(sessionId);
                         }
 
-                        console.log(
+                        log.info(
                             'Authentication flow complete. Closing browser.'
                         );
                         finished = true;
@@ -373,10 +373,10 @@ async function startAuthFlow() {
                         resolve('Authentication successful.');
                     }
                 } else if (url.includes('code=') && !url.includes('locale?')) {
-                    console.log('Found the url with the code query parameter.');
+                    log.info('Found the URL with the code query parameter.');
                     const code = extractCodeFromUrl(url);
                     if (code) {
-                        console.log(
+                        log.info(
                             'The URL contains the specified code query parameter.'
                         );
                         const idTokenFromCode = await getToken(code);
@@ -392,24 +392,24 @@ async function startAuthFlow() {
                                 `&client_id=1fddee4e-b100-4f4e-b2b0-097f9088f9d2` +
                                 `&scope=openid+offline`;
 
-                            console.log('Navigating to NextAuth URL.');
+                            log.info(
+                                'Navigating to the next authentication URL.'
+                            );
                             await page.goto(nextAuthUrl);
                         }
                     }
                 }
             } catch (error) {
+                error.message =
+                    'An error occurred during the authentication flow.';
+                fail(error);
                 await browser.close();
-                fail(
-                    new Error(
-                        'An error occurred during the authentication flow.'
-                    )
-                );
             }
         });
 
         await page.route('http://localhost/', async (route) => {
             if (finished) return;
-            console.log('Intercepted navigation to localhost.');
+            log.info('Intercepted navigation to localhost.');
 
             await page.waitForTimeout(50); // Small delay to ensure the URL is updated
             finalUrl = page.url();

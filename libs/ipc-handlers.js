@@ -28,7 +28,7 @@ module.exports = async function (deps) {
         try {
             return await startAuthFlow();
         } catch (error) {
-            log.error(error.message);
+            log.error(`Error during authentication flow: ${error.message}`);
             return { error: error.message };
         }
     });
@@ -37,7 +37,7 @@ module.exports = async function (deps) {
         try {
             return await isBrowserDownloaded();
         } catch (error) {
-            log.error(error.message);
+            log.error(`Error checking if browser is downloaded: ${error}`);
             return { error: error.message };
         }
     });
@@ -86,7 +86,7 @@ module.exports = async function (deps) {
             });
             return { success: true, path: filePath };
         } catch (error) {
-            log.error(error.message);
+            log.error(`Error downloading Microbot launcher: ${error}`);
             return { error: error.message };
         }
     });
@@ -133,7 +133,7 @@ module.exports = async function (deps) {
         } catch (error) {
             log.error(
                 `Error downloading client ${version} from ${url}:`,
-                error.message
+                error
             );
             return { error: error.message };
         }
@@ -144,7 +144,7 @@ module.exports = async function (deps) {
             const response = await axios.get(url + '/api/version/launcher');
             return response.data;
         } catch (error) {
-            log.error(error.message);
+            log.error(`Error fetching launcher version: ${error}`);
             return { error: error.message };
         }
     });
@@ -154,7 +154,7 @@ module.exports = async function (deps) {
             const response = await axios.get(url + '/api/version/client');
             return response.data;
         } catch (error) {
-            log.error(error.message);
+            log.error(`Error fetching client version: ${error}`);
             return { error: error.message };
         }
     });
@@ -165,7 +165,7 @@ module.exports = async function (deps) {
             log.info(filePath);
             return fs.existsSync(filePath);
         } catch (error) {
-            log.error(error.message);
+            log.error(`Error checking if client exists: ${error}`);
             return { error: error.message };
         }
     });
@@ -175,7 +175,7 @@ module.exports = async function (deps) {
             const filePath = path.join(microbotDir, 'microbot-launcher.jar');
             return fs.existsSync(filePath);
         } catch (error) {
-            log.error(error.message);
+            log.error(`Error checking if launcher exists: ${error}`);
             return { error: error.message };
         }
     });
@@ -183,7 +183,7 @@ module.exports = async function (deps) {
     ipcMain.handle('list-jars', async () => {
         const files = fs.readdirSync(microbotDir, (err) => {
             if (err) {
-                return console.log('Unable to scan directory: ' + err);
+                return log.error(`Unable to scan directory: ${err}`);
             }
         });
         const regex = /\d/;
@@ -219,7 +219,7 @@ module.exports = async function (deps) {
                     )
                     .map((profile) => profile.name);
             } catch (error) {
-                log.error(error.message);
+                log.error(`Error reading profiles file: ${error}`);
                 return { error: error.message };
             }
         } else {
@@ -239,7 +239,7 @@ module.exports = async function (deps) {
                 const profile = JSON.parse(data);
                 return profile?.profile;
             } catch (error) {
-                log.error(error.message);
+                log.error(`Error reading non-Jagex profile file: ${error}`);
                 return { error: error.message };
             }
         } else {
@@ -265,7 +265,7 @@ module.exports = async function (deps) {
             });
             return result;
         } catch (error) {
-            log.error(error.message);
+            log.error(`Error showing error alert: ${error}`);
             return { error: error.message };
         }
     });
