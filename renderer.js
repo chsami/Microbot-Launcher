@@ -2,7 +2,19 @@ let accounts = [];
 let iii = null;
 
 async function openClient() {
-    const version = extractVersion(document.getElementById('client').value);
+    const clientValue = document.getElementById('client').value;
+
+    // Check if a valid client version is selected
+    if (
+        !clientValue ||
+        clientValue === '' ||
+        !clientValue.includes('microbot-')
+    ) {
+        window.electron.errorAlert('Please select a valid client version');
+        return;
+    }
+
+    const version = extractVersion(clientValue);
     await downloadClientIfNotExist(version);
 
     const proxy = getProxyValues();
@@ -93,25 +105,25 @@ async function handleJagexAccountLogic(properties) {
 }
 
 window.onerror = function myErrorHandler(errorMsg, url, lineNumber) {
-    alert('Error occured: ' + errorMsg + ' - Version 1.0.5'); //or any message
+    alert(`Error occurred: ${errorMsg}`);
     window.electron.logError(errorMsg);
     return false;
 };
 window.addEventListener('error', function (e) {
     if (e.error) {
-        alert('Error occured: ' + e.error.stack + ' - Version 1.0.5'); //or any message
+        alert(`Error occurred: ${e.error.stack}`);
         window.electron.logError(e.error.stack);
     } else if (e.reason) {
-        alert('Error occured: ' + e.reason.stack + ' - Version 1.0.5'); //or any message
+        alert(`Error occurred: ${e.reason.stack}`);
         window.electron.logError(e.reason.stack);
     }
     return false;
 });
 
-window.addEventListener('unhandledrejection', (event) => {
-    event.preventDefault(); // This will not print the error in the console });
-    alert('Error occured: ' + event.reason.stack + ' - Version 1.0.5'); //or any message
-    window.electron.logError(event.reason.stack);
+window.addEventListener('unhandledrejection', (e) => {
+    e.preventDefault();
+    alert(`Error occurred: ${e.reason.stack}`);
+    window.electron.logError(e.reason.stack);
 });
 
 window.addEventListener('load', async () => {
@@ -355,7 +367,7 @@ function setupAddAccountsButton() {
 
 /**
  * Extracts the version number from a string.
- * e.g., "microbot-1.1.1.1.jar" becomes "1.9.6.1"
+ * e.g., "microbot-1.9.6.1.jar" becomes "1.9.6.1"
  * @param {string} versionString - The string containing the version.
  * @returns {string} The extracted version number.
  */
@@ -369,6 +381,19 @@ function playNoJagexAccount() {
         .addEventListener('click', async () => {
             const proxy = getProxyValues();
             const selectedVersion = document.getElementById('client').value;
+
+            // Check if a valid client version is selected
+            if (
+                !selectedVersion ||
+                selectedVersion === '' ||
+                !selectedVersion.includes('microbot-')
+            ) {
+                window.electron.errorAlert(
+                    'Please select a valid client version'
+                );
+                return;
+            }
+
             const version = extractVersion(selectedVersion);
 
             const selectedProfile =
@@ -387,6 +412,19 @@ async function downloadClientIfNotExist(version) {
         );
         document.getElementById('loader-container').style.display = 'block';
         await window.electron.downloadClient(version);
+
+        // Refresh client versions list after download
+        const orderedClientJars = await orderClientJarsByVersion();
+        populateSelectElement('client', orderedClientJars);
+
+        // Set the newly downloaded version as the selected value
+        const clientSelect = document.getElementById('client');
+        for (let i = 0; i < clientSelect.options.length; i++) {
+            if (clientSelect.options[i].value.includes(version)) {
+                clientSelect.selectedIndex = i;
+                break;
+            }
+        }
     }
     window.electron.logError(`Client ${version} is ready.`);
 }
