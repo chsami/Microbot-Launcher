@@ -6,6 +6,7 @@ module.exports = async function (deps) {
         packageJson,
         path,
         log,
+        dialog,
         fs,
         projectDir,
         app
@@ -24,11 +25,21 @@ module.exports = async function (deps) {
     ));
 
     ipcMain.handle('start-auth-flow', async () => {
-        return await startAuthFlow();
+        try {
+            return await startAuthFlow();
+        } catch (error) {
+            log.error(error.message);
+            return { error: error.message };
+        }
     });
 
     ipcMain.handle('is-browser-downloaded', async () => {
-        return await isBrowserDownloaded();
+        try {
+            return await isBrowserDownloaded();
+        } catch (error) {
+            log.error(error.message);
+            return { error: error.message };
+        }
     });
 
     const propertiesHandler = require(path.join(
@@ -243,5 +254,19 @@ module.exports = async function (deps) {
 
     ipcMain.handle('log-error', async (event, message) => {
         log.error(message);
+    });
+
+    ipcMain.handle('error-alert', async (event, message) => {
+        try {
+            const result = await dialog.showMessageBox({
+                type: 'error',
+                title: 'Error',
+                message: message
+            });
+            return result;
+        } catch (error) {
+            log.error(error.message);
+            return { error: error.message };
+        }
     });
 };

@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('electron', {
     listProfiles: () => ipcRenderer.invoke('list-profiles'),
     launcherVersion: () => ipcRenderer.invoke('launcher-version'),
     logError: (message) => ipcRenderer.invoke('log-error', message),
+    errorAlert: (options) => ipcRenderer.invoke('error-alert', options),
     ipcRenderer: {
         send: (channel, data) => ipcRenderer.send(channel, data),
         receive: (channel, func) =>
