@@ -1,16 +1,21 @@
-name: Build and Release macOS App
+name: Build macOS App
 
 on:
     push:
-        branches:
-            - mac-os-testing
+        branches: [main]
+    workflow_run:
+        workflows: ['Build and Upload']
+        types:
+            - completed
 
 concurrency:
     group: mac-build-${{ github.ref_name }}
     cancel-in-progress: true
 
 jobs:
-    build:
+    build-mac:
+        # Only run if the Windows workflow completed successfully
+        if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' }}
         runs-on: macos-latest
 
         steps:
@@ -20,7 +25,7 @@ jobs:
             - name: Set up Node.js
               uses: actions/setup-node@v4
               with:
-                  node-version: 18
+                  node-version: 20
                   cache: 'npm'
 
             - name: Install dependencies
@@ -29,49 +34,41 @@ jobs:
             - name: Build macOS app (dmg & zip)
               run: npm run mac
 
-            - name: Capture version & resolve artifact paths
-              id: resolve
+            - name: Get version from package.json
+              id: version
+              run: |
+                  APP_VERSION=$(node -p "require('./package.json').version")
+                  echo "version=$APP_VERSION" >> $GITHUB_OUTPUT
+                  echo "App version: $APP_VERSION"
+
+            - name: Find DMG file
+              id: find_dmg
               run: |
                   set -euo pipefail
-                  APP_VERSION=$(node -p "require('./package.json').version")
-                  echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
-                  echo "App version: $APP_VERSION"
                   echo "Dist contents:"; ls -1 dist || true
                   DMG_PATH=$(ls -1 "dist"/*.dmg 2>/dev/null | head -n1 || true)
-                  ZIP_PATH=$(ls -1 "dist"/*-mac.zip 2>/dev/null | head -n1 || true)
                   if [ -z "$DMG_PATH" ]; then
                     echo "::error::No DMG file found in dist/"; exit 1; fi
-                  if [ -z "$ZIP_PATH" ]; then
-                    echo "::error::No mac zip file found in dist/"; exit 1; fi
-                  echo "DMG_PATH=$DMG_PATH" >> $GITHUB_ENV
-                  echo "ZIP_PATH=$ZIP_PATH" >> $GITHUB_ENV
-                  echo "Resolved DMG: $DMG_PATH"; echo "Resolved ZIP: $ZIP_PATH"
-                  # outputs for reuse
-                  echo "version=$APP_VERSION" >> $GITHUB_OUTPUT
-                  echo "dmg=$DMG_PATH" >> $GITHUB_OUTPUT
-                  echo "zip=$ZIP_PATH" >> $GITHUB_OUTPUT
+                  echo "dmg_path=$DMG_PATH" >> $GITHUB_OUTPUT
+                  echo "Resolved DMG: $DMG_PATH"
 
-            - name: Detect existing tag
-              id: tag_check
-              run: |
-                  set -euo pipefail
-                  TAG="v${{ steps.resolve.outputs.version }}"
-                  if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
-                    echo "exists=true" >> $GITHUB_OUTPUT
-                  else
-                    echo "exists=false" >> $GITHUB_OUTPUT
-                  fi
-
-            - name: Create or Update Release (single tag per version)
-              if: steps.tag_check.outputs.exists == 'false'
-              uses: ncipollo/release-action@v1
+            - name: Update GitHub Release
+              uses: softprops/action-gh-release@v2
               with:
-                  token: ${{ secrets.GITHUB_TOKEN }}
-                  tag: v${{ steps.resolve.outputs.version }}
-                  name: Release v${{ steps.resolve.outputs.version }}
-                  draft: false
-                  prerelease: false
-                  makeLatest: true
-                  allowUpdates: true # if a re-run occurs after partial failure, allow updating
-                  replacesArtifacts: true # replace old assets if present
-                  artifacts: '${{ steps.resolve.outputs.dmg }},${{ steps.resolve.outputs.zip }}'
+                  tag_name: v${{ steps.version.outputs.version }}
+                  name: Release v${{ steps.version.outputs.version }}
+                  files: ${{ steps.find_dmg.outputs.dmg_path }}
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Upload to Hetzner
+              env:
+                  SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+              run: |
+                  mkdir -p ~/.ssh
+                  echo "$SSH_KEY" > ~/.ssh/id_rsa
+                  chmod 600 ~/.ssh/id_rsa
+                  ssh-keyscan -H 138.201.81.246 >> ~/.ssh/known_hosts
+
+                  # Upload DMG to server
+                  scp -r ${{ steps.find_dmg.outputs.dmg_path }} root@138.201.81.246:/var/www/files/releases/microbot-launcher/
