@@ -1,0 +1,74 @@
+name: Build macOS App
+
+on:
+    push:
+        branches: [main]
+    workflow_run:
+        workflows: ['Build and Upload']
+        types:
+            - completed
+
+concurrency:
+    group: mac-build-${{ github.ref_name }}
+    cancel-in-progress: true
+
+jobs:
+    build-mac:
+        # Only run if the Windows workflow completed successfully
+        if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' }}
+        runs-on: macos-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: 'npm'
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Build macOS app (dmg & zip)
+              run: npm run mac
+
+            - name: Get version from package.json
+              id: version
+              run: |
+                  APP_VERSION=$(node -p "require('./package.json').version")
+                  echo "version=$APP_VERSION" >> $GITHUB_OUTPUT
+                  echo "App version: $APP_VERSION"
+
+            - name: Find DMG file
+              id: find_dmg
+              run: |
+                  set -euo pipefail
+                  echo "Dist contents:"; ls -1 dist || true
+                  DMG_PATH=$(ls -1 "dist"/*.dmg 2>/dev/null | head -n1 || true)
+                  if [ -z "$DMG_PATH" ]; then
+                    echo "::error::No DMG file found in dist/"; exit 1; fi
+                  echo "dmg_path=$DMG_PATH" >> $GITHUB_OUTPUT
+                  echo "Resolved DMG: $DMG_PATH"
+
+            - name: Update GitHub Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: v${{ steps.version.outputs.version }}
+                  name: Release v${{ steps.version.outputs.version }}
+                  files: ${{ steps.find_dmg.outputs.dmg_path }}
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Upload to Hetzner
+              env:
+                  SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+              run: |
+                  mkdir -p ~/.ssh
+                  echo "$SSH_KEY" > ~/.ssh/id_rsa
+                  chmod 600 ~/.ssh/id_rsa
+                  ssh-keyscan -H 138.201.81.246 >> ~/.ssh/known_hosts
+
+                  # Upload DMG to server
+                  scp -r ${{ steps.find_dmg.outputs.dmg_path }} root@138.201.81.246:/var/www/files/releases/microbot-launcher/

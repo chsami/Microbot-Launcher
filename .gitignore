@@ -134,3 +134,5 @@ index_debug.html
 # lockfile , etc
 ...
 package-lock.json
+.DS_Store
+package-lock.json
