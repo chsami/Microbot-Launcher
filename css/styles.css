@@ -30,7 +30,7 @@ webview#website {
     opacity: 1;
     pointer-events: none;
     transition: opacity 0.4s ease;
-    z-index: 100;
+    z-index: 50;
 }
 
 #embed-overlay.hidden {

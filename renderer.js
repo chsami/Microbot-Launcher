@@ -2,7 +2,19 @@ let accounts = [];
 let iii = null;
 
 async function openClient() {
-    const version = extractVersion(document.getElementById('client').value);
+    const clientValue = document.getElementById('client').value;
+
+    // Check if a valid client version is selected
+    if (
+        !clientValue ||
+        clientValue === '' ||
+        !clientValue.includes('microbot-')
+    ) {
+        window.electron.errorAlert('Please select a valid client version');
+        return;
+    }
+
+    const version = extractVersion(clientValue);
     await downloadClientIfNotExist(version);
 
     const proxy = getProxyValues();
@@ -49,13 +61,26 @@ async function playButtonClickHandler() {
         await openClient();
     } else {
         document.getElementById('play').classList.add('disabled');
-        try {
-            await window.electron.startAuthFlow();
-        } catch (error) {
-            alert('Authentication flow ended unexpectedly.');
-            window.electron.logError(error);
+        const result = await window.electron.startAuthFlow();
+        if (result.error) {
+            window.electron.errorAlert(result.error);
         }
         document.getElementById('play').classList.remove('disabled');
+    }
+}
+
+/**
+ * Helper function to update character select and trigger profile update
+ * @param {string} accountId - The account ID to select
+ * @returns {void}
+ */
+function updateCharacterSelection(accountId) {
+    const characterSelect = document.getElementById('character');
+    if (characterSelect) {
+        characterSelect.value = accountId;
+        // Manually dispatch a change event to trigger the onChange handler
+        const changeEvent = new Event('change');
+        characterSelect.dispatchEvent(changeEvent);
     }
 }
 
@@ -71,7 +96,17 @@ async function handleJagexAccountLogic(properties) {
             const selectedCharacter =
                 document.getElementById('character')?.value;
 
-            setupSidebarLayout(accounts.length);
+            // If accounts were deleted externally, ensure UI is updated properly
+            if (oldNumberOfAccounts > 0 && newNumberOfAccounts === 0) {
+                window.electron.logError(
+                    'All accounts were removed externally'
+                );
+                // Force UI update for removed accounts
+                document.getElementById('play').innerHTML =
+                    'Login Jagex Account';
+            }
+
+            await setupSidebarLayout(accounts.length);
 
             const orderedClientJars = await orderClientJarsByVersion();
             populateSelectElement('client', orderedClientJars);
@@ -81,39 +116,57 @@ async function handleJagexAccountLogic(properties) {
             );
             await setVersionPreference(properties);
 
-            if (oldNumberOfAccounts !== newNumberOfAccounts) {
+            if (newNumberOfAccounts === 0) {
+                /**
+                 * All accounts were removed
+                 * Profile will be updated by setupSidebarLayout
+                 * which calls populateAccountSelector with empty accounts
+                 */
+                await updateProfileBasedOnCharacter();
+            } else if (oldNumberOfAccounts !== newNumberOfAccounts) {
                 const latestAccount = accounts[0];
                 if (latestAccount) {
-                    document.getElementById('character').value =
-                        latestAccount.accountId;
+                    updateCharacterSelection(latestAccount.accountId);
                 }
             } else {
-                document.getElementById('character').value = selectedCharacter;
+                // Check if the selectedCharacter still exists in the accounts array
+                const characterExists = accounts.some(
+                    (acc) => acc.accountId === selectedCharacter
+                );
+                if (characterExists) {
+                    updateCharacterSelection(selectedCharacter);
+                } else if (accounts.length > 0) {
+                    // If character no longer exists but there are accounts, select the first one
+                    window.electron.logError(
+                        'Selected character no longer exists, selecting first available'
+                    );
+                    updateCharacterSelection(accounts[0].accountId);
+                }
             }
         }
     }, 1000);
 }
 
 window.onerror = function myErrorHandler(errorMsg, url, lineNumber) {
-    alert('Error occured: ' + errorMsg + ' - Version 1.0.5'); //or any message
+    alert(`Error occurred: ${errorMsg}`);
     window.electron.logError(errorMsg);
     return false;
 };
 window.addEventListener('error', function (e) {
     if (e.error) {
-        alert('Error occured: ' + e.error.stack + ' - Version 1.0.5'); //or any message
+        alert(`Error occurred: ${e.error.stack}`);
         window.electron.logError(e.error.stack);
     } else if (e.reason) {
-        alert('Error occured: ' + e.reason.stack + ' - Version 1.0.5'); //or any message
+        alert(`Error occurred: ${e.reason.stack}`);
         window.electron.logError(e.reason.stack);
     }
     return false;
 });
 
-window.addEventListener('unhandledrejection', (event) => {
-    event.preventDefault(); // This will not print the error in the console });
-    alert('Error occured: ' + event.reason.stack + ' - Version 1.0.5'); //or any message
-    window.electron.logError(event.reason.stack);
+window.addEventListener('unhandledrejection', (e) => {
+    e.preventDefault();
+    alert(`Error occurred: ${e.reason.stack}`);
+    window.electron.logError(e.reason.stack);
 });
 
 window.addEventListener('load', async () => {
@@ -288,19 +341,28 @@ function populateAccountSelector(characters = [], selectedAccount = null) {
     });
 
     if (selectedAccount) {
-        characterSelect.value = selectedAccount;
+        updateCharacterSelection(selectedAccount);
     }
 }
 
 async function removeAccountsHandler() {
     const userConfirmed = confirm('Are you sure you want to proceed?');
     if (!userConfirmed) return;
+
+    // Remove accounts via the Electron API
     await window.electron.removeAccounts();
-    document.getElementById('play').innerHTML = 'Login Jagex Account';
-    document.querySelector('#add-accounts').style = 'display:none';
-    document.querySelector('#logout').style = 'display:none';
+
+    // Update the global accounts array
     accounts = [];
-    populateAccountSelector([]);
+
+    // Reset UI to show no accounts state
+    await setupSidebarLayout(0);
+
+    // Update the profile to non-Jagex profile or default
+    await updateProfileBasedOnCharacter();
+
+    // Update the play button text
+    document.getElementById('play').innerHTML = 'Login Jagex Account';
 }
 
 function setupLogoutButton() {
@@ -309,7 +371,7 @@ function setupLogoutButton() {
     logoutBtn?.addEventListener('click', removeAccountsHandler);
 }
 
-function setupSidebarLayout(amountOfAccounts) {
+async function setupSidebarLayout(amountOfAccounts) {
     const selectedAccount = document.getElementById('character')?.value;
     const playJagexButton = document.getElementById('play');
     const playButtonsDiv = document.querySelector('.play-buttons');
@@ -328,25 +390,33 @@ function setupSidebarLayout(amountOfAccounts) {
         characterSelect.style.display = 'block';
         addAccountsButton.style.display = 'block';
         populateAccountSelector(accounts, selectedAccount);
+        // Note: populateAccountSelector uses updateCharacterSelection which
+        // triggers the profile update via the change event
         setupLogoutButton();
         setupAddAccountsButton();
     } else {
+        // Reset UI for no accounts state
         playJagexButton.innerHTML = 'Login Jagex Account';
         logoutButton.style.display = 'none';
+        playButtonsDiv.style.display = 'block';
         characterSelectLabel.style.display = 'none';
         characterSelect.style.display = 'none';
         addAccountsButton.style.display = 'none';
+
+        // Clear character selector and make sure 'none' is selected
+        populateAccountSelector([], 'none');
+
+        // Also update the profile to use non-Jagex profile or default
+        updateProfileBasedOnCharacter();
     }
 }
 
 async function addAccountsHandler() {
     const addAccountsButton = document.getElementById('add-accounts');
     addAccountsButton.classList.add('disabled');
-    try {
-        await window.electron.startAuthFlow();
-    } catch (error) {
-        alert('Authentication flow ended unexpectedly.');
-        window.electron.logError(error);
+    const result = await window.electron.startAuthFlow();
+    if (result.error) {
+        window.electron.errorAlert(result.error);
     }
     document.getElementById('add-accounts').classList.remove('disabled');
 }
@@ -359,7 +429,7 @@ function setupAddAccountsButton() {
 
 /**
  * Extracts the version number from a string.
- * e.g., "microbot-1.1.1.1.jar" becomes "1.9.6.1"
+ * e.g., "microbot-1.9.6.1.jar" becomes "1.9.6.1"
  * @param {string} versionString - The string containing the version.
  * @returns {string} The extracted version number.
  */
@@ -373,6 +443,19 @@ function playNoJagexAccount() {
         .addEventListener('click', async () => {
             const proxy = getProxyValues();
             const selectedVersion = document.getElementById('client').value;
+
+            // Check if a valid client version is selected
+            if (
+                !selectedVersion ||
+                selectedVersion === '' ||
+                !selectedVersion.includes('microbot-')
+            ) {
+                window.electron.errorAlert(
+                    'Please select a valid client version'
+                );
+                return;
+            }
+
             const version = extractVersion(selectedVersion);
 
             const selectedProfile =
@@ -391,6 +474,19 @@ async function downloadClientIfNotExist(version) {
         );
         document.getElementById('loader-container').style.display = 'block';
         await window.electron.downloadClient(version);
+
+        // Refresh client versions list after download
+        const orderedClientJars = await orderClientJarsByVersion();
+        populateSelectElement('client', orderedClientJars);
+
+        // Set the newly downloaded version as the selected value
+        const clientSelect = document.getElementById('client');
+        for (let i = 0; i < clientSelect.options.length; i++) {
+            if (clientSelect.options[i].value.includes(version)) {
+                clientSelect.selectedIndex = i;
+                break;
+            }
+        }
     }
     window.electron.logError(`Client ${version} is ready.`);
 }
@@ -473,6 +569,41 @@ async function titlebarButtons() {
     });
 }
 
+/**
+ * Updates the profile selector based on the selected character or default settings
+ * @returns {Promise<void>}
+ */
+async function updateProfileBasedOnCharacter() {
+    const characterSelect = document.getElementById('character');
+    const selectedAccountId = characterSelect?.value;
+    const profileSelect = document.getElementById('profile');
+
+    if (
+        selectedAccountId &&
+        selectedAccountId !== 'none' &&
+        accounts.length > 0
+    ) {
+        const selectedAccount = accounts.find(
+            (acc) => acc.accountId === selectedAccountId
+        );
+        if (selectedAccount && selectedAccount.profile) {
+            profileSelect.value = selectedAccount.profile;
+        } else {
+            // If account exists but has no profile preference, use default
+            profileSelect.value = 'default';
+        }
+    } else {
+        // If no account is selected or no accounts exist, use the non-Jagex preferred profile
+        const nonJagexProfile = await window.electron.readNonJagexProfile();
+        if (nonJagexProfile) {
+            profileSelect.value = nonJagexProfile;
+        } else {
+            // If no non-Jagex profile preference exists, use default
+            profileSelect.value = 'default';
+        }
+    }
+}
+
 async function initUI(properties) {
     updateNowBtn();
     reminderMeLaterBtn();
@@ -484,7 +615,14 @@ async function initUI(properties) {
 
     const orderedClientJars = await orderClientJarsByVersion();
     populateSelectElement('client', orderedClientJars);
-    populateProfileSelector(await window.electron.listProfiles(), null);
+
+    // Get profiles and initialize profile selector
+    const profiles = await window.electron.listProfiles();
+    populateProfileSelector(profiles, null);
+
+    // Update the profile based on the selected character
+    await updateProfileBasedOnCharacter();
+
     await setVersionPreference(properties);
     document.querySelector('.game-info').style = 'display:block';
 }

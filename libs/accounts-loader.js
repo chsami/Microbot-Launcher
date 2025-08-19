@@ -30,6 +30,10 @@ module.exports = async function (deps) {
                         }
                     }
                 });
+            } else {
+                // File doesn't exist, return an empty array
+                log.info('Accounts file does not exist, returning empty array');
+                return [];
             }
         } catch (error) {
             log.error(error.message);
@@ -49,21 +53,45 @@ module.exports = async function (deps) {
     });
 
     let lastModifiedTime = null;
+    let fileExistedLastCheck = fs.existsSync(filePath);
 
     ipcMain.handle('check-file-change', async () => {
         try {
             let val = false;
-            if (fs.existsSync(filePath)) {
+            const fileExistsNow = fs.existsSync(filePath);
+
+            // File was deleted
+            if (fileExistedLastCheck && !fileExistsNow) {
+                log.info('Accounts file was deleted!');
+                lastModifiedTime = null;
+                fileExistedLastCheck = false;
+                return true; // Signal a change occurred
+            }
+
+            // File was created
+            if (!fileExistedLastCheck && fileExistsNow) {
+                log.info('Accounts file was created!');
+                const stats = fs.statSync(filePath);
+                lastModifiedTime = stats.mtime;
+                fileExistedLastCheck = true;
+                return true; // Signal a change occurred
+            }
+
+            // Check for modifications if file exists
+            if (fileExistsNow) {
                 const stats = fs.statSync(filePath);
                 const modifiedTime = stats.mtime;
 
                 // Check if the modification time has changed
                 if (!lastModifiedTime || modifiedTime > lastModifiedTime) {
-                    log.info('File has been modified!');
+                    log.info('Accounts file has been modified!');
                     lastModifiedTime = modifiedTime; // Update the last modification time
                     val = true;
                 }
+
+                fileExistedLastCheck = true;
             }
+
             return val;
         } catch (error) {
             log.error(error.message);

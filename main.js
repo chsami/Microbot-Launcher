@@ -138,7 +138,7 @@ async function createWindow() {
         'libs',
         'extra-ipc-handlers.js'
     ));
-    extraHandlers(app, ipcMain, mainWindow);
+    extraHandlers(app, ipcMain, mainWindow, log);
 
     if (isDebugging) {
         const htmlPath = path.join(__dirname, 'index.html');
@@ -250,7 +250,7 @@ async function downloadAndSaveFile(remoteUrl, localPath, srcPath) {
         const destDir = path.join(microbotDir, 'libs');
         fs.mkdirSync(destDir, { recursive: true });
         fs.copyFileSync(srcPath, localPath);
-        log.info('sucesfully copied ' + localPath);
+        log.info('successfully copied ' + localPath);
         return new Promise((resolve, reject) => {
             resolve();
         });

@@ -1,4 +1,4 @@
-module.exports = async function (app, ipcMain, window) {
+module.exports = async function (app, ipcMain, window, log) {
     ipcMain.handle('minimize-window', async () => {
         try {
             if (window) {
@@ -6,7 +6,7 @@ module.exports = async function (app, ipcMain, window) {
             }
             return { success: true };
         } catch (error) {
-            log.error('Error minimizing window:', error.message);
+            log?.error('Error minimizing window:', error.message);
             return { error: error.message };
         }
     });
@@ -22,7 +22,7 @@ module.exports = async function (app, ipcMain, window) {
             }
             return { success: true };
         } catch (error) {
-            log.error('Error maximizing window:', error.message);
+            log?.error('Error maximizing window:', error.message);
             return { error: error.message };
         }
     });
@@ -33,7 +33,7 @@ module.exports = async function (app, ipcMain, window) {
             }
             return { success: true };
         } catch (error) {
-            log.error('Error closing launcher:', error.message);
+            log?.error('Error closing launcher:', error.message);
             return { error: error.message };
         }
     });
