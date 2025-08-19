@@ -1,112 +1,120 @@
 {
-    "name": "microbot-launcher",
-    "version": "3.1.0",
-    "description": "Launcher for the microbot client",
-    "main": "main.js",
-    "scripts": {
-        "dev": "cross-env DEBUG=true electron .",
-        "start": "electron-forge start",
-        "test": "echo \"Error: no test specified\" && exit 1",
-        "release": "electron-builder --publish always",
-        "linux": "electron-builder --linux",
-        "mac": "electron-builder --mac"
+  "name": "microbot-launcher",
+  "version": "3.1.1",
+  "description": "Launcher for the microbot client",
+  "main": "main.js",
+  "scripts": {
+    "dev": "cross-env DEBUG=true electron .",
+    "start": "electron-forge start",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "release": "electron-builder --publish always",
+    "linux": "electron-builder --linux",
+    "mac": "electron-builder --mac"
+  },
+  "author": "Mocrosoft",
+  "license": "ISC",
+  "devDependencies": {
+    "@electron-forge/cli": "^7.8.1",
+    "@electron-forge/maker-deb": "^7.8.1",
+    "@electron-forge/maker-rpm": "^7.8.1",
+    "@electron-forge/maker-squirrel": "^7.8.1",
+    "@electron-forge/maker-zip": "^7.8.1",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.8.1",
+    "@electron-forge/plugin-fuses": "^7.8.1",
+    "@electron/fuses": "^1.8.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.15",
+    "applicationinsights": "^2.9.6",
+    "axios": "^1.7.2",
+    "cheerio": "1.1.2",
+    "detect-browsers": "^6.1.0",
+    "electron-log": "^5.4.1",
+    "electron-updater": "^6.1.8",
+    "patchright": "^1.52.5",
+    "playwright": "^1.54.1",
+    "update-electron-app": "^3.0.0"
+  },
+  "build": {
+    "asar": "true",
+    "appId": "com.microbot.launcher",
+    "productName": "Microbot Launcher",
+    "files": [
+      "main.js",
+      "renderer.js",
+      "preload.js",
+      "package.json",
+      "!**/*.map",
+      "images/**",
+      "libs/**",
+      "index.html",
+      "css/**",
+      "build/READ THIS BEFORE INSTALL.html"
+    ],
+    "directories": {
+      "buildResources": "build"
     },
-    "author": "Mocrosoft",
-    "license": "ISC",
-    "devDependencies": {
-        "@electron-forge/cli": "^7.8.1",
-        "@electron-forge/maker-deb": "^7.8.1",
-        "@electron-forge/maker-rpm": "^7.8.1",
-        "@electron-forge/maker-squirrel": "^7.8.1",
-        "@electron-forge/maker-zip": "^7.8.1",
-        "@electron-forge/plugin-auto-unpack-natives": "^7.8.1",
-        "@electron-forge/plugin-fuses": "^7.8.1",
-        "@electron/fuses": "^1.8.0",
-        "cross-env": "^7.0.3",
-        "electron": "^33.2.0",
-        "electron-builder": "^26.0.12"
+    "win": {
+      "target": "nsis",
+      "icon": "images/microbot_transparent.ico"
     },
-    "dependencies": {
-        "adm-zip": "^0.5.15",
-        "applicationinsights": "^2.9.6",
-        "axios": "^1.7.2",
-        "cheerio": "1.1.2",
-        "detect-browsers": "^6.1.0",
-        "electron-log": "^5.4.1",
-        "electron-updater": "^6.1.8",
-        "patchright": "^1.52.5",
-        "playwright": "^1.54.1",
-        "update-electron-app": "^3.0.0"
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": "default",
+      "icon": "images/microbot_transparent.icns"
     },
-    "build": {
-        "asar": "true",
-        "appId": "com.microbot.launcher",
-        "productName": "Microbot Launcher",
-        "files": [
-            "main.js",
-            "renderer.js",
-            "preload.js",
-            "package.json",
-            "!**/*.map",
-            "images/**",
-            "libs/**",
-            "index.html",
-            "css/**",
-            "build/READ THIS BEFORE INSTALL.html"
-        ],
-        "directories": {
-            "buildResources": "build"
+    "dmg": {
+      "icon": "images/microbot_transparent.icns",
+      "background": "images/dmg-background.png",
+      "title": "${productName} Installer",
+      "iconSize": 108,
+      "contents": [
+        {
+          "x": 530,
+          "y": 192,
+          "type": "file",
+          "path": "./build/READ THIS BEFORE INSTALL.html"
         },
-        "win": {
-            "target": "nsis",
-            "icon": "images/microbot_transparent.ico"
+        {
+          "x": 200,
+          "y": 400,
+          "type": "file"
         },
-        "mac": {
-            "category": "public.app-category.utilities",
-            "target": "default",
-            "icon": "images/microbot_transparent.icns"
-        },
-        "dmg": {
-            "icon": "images/microbot_transparent.icns",
-            "background": "images/dmg-background.png",
-            "title": "${productName} Installer",
-            "iconSize": 108,
-            "contents": [
-                {
-                    "x": 530,
-                    "y": 192,
-                    "type": "file",
-                    "path": "./build/READ THIS BEFORE INSTALL.html"
-                },
-                {
-                    "x": 200,
-                    "y": 400,
-                    "type": "file"
-                },
-                {
-                    "x": 730,
-                    "y": 495,
-                    "type": "link",
-                    "path": "/Applications"
-                }
-            ]
-        },
-        "nsis": {
-            "oneClick": false,
-            "allowToChangeInstallationDirectory": true,
-            "createDesktopShortcut": true,
-            "createStartMenuShortcut": true,
-            "shortcutName": "Microbot Launcher"
-        },
-        "publish": {
-            "provider": "generic",
-            "url": "https://files.microbot.cloud/releases/microbot-launcher/"
-        },
-        "extraMetadata": {
-            "version": "3.0.0"
+        {
+          "x": 730,
+          "y": 495,
+          "type": "link",
+          "path": "/Applications"
         }
+      ]
     },
-    "optionalDependencies": {
-        "fsevents": "^2.3.2"
+    "linux": {
+      "target": [
+        "AppImage",
+        "snap"
+      ],
+      "icon": "images/microbot_transparent.ico",
+      "category": "Game"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Microbot Launcher"
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "https://files.microbot.cloud/releases/microbot-launcher/"
+    },
+    "extraMetadata": {
+      "version": "3.0.0"
     }
+  },
+  "optionalDependencies": {
+    "fsevents": "^2.3.2"
+  }
 }
