@@ -787,7 +787,9 @@ async function checkForOutdatedLaunch() {
     ) {
         const userConfirmed = await window.electron.showConfirmationDialog(
             'Do you want to proceed?',
-            `You are about to launch an older version (${selectedVersion}).\r\rThe latest version is ${latestVersion}.`,
+            `You are about to launch an older version (${extractVersion(
+                selectedVersion
+            )}).\r\rThe latest version is ${extractVersion(latestVersion)}.`,
             'Outdated Version Warning',
             'Skip latest version',
             'Launch with the latest version'
