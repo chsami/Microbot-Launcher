@@ -111,16 +111,28 @@ module.exports = async function (deps) {
                 url: url,
                 responseType: 'arraybuffer',
                 onDownloadProgress: (progressEvent) => {
-                    const totalLength = 126009591;
-                    const progress = (
-                        (progressEvent.loaded * 100) /
-                        totalLength
-                    ).toFixed(2);
-                    let currentPercent = (10 + progress * 0.4).toFixed(2);
-                    event.sender.send('progress', {
-                        percent: currentPercent,
-                        status: `Downloading client ${version}... (${progress}%)`
-                    });
+                    if (progressEvent.total) {
+                        const progress = (
+                            (progressEvent.loaded * 100) /
+                            progressEvent.total
+                        ).toFixed(2);
+                        // Scale from 10% to 90% for download progress
+                        let currentPercent = (10 + progress * 0.8).toFixed(2);
+                        event.sender.send('progress', {
+                            percent: currentPercent,
+                            status: `Downloading client ${version}... (${progress}%)`
+                        });
+                    } else {
+                        // Fallback
+                        const downloadedMB = (
+                            progressEvent.loaded /
+                            (1024 * 1024)
+                        ).toFixed(1);
+                        event.sender.send('progress', {
+                            percent: 50,
+                            status: `Downloading client ${version}... (${downloadedMB}MB)`
+                        });
+                    }
                 }
             });
             const filePath = path.join(microbotDir, `microbot-${version}.jar`);
@@ -269,4 +281,40 @@ module.exports = async function (deps) {
             return { error: error.message };
         }
     });
+
+    /**
+     * Show a confirmation dialog with the given message and options
+     * @param {string} message - The message to display in the dialog
+     * @param {string} [defaultTitle="Confirm"] - The title of the dialog
+     * @param {string} [yesButton="Yes"] - The text for the "Yes" button
+     * @param {string} [noButton="No"] - The text for the "No" button
+     */
+    ipcMain.handle(
+        'show-confirmation-dialog',
+        async (
+            event,
+            message,
+            detail,
+            defaultTitle = 'Confirm',
+            yesButton = '&Yes',
+            noButton = '&No'
+        ) => {
+            try {
+                const result = await dialog.showMessageBox({
+                    type: 'warning',
+                    title: defaultTitle,
+                    message: message,
+                    detail: detail,
+                    buttons: ['&' + yesButton, '&' + noButton],
+                    defaultId: 1,
+                    cancelId: 1,
+                    noLink: false
+                });
+                return result.response === 0; // Return true if 'Yes' is clicked
+            } catch (error) {
+                log.error(`Error showing confirmation dialog: ${error}`);
+                return { error: error.message };
+            }
+        }
+    );
 };
