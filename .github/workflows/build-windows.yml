@@ -1,135 +1,54 @@
-name: Build and Upload
+name: Build Windows App
 
 on:
-  push:
-    branches: [main]
+    workflow_call:
 
 permissions:
-  contents: write
+    contents: write
 
 jobs:
-  build-win:
-    runs-on: windows-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
+    build-win:
+        runs-on: windows-latest
+        outputs:
+            version: ${{ steps.version.outputs.version }}
 
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
 
-      - run: npm ci
-      - run: npm run release
+            - run: npm ci
+            - run: npm run release
 
-      - name: Get version from package.json
-        id: version
-        run: |
-          $version = (Get-Content package.json | ConvertFrom-Json).version
-          echo "version=$version" >> $env:GITHUB_OUTPUT
-        shell: pwsh
+            - name: Get version from package.json
+              id: version
+              run: |
+                  $version = (Get-Content package.json | ConvertFrom-Json).version
+                  echo "version=$version" >> $env:GITHUB_OUTPUT
+              shell: pwsh
 
-      - name: Copy only files from dist/ to filtered/
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Path filtered
-          Get-ChildItem -Path dist -File | ForEach-Object {
-            Copy-Item $_.FullName -Destination filtered
-          }
+            - name: Copy only files from dist/ to filtered/
+              shell: pwsh
+              run: |
+                  New-Item -ItemType Directory -Path filtered
+                  Get-ChildItem -Path dist -File | ForEach-Object {
+                    Copy-Item $_.FullName -Destination filtered
+                  }
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: microbot-launcher-exe-latest
-          path: filtered/
+            - name: Upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: microbot-launcher-exe-latest
+                  path: filtered/
 
-      - name: Upload project assets
-        uses: actions/upload-artifact@v4
-        with:
-          name: microbot-launcher-assets
-          path: |
-            css/**
-            images/**
-            libs/**
-            index.html
-            renderer.js
-
-  build-linux:
-    runs-on: ubuntu-latest
-    needs: build-win
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - run: npm ci
-
-      - name: Build AppImage
-        run: npm run linux
-
-      - name: Upload AppImage
-        uses: actions/upload-artifact@v4
-        with:
-          name: microbot-launcher-linux-latest
-          path: dist/*.AppImage
-
-  upload:
-    runs-on: ubuntu-latest
-    needs: [build-win, build-linux]
-
-    steps:
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: microbot-launcher-exe-latest
-          path: ./artifact
-
-      - name: Download Linux artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: microbot-launcher-linux-latest
-          path: ./linux
-
-      - name: Download assets
-        uses: actions/download-artifact@v4
-        with:
-          name: microbot-launcher-assets
-          path: ./assets
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.build-win.outputs.version }}
-          name: Release v${{ needs.build-win.outputs.version }}
-          files: |
-            ./artifact/Microbot Launcher Setup.exe
-            ./artifact/latest.yml
-            ./artifact/*.blockmap
-            ./linux/*.AppImage
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload to Hetzner
-        env:
-          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H 138.201.81.246 >> ~/.ssh/known_hosts
-
-          # Upload EXE
-          scp -r ./artifact/* root@138.201.81.246:/var/www/files/releases/microbot-launcher/
-
-          # Upload AppImage
-          scp -r ./linux/*.AppImage root@138.201.81.246:/var/www/files/releases/microbot-launcher/
-
-          # Upload additional files
-          scp -r \
-            ./assets/css \
-            ./assets/images \
-            ./assets/libs \
-            ./assets/index.html \
-            ./assets/renderer.js \
-            root@138.201.81.246:/var/www/files/assets/microbot-launcher/
+            - name: Upload project assets
+              uses: actions/upload-artifact@v4
+              with:
+                  name: microbot-launcher-assets
+                  path: |
+                      css/**
+                      images/**
+                      libs/**
+                      index.html
+                      renderer.js
