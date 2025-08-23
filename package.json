@@ -118,6 +118,25 @@
             "version": "3.1.2"
         }
     },
+    "linux": {
+      "target": [
+        "AppImage",
+        "snap"
+      ],
+      "icon": "images/microbot_transparent.png",
+      "category": "Game"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Microbot Launcher"
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "https://files.microbot.cloud/releases/microbot-launcher/"
+    },
     "optionalDependencies": {
         "fsevents": "^2.3.2"
     }
