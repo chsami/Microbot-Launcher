@@ -96,7 +96,7 @@
         "AppImage",
         "snap"
       ],
-      "icon": "images/microbot_transparent.ico",
+      "icon": "images/microbot_transparent.png",
       "category": "Game"
     },
     "nsis": {
