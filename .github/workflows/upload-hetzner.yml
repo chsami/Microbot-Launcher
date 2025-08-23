@@ -1,0 +1,66 @@
+name: Upload to Hetzner
+
+on:
+    workflow_call:
+
+jobs:
+    upload-to-hetzner:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Download all artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: ./artifacts
+
+            - name: List downloaded files for debugging
+              run: ls -R ./artifacts
+
+            - name: Upload to Hetzner
+              env:
+                  SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+              run: |
+                  mkdir -p ~/.ssh
+                  echo "$SSH_KEY" > ~/.ssh/id_rsa
+                  chmod 600 ~/.ssh/id_rsa
+                  ssh-keyscan -H 138.201.81.246 >> ~/.ssh/known_hosts
+
+                  # Create directories on server if they don't exist
+                  ssh root@138.201.81.246 "mkdir -p /var/www/files/releases/microbot-launcher/"
+                  ssh root@138.201.81.246 "mkdir -p /var/www/files/assets/microbot-launcher/"
+
+                  # Upload Windows files with error handling
+                  if ls ./artifacts/microbot-launcher-exe-latest/*.exe 1> /dev/null 2>&1; then
+                    scp -r ./artifacts/microbot-launcher-exe-latest/* root@138.201.81.246:/var/www/files/releases/microbot-launcher/
+                    echo "✅ Windows files uploaded successfully"
+                  else
+                    echo "⚠️  Warning: Windows installer not found"
+                  fi
+
+                  # Upload Linux AppImage with error handling
+                  if ls ./artifacts/microbot-launcher-linux-latest/*.AppImage 1> /dev/null 2>&1; then
+                    scp -r ./artifacts/microbot-launcher-linux-latest/*.AppImage root@138.201.81.246:/var/www/files/releases/microbot-launcher/
+                    echo "✅ Linux AppImage uploaded successfully"
+                  else
+                    echo "⚠️  Warning: Linux AppImage not found"
+                  fi
+
+                  # Upload macOS DMG with error handling
+                  if ls ./artifacts/microbot-launcher-mac-latest/*.dmg 1> /dev/null 2>&1; then
+                    scp -r ./artifacts/microbot-launcher-mac-latest/*.dmg root@138.201.81.246:/var/www/files/releases/microbot-launcher/
+                    echo "✅ macOS DMG uploaded successfully"
+                  else
+                    echo "⚠️  Warning: macOS DMG not found"
+                  fi
+
+                  # Upload project assets
+                  scp -r \
+                    ./artifacts/microbot-launcher-assets/css \
+                    ./artifacts/microbot-launcher-assets/images \
+                    ./artifacts/microbot-launcher-assets/libs \
+                    ./artifacts/microbot-launcher-assets/index.html \
+                    ./artifacts/microbot-launcher-assets/renderer.js \
+                    root@138.201.81.246:/var/www/files/assets/microbot-launcher/
+                  echo "✅ Project assets uploaded successfully"
+
+                  echo "🎉 All uploads to Hetzner completed!"

@@ -1,12 +1,7 @@
 name: Build macOS App
 
 on:
-    push:
-        branches: [main]
-    workflow_run:
-        workflows: ['Build and Upload']
-        types:
-            - completed
+    workflow_call:
 
 concurrency:
     group: mac-build-${{ github.ref_name }}
@@ -14,8 +9,6 @@ concurrency:
 
 jobs:
     build-mac:
-        # Only run if the Windows workflow completed successfully
-        if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' }}
         runs-on: macos-latest
 
         steps:
@@ -52,23 +45,8 @@ jobs:
                   echo "dmg_path=$DMG_PATH" >> $GITHUB_OUTPUT
                   echo "Resolved DMG: $DMG_PATH"
 
-            - name: Update GitHub Release
-              uses: softprops/action-gh-release@v2
+            - name: Upload macOS artifact
+              uses: actions/upload-artifact@v4
               with:
-                  tag_name: v${{ steps.version.outputs.version }}
-                  name: Release v${{ steps.version.outputs.version }}
-                  files: ${{ steps.find_dmg.outputs.dmg_path }}
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-            - name: Upload to Hetzner
-              env:
-                  SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
-              run: |
-                  mkdir -p ~/.ssh
-                  echo "$SSH_KEY" > ~/.ssh/id_rsa
-                  chmod 600 ~/.ssh/id_rsa
-                  ssh-keyscan -H 138.201.81.246 >> ~/.ssh/known_hosts
-
-                  # Upload DMG to server
-                  scp -r ${{ steps.find_dmg.outputs.dmg_path }} root@138.201.81.246:/var/www/files/releases/microbot-launcher/
+                  name: microbot-launcher-mac-latest
+                  path: ${{ steps.find_dmg.outputs.dmg_path }}
