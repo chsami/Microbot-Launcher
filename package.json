@@ -1,6 +1,6 @@
 {
   "name": "microbot-launcher",
-  "version": "3.1.5",
+  "version": "3.1.6",
   "description": "Launcher for the microbot client",
   "main": "main.js",
   "scripts": {
@@ -109,9 +109,9 @@
     "publish": {
       "provider": "generic",
       "url": "https://files.microbot.cloud/releases/microbot-launcher/"
-    },
-    "optionalDependencies": {
-      "fsevents": "^2.3.2"
     }
+  },
+  "optionalDependencies": {
+    "fsevents": "^2.3.2"
   }
 }
