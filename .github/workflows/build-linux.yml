@@ -1,0 +1,43 @@
+name: Build Linux App
+
+on:
+    workflow_call:
+
+concurrency:
+    group: linux-build-${{ github.ref_name }}
+    cancel-in-progress: true
+
+jobs:
+    build-linux:
+        runs-on: ubuntu-latest
+        outputs:
+            version: ${{ steps.version.outputs.version }}
+
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+
+            - run: npm ci
+
+            - name: Build AppImage
+              run: npm run linux
+
+            - name: Get version from package.json
+              id: version
+              run: |
+                  APP_VERSION=$(node -p "require('./package.json').version")
+                  echo "version=$APP_VERSION" >> $GITHUB_OUTPUT
+                  echo "App version: $APP_VERSION"
+
+            - name: List dist contents for debugging
+              run: |
+                  echo "Contents of dist directory:"
+                  ls -la dist/ || echo "dist directory not found"
+
+            - name: Upload AppImage
+              uses: actions/upload-artifact@v4
+              with:
+                  name: microbot-launcher-linux-latest
+                  path: dist/*.AppImage
