@@ -1,0 +1,62 @@
+name: Build and Upload
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Build AppImage
+        run: npm run linux
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: microbot-launcher-linux-latest
+          path: dist/*.AppImage
+
+  upload:
+    runs-on: ubuntu-latest
+    needs: [build-linux]
+
+    steps:
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: microbot-launcher-linux-latest
+          path: ./linux
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.build-win.outputs.version }}
+          name: Release v${{ needs.build-win.outputs.version }}-LINUX
+          files: |
+            ./linux/*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+      - name: Upload to Hetzner
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H 138.201.81.246 >> ~/.ssh/known_hosts
+          
+          # Upload AppImage
+          scp -r ./linux/*.AppImage root@138.201.81.246:/var/www/files/releases/microbot-launcher/

@@ -56,7 +56,7 @@ jobs:
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: v${{ steps.version.outputs.version }}
-                  name: Release v${{ steps.version.outputs.version }}
+                  name: Release v${{ steps.version.outputs.version }}-MAC
                   files: ${{ steps.find_dmg.outputs.dmg_path }}
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
