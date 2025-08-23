@@ -296,8 +296,8 @@ module.exports = async function (deps) {
             message,
             detail,
             defaultTitle = 'Confirm',
-            yesButton = '&Yes',
-            noButton = '&No'
+            yesButton = 'Yes',
+            noButton = 'No'
         ) => {
             try {
                 const result = await dialog.showMessageBox({
