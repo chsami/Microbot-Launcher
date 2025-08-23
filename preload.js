@@ -37,6 +37,15 @@ contextBridge.exposeInMainWorld('electron', {
     launcherVersion: () => ipcRenderer.invoke('launcher-version'),
     logError: (message) => ipcRenderer.invoke('log-error', message),
     errorAlert: (options) => ipcRenderer.invoke('error-alert', options),
+    showConfirmationDialog: (message, detail, title, yesButton, noButton) =>
+        ipcRenderer.invoke(
+            'show-confirmation-dialog',
+            message,
+            detail,
+            title,
+            yesButton,
+            noButton
+        ),
     ipcRenderer: {
         send: (channel, data) => ipcRenderer.send(channel, data),
         receive: (channel, func) =>

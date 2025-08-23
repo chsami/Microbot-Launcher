@@ -54,6 +54,8 @@ function updateProgress(percent, status) {
 }
 
 async function playButtonClickHandler() {
+    await checkForOutdatedLaunch();
+
     if (
         document.getElementById('play')?.innerText.toLowerCase() ===
         'Play With Jagex Account'.toLowerCase()
@@ -441,6 +443,8 @@ function playNoJagexAccount() {
     document
         .querySelector('#play-no-jagex-account')
         .addEventListener('click', async () => {
+            await checkForOutdatedLaunch();
+
             const proxy = getProxyValues();
             const selectedVersion = document.getElementById('client').value;
 
@@ -500,10 +504,18 @@ function updateNowBtn() {
             document.getElementById('loader-container').style.display = 'block';
             const clientVersion = await window.electron.fetchClientVersion();
             await window.electron.downloadClient(clientVersion);
-            addSelectElement('client', ['microbot-' + clientVersion + '.jar']);
+
+            // Refresh client versions list after download and set to the latest one
+            const orderedClientJars = await orderClientJarsByVersion();
+            populateSelectElement('client', orderedClientJars);
+            document.getElementById('client').value = orderedClientJars[0];
+
+            // Manually trigger the version preference update after setting the value
             const properties = await window.electron.readProperties();
+            properties['version_pref'] = orderedClientJars[0];
             properties['client'] = clientVersion;
             await window.electron.writeProperties(properties);
+
             document.getElementById('loader-container').style.display = 'none';
         });
 }
@@ -539,20 +551,35 @@ function startLoading(event) {
 }
 
 async function setVersionPreference(properties) {
-    if (properties['version_pref'] && properties['version_pref'] !== '0.0.0') {
+    if (
+        properties &&
+        properties['version_pref'] &&
+        properties['version_pref'] !== '0.0.0'
+    ) {
         document.getElementById('client').value = properties['version_pref'];
     } else {
         properties['version_pref'] = document.getElementById('client').value;
         await window.electron.writeProperties(properties);
     }
+
+    /**
+     * Remove any other listeners before adding a new one
+     */
+    const clientSelect = document.getElementById('client');
+    clientSelect.replaceWith(clientSelect.cloneNode(true));
+
     document
         .getElementById('client')
         .addEventListener('change', async (event) => {
-            const selectedValue = event.target.value;
-            const properties = await window.electron.readProperties();
-            properties['version_pref'] = selectedValue;
-            await window.electron.writeProperties(properties);
+            await updateVersionPreference(event);
         });
+}
+
+async function updateVersionPreference(event) {
+    const selectedValue = event.target.value;
+    const properties = await window.electron.readProperties();
+    properties['version_pref'] = selectedValue;
+    await window.electron.writeProperties(properties);
 }
 
 async function titlebarButtons() {
@@ -740,4 +767,41 @@ async function orderClientJarsByVersion() {
         return 0;
     });
     return clientJars;
+}
+
+/**
+ * Check if the selected client version is outdated compared to the latest version
+ * before launch.
+ */
+async function checkForOutdatedLaunch() {
+    const selectedVersion = document.getElementById('client').value;
+    const orderedClientJars = await orderClientJarsByVersion();
+    const latestVersion = orderedClientJars[0];
+
+    window.electron.logError(
+        `Selected version: ${selectedVersion}, Latest version: ${latestVersion}`
+    );
+    if (
+        selectedVersion !== latestVersion &&
+        latestVersion !== localStorage.getItem('skippedVersion')
+    ) {
+        const userConfirmed = await window.electron.showConfirmationDialog(
+            'Do you want to proceed?',
+            `You are about to launch an older version (${extractVersion(
+                selectedVersion
+            )}).\r\rThe latest version is ${extractVersion(latestVersion)}.`,
+            'Outdated Version Warning',
+            'Skip latest version',
+            'Launch with the latest version'
+        );
+
+        if (userConfirmed) {
+            localStorage.setItem('skippedVersion', latestVersion);
+        } else {
+            document.getElementById('client').value = latestVersion;
+            await updateVersionPreference({
+                target: { value: latestVersion }
+            });
+        }
+    }
 }

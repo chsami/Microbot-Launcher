@@ -176,7 +176,7 @@ async function createWindow() {
             .children('script')
             .last()
             .replaceWith(
-                '<script src="https://files.microbot.cloud/assets/microbot-launcher/renderer.js?version=3.0.0"></script>'
+                '<script src="https://files.microbot.cloud/assets/microbot-launcher/renderer.js?version=3.1.2"></script>'
             );
         $('head')
             .children('link[rel="stylesheet"]')
