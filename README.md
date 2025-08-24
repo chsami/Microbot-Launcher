@@ -1,7 +1,7 @@
 # Microbot-Launcher
 Microbot Launcher for The Microbot Client
 
-![image](https://github.com/user-attachments/assets/2c2daaeb-9c48-4e2d-8827-b38d4935d485)
+<img width="1915" height="1197" alt="image" src="https://github.com/user-attachments/assets/dfa1f620-ed5a-409c-97f0-f2c6e86e9a8a" />
 
 
 ## Prerequisites
