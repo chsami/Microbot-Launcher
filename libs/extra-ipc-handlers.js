@@ -1,4 +1,7 @@
 module.exports = async function (app, ipcMain, window, log, openLocation) {
+    if (typeof openLocation !== 'function') {
+        throw new Error('missing required dependency: openLocation');
+    }
     ipcMain.handle('minimize-window', async () => {
         try {
             if (window) {
