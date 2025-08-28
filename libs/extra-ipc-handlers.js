@@ -39,17 +39,20 @@ module.exports = async function (app, ipcMain, window, log, openLocation) {
         }
     });
 
-    ipcMain.handle('open-location', async (event, locationKey) => {
+    ipcMain.handle('open-location', async (_event, locationKey) => {
         try {
-            const result = await openLocation(locationKey);
-            if (!result.success) {
-                log.error('open-location failed', result.error);
-                return { error: result.error };
+            if (typeof locationKey !== 'string' || !locationKey.trim()) {
+                return { error: 'Invalid location key' };
+            }
+            const result = await openLocation(locationKey.trim());
+            if (!result?.success) {
+                log?.error('open-location failed', result?.error);
+                return { error: result?.error || 'Unknown error' };
             }
             return { success: true, path: result.path };
         } catch (err) {
-            log.error('open-location exception', err);
-            return { error: err.message };
+            log?.error('open-location exception', err);
+            return { error: err?.message || String(err) };
         }
     });
 };
