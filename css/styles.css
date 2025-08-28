@@ -592,7 +592,6 @@ button.hamburger {
     border-radius: 6px;
     padding: 4px 0;
     display: none;
-    min-width: 200px;
 }
 
 .app-menu .menu-item.has-sub:hover>.submenu {
