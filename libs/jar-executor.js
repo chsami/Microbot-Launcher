@@ -79,19 +79,40 @@ module.exports = async function (deps) {
     function isJavaInstalled(callback) {
         try {
             const javaProcess = spawn('java', ['-version']);
-
             let stderrData = '';
+            let called = false;
+            const TIMEOUT_MS = 5000;
+
+            const finish = (success, message) => {
+                if (called) return;
+                called = true;
+                clearTimeout(timeoutHandle);
+                callback(success, message);
+            };
+
+            const timeoutHandle = setTimeout(() => {
+                log.info(
+                    `Java version check timed out after ${TIMEOUT_MS}ms – killing process`
+                );
+                try {
+                    // attempt to kill the process; signal ignored on Windows
+                    javaProcess.kill();
+                } catch (_) {
+                    /* ignore */
+                }
+                finish(false, `Java check timed out after ${TIMEOUT_MS}ms`);
+            }, TIMEOUT_MS);
 
             javaProcess.stderr.on('data', (data) => {
                 stderrData += data.toString();
             });
 
             javaProcess.on('error', (err) => {
-                callback(false, err.message);
+                finish(false, err.message);
             });
 
             javaProcess.on('close', (code) => {
-                callback(code === 0, stderrData);
+                finish(code === 0, stderrData);
             });
         } catch (error) {
             callback(false, error.message);
