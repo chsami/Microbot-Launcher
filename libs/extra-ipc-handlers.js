@@ -41,7 +41,7 @@ module.exports = async function (app, ipcMain, window, log, openLocation) {
 
     ipcMain.handle('open-location', async (event, locationKey) => {
         try {
-            const result = openLocation(locationKey);
+            const result = await openLocation(locationKey);
             if (!result.success) {
                 log.error('open-location failed', result.error);
                 return { error: result.error };

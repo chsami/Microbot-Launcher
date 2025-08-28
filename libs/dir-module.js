@@ -50,9 +50,9 @@ const launcherLogs = () => {
  * Uses electron shell to open a path based on the logical key.
  * Shell automatically determines if the path is a file or directory.
  * @param {string} key Logical location key
- * @returns {{success: boolean, path?: string, error?: string}}
+ * @returns {Promise<{success: boolean, path?: string, error?: string}>}
  */
-function openLocation(key) {
+async function openLocation(key) {
     try {
         const mapping = {
             'launcher-logs': launcherLogs(),
@@ -65,7 +65,10 @@ function openLocation(key) {
             return { success: false, error: 'Unknown folder key: ' + key };
         }
         const shell = getShell();
-        shell.openPath(target);
+        const err = await shell.openPath(target);
+        if (err) {
+            return { success: false, error: err };
+        }
         return { success: true, path: target };
     } catch (err) {
         return { success: false, error: err.message };
