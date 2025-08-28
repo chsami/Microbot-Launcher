@@ -25,6 +25,7 @@ module.exports = async function (deps) {
             }
 
             checkJavaAndRunJar(commandArgs, dialog, shell);
+            return { success: true };
         } catch (error) {
             log.error(error.message);
             return { error: error.message };
@@ -72,6 +73,7 @@ module.exports = async function (deps) {
             commandArgs.unshift('--add-opens=java.desktop/sun.awt=ALL-UNNAMED');
         }
         checkJavaAndRunJar(commandArgs, dialog, shell);
+        return { success: true };
     });
 
     function isJavaInstalled(callback) {
@@ -134,7 +136,7 @@ module.exports = async function (deps) {
                 }
                 if (jarProcess.stderr) {
                     jarProcess.stderr.on('data', (data) => {
-                        log.info(`[stddata] ${data}`);
+                        log.info(`[stderr] ${data}`);
                     });
                 }
             }
@@ -162,9 +164,7 @@ module.exports = async function (deps) {
         } catch (error) {
             log.error(`[error] ${error.message}`);
             if (dialog) {
-                dialog.showErrorBox(
-                    'An error occurred while trying to run the JAR file.'
-                );
+                dialog.showErrorBox('Error running jar!', error.message);
             }
         }
     }
@@ -186,8 +186,17 @@ module.exports = async function (deps) {
                     })
                     .then((result) => {
                         if (result.response === 0) {
+                            const arch =
+                                process.arch === 'arm64' ? 'aarch64' : 'x64';
+                            const platform = process.platform;
+                            const urls = {
+                                win32: `https://adoptium.net/temurin/releases/?os=windows&arch=${arch}&package=jdk&version=17&mode=filter`,
+                                darwin: `https://adoptium.net/temurin/releases/?os=mac&arch=${arch}&package=jdk&version=17&mode=filter`,
+                                linux: `https://adoptium.net/temurin/releases/?os=linux&arch=${arch}&package=jdk&version=17&mode=filter`
+                            };
                             shell.openExternal(
-                                'https://adoptium.net/temurin/releases/?os=windows&arch=x64&package=jdk&version=17'
+                                urls[platform] ||
+                                    'https://adoptium.net/temurin/'
                             );
                         } else {
                             log.info('User chose not to download Java.');
