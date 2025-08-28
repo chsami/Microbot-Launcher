@@ -1,5 +1,5 @@
 const { app, BrowserWindow, dialog, shell } = require('electron');
-const { microbotDir } = require('./libs/dir-module');
+const { microbotDir, openLocation } = require('./libs/dir-module');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
@@ -138,7 +138,7 @@ async function createWindow() {
         'libs',
         'extra-ipc-handlers.js'
     ));
-    extraHandlers(app, ipcMain, mainWindow, log);
+    extraHandlers(app, ipcMain, mainWindow, log, openLocation);
 
     if (isDebugging) {
         const htmlPath = path.join(__dirname, 'index.html');
@@ -176,7 +176,7 @@ async function createWindow() {
             .children('script')
             .last()
             .replaceWith(
-                '<script src="https://files.microbot.cloud/assets/microbot-launcher/renderer.js?version=3.1.2"></script>'
+                '<script src="https://files.microbot.cloud/assets/microbot-launcher/renderer.js?version=3.1.8"></script>'
             );
         $('head')
             .children('link[rel="stylesheet"]')

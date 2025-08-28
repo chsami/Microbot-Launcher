@@ -35,6 +35,13 @@
 
         <div id="main-container" class="container">
             <div class="titlebar">
+                <button id="menu-btn" class="titlebar-button hamburger" title="Menu" aria-label="Application Menu">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
                 <span class="titlebar-title">Microbot Launcher - 0.0.0.0</span>
                 <div class="titlebar-controls">
                     <button class="titlebar-button" id="minimize-btn">
@@ -114,6 +121,20 @@
                         </select>
                     </div>
                 </aside>
+            </div>
+            <!-- Custom popup menu -->
+            <div id="app-menu" class="app-menu hidden" aria-hidden="true">
+                <ul class="menu-root">
+                    <li class="menu-item has-sub" data-action="open-folder-root">
+                        <span class="menu-label">Open ▸</span>
+                        <ul class="submenu">
+                            <li class="submenu-item" data-location="microbot-folder">Microbot Folder</li>
+                            <li class="submenu-item" data-location="runelite-folder">Runelite Folder</li>
+                            <li class="submenu-item" data-location="launcher-logs">Launcher Logs</li>
+                            <li class="submenu-item" data-location="client-logs">Client Logs</li>
+                        </ul>
+                    </li>
+                </ul>
             </div>
         </div>
         <script>

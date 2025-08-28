@@ -636,6 +636,7 @@ async function initUI(properties) {
     reminderMeLaterBtn();
     playNoJagexAccount();
     titlebarButtons();
+    setupHamburgerMenu();
 
     const accounts = await window.electron.readAccounts();
     await setupSidebarLayout(accounts?.length || 0);
@@ -652,6 +653,82 @@ async function initUI(properties) {
 
     await setVersionPreference(properties);
     document.querySelector('.game-info').style = 'display:block';
+}
+
+/**
+ * Setup the hamburger menu for the app.
+ * Has some functional behavior for showing and hiding the menu
+ * depending on user interaction.
+ * @returns {void}
+ */
+function setupHamburgerMenu() {
+    const menuBtn = document.getElementById('menu-btn');
+    const menu = document.getElementById('app-menu');
+    if (!menuBtn || !menu) return;
+
+    const hideMenu = () => {
+        if (!menu.classList.contains('hidden')) {
+            menu.classList.add('hidden');
+            menu.setAttribute('aria-hidden', 'true');
+            menu.classList.remove('closing');
+        }
+    };
+
+    const showMenu = () => {
+        menu.classList.remove('hidden');
+        menu.setAttribute('aria-hidden', 'false');
+    };
+
+    menuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (menu.classList.contains('hidden')) showMenu();
+        else hideMenu();
+    });
+
+    // if clicked outside we hide the menu
+    document.addEventListener('click', (e) => {
+        if (!menu.contains(e.target) && e.target !== menuBtn) {
+            hideMenu();
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') hideMenu();
+    });
+
+    menu.querySelectorAll('.submenu-item').forEach((item) => {
+        item.addEventListener('click', async (e) => {
+            const key = item.getAttribute('data-location');
+            if (key) {
+                const res = await window.electron.openLocation(key);
+                if (res?.error) {
+                    window.electron.errorAlert(res.error);
+                }
+            }
+            hideMenu();
+        });
+    });
+
+    let hideTimeout = null;
+    const scheduleHide = () => {
+        hideTimeout = setTimeout(() => hideMenu(), 200);
+    };
+    const cancelHide = () => {
+        if (hideTimeout) {
+            clearTimeout(hideTimeout);
+            hideTimeout = null;
+        }
+    };
+
+    menu.addEventListener('pointerleave', () => {
+        // Mark as closing to keep submenu visible until root hides
+        if (!menu.classList.contains('closing')) menu.classList.add('closing');
+        scheduleHide();
+    });
+    menu.addEventListener('pointerenter', () => {
+        cancelHide();
+        menu.classList.remove('closing');
+    });
 }
 
 async function checkForClientUpdate(properties) {
