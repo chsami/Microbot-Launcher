@@ -133,12 +133,20 @@ async function createWindow() {
         mainWindow.setWindowButtonVisibility(false);
     }
 
-    const extraHandlers = require(path.join(
-        microbotDir,
-        'libs',
-        'extra-ipc-handlers.js'
-    ));
-    extraHandlers(app, ipcMain, mainWindow, log, openLocation);
+    try {
+        const extraHandlers = require(path.join(
+            microbotDir,
+            'libs',
+            'extra-ipc-handlers.js'
+        ));
+        if (typeof extraHandlers === 'function') {
+            await extraHandlers(app, ipcMain, mainWindow, log, openLocation);
+        } else {
+            log.error('extra-ipc-handlers does not export a function');
+        }
+    } catch (e) {
+        log.error('Failed to load extra-ipc-handlers:', e);
+    }
 
     if (isDebugging) {
         const htmlPath = path.join(__dirname, 'index.html');

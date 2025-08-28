@@ -6,7 +6,7 @@ module.exports = async function (deps) {
             const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
             const commandArgs = ['-jar', jarPath];
 
-            if (proxy && proxy.proxyIp !== '') {
+            if (proxy && proxy.proxyIp && proxy.proxyType) {
                 commandArgs.push(`-proxy=${proxy.proxyIp}`);
                 commandArgs.push(`-proxy-type=${proxy.proxyType}`);
             }
@@ -35,7 +35,7 @@ module.exports = async function (deps) {
         const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
         const commandArgs = ['-jar', jarPath, '-clean-jagex-launcher'];
 
-        if (proxy && proxy.proxyIp !== '') {
+        if (proxy && proxy.proxyIp && proxy.proxyType) {
             commandArgs.push(`-proxy=${proxy.proxyIp}`);
             commandArgs.push(`-proxy-type=${proxy.proxyType}`);
         }
@@ -45,14 +45,24 @@ module.exports = async function (deps) {
                 path.join(microbotDir, 'non-jagex-preferred-profile.json')
             )
         ) {
-            const profileData = JSON.parse(
-                fs.readFileSync(
-                    path.join(microbotDir, 'non-jagex-preferred-profile.json'),
-                    'utf8'
-                )
-            );
-            if (profileData.profile && profileData.profile !== 'default') {
-                commandArgs.push(`-profile=${profileData.profile}`);
+            try {
+                const profileData = JSON.parse(
+                    fs.readFileSync(
+                        path.join(
+                            microbotDir,
+                            'non-jagex-preferred-profile.json'
+                        ),
+                        'utf8'
+                    )
+                );
+                if (profileData?.profile && profileData.profile !== 'default') {
+                    commandArgs.push(`-profile=${profileData.profile}`);
+                }
+            } catch (error) {
+                log.error(
+                    'Invalid non-jagex-preferred-profile.json:',
+                    error.message
+                );
             }
         }
         if (process.platform === 'darwin') {
