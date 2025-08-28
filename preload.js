@@ -16,8 +16,8 @@ contextBridge.exposeInMainWorld('electron', {
     fetchLauncherVersion: () => ipcRenderer.invoke('fetch-launcher-version'), //jagex launcher
     fetchClientVersion: () => ipcRenderer.invoke('fetch-client-version'),
     openLauncher: () => ipcRenderer.invoke('open-launcher'),
-    openClient: (version, proxy) =>
-        ipcRenderer.invoke('open-client', version, proxy),
+    openClient: (version, proxy, account) =>
+        ipcRenderer.invoke('open-client', version, proxy, account),
     readAccounts: () => ipcRenderer.invoke('read-accounts'),
     removeAccounts: () => ipcRenderer.invoke('remove-accounts'),
     setProfileJagexAccount: (account, profile) =>
@@ -46,6 +46,8 @@ contextBridge.exposeInMainWorld('electron', {
             yesButton,
             noButton
         ),
+    openLocation: (locationKey) =>
+        ipcRenderer.invoke('open-location', locationKey),
     ipcRenderer: {
         send: (channel, data) => ipcRenderer.send(channel, data),
         receive: (channel, func) =>

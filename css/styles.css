@@ -376,12 +376,11 @@ h2 {
     cursor: pointer;
     margin-bottom: 20px;
     width: 200px;
+    transition: transform 0.3s ease;
+}
 
-    transition: scale 0.3s ease;
-
-    &:hover {
-        scale: 1.02;
-    }
+#remind-me-later-btn:hover {
+    transform: scale(1.02);
 }
 
 #update-now-btn {
@@ -394,12 +393,11 @@ h2 {
     cursor: pointer;
     margin-bottom: 20px;
     width: 200px;
+    transition: transform 0.3s ease;
+}
 
-    transition: scale 0.3s ease;
-
-    &:hover {
-        scale: 1.02;
-    }
+#update-now-btn:hover {
+    transform: scale(1.02);
 }
 
 .loadingButton {
@@ -446,67 +444,180 @@ h2 {
     }
 }
 
+/* titlebar layout: [hamburger button] [centered title that expands] [window controls] */
 .titlebar {
     height: 30px;
     background: #242a3b;
     color: white;
     display: grid;
-    -webkit-app-region: drag;
-    /* Electron specific draggable region */
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
     width: 100%;
-    padding: 0%;
+    -webkit-app-region: drag;
+    position: relative;
+}
 
-    .titlebar-title {
-        grid-column: 1;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        margin-left: 8px;
-        overflow: hidden;
-        font-size: 14px;
+/* hamburger button */
+.titlebar .hamburger {
+    grid-column: 1;
+    -webkit-app-region: no-drag;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 38px;
+    height: 30px;
+}
+
+/* center title */
+.titlebar .titlebar-title {
+    grid-column: 2;
+    font-size: 14px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    padding: 0 8px;
+    user-select: none;
+}
+
+/* right window control buttons */
+.titlebar .titlebar-controls {
+    grid-column: 3;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 30px;
+    height: 30px;
+    -webkit-app-region: no-drag;
+}
+
+.titlebar .titlebar-controls button,
+.titlebar button.hamburger {
+    background: transparent;
+    border: none;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    user-select: none;
+    padding: 0;
+}
+
+.titlebar .titlebar-controls button:hover,
+.titlebar button.hamburger:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.titlebar .titlebar-controls button:active,
+.titlebar button.hamburger:active {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.titlebar .titlebar-controls button:focus-visible,
+.titlebar button.hamburger:focus-visible,
+.app-menu .menu-item:focus-visible,
+.app-menu .submenu-item:focus-visible {
+    outline: 2px solid #00d4a4;
+    outline-offset: -2px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* hamburger/menu button */
+button.hamburger {
+    position: relative;
+    width: 38px;
+    min-width: 38px;
+    height: 30px;
+    -webkit-app-region: no-drag;
+    cursor: pointer;
+}
+
+/* app menu popup */
+.app-menu {
+    position: absolute;
+    top: 30px;
+    left: 0;
+    background: #121425;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    border-radius: 6px;
+    padding: 4px 0;
+    font-size: 13px;
+    z-index: 5000;
+    -webkit-app-region: no-drag;
+    animation: menuFadeIn 120ms ease;
+}
+
+@keyframes menuFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
     }
 
-    .titlebar-controls {
-        display: grid;
-        grid-template-columns: repeat(3, 30px);
-        position: absolute;
-        top: 0;
-        right: 0;
-        height: 30px;
-        -webkit-app-region: no-drag;
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
+}
 
-    button {
-        grid-row: 1 / span 1;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        width: 100%;
-        height: 100%;
-        user-select: none;
-        background: transparent;
-        border: none;
+.app-menu.hidden {
+    display: none;
+}
 
-        &:hover {
-            background: rgba(255, 255, 255, 0.1);
-        }
+.app-menu ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
 
-        &:active {
-            background: rgba(255, 255, 255, 0.2);
-        }
+.app-menu .menu-item,
+.app-menu .submenu-item {
+    color: #ffffff;
+    padding: 6px 14px;
+    white-space: nowrap;
+    user-select: none;
+    cursor: pointer;
+    position: relative;
+}
 
-        z-index: 1000;
-    }
+.app-menu .menu-item:hover,
+.app-menu .submenu-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
 
-    #minimize-btn {
-        grid-column: 1;
-    }
+.app-menu .menu-item.has-sub>.menu-label::after {
+    content: '';
+}
 
-    #maximize-btn {
-        grid-column: 2;
-    }
+/* submenu */
+.app-menu .submenu {
+    position: absolute;
+    top: 0;
+    left: 100%;
+    background: #121425;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    border-radius: 6px;
+    padding: 4px 0;
+    display: none;
+}
 
-    #close-btn {
-        grid-column: 3;
-    }
+.app-menu .menu-item.has-sub:hover>.submenu {
+    display: block;
+}
+
+/* while menu is in the delayed closing phase keep submenus visible so they hide in sync */
+.app-menu.closing .submenu {
+    display: block !important;
+}
+
+.app-menu .separator {
+    height: 1px;
+    margin: 4px 0;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.app-menu .submenu-item {
+    font-size: 12px;
 }
