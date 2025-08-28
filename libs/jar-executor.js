@@ -12,13 +12,7 @@ module.exports = async function (deps) {
             }
 
             if (account) {
-                const accounts = await window.electron.readAccounts();
-                const selectedAccount = accounts?.find(
-                    (x) => x.accountId === account
-                );
-                if (selectedAccount) {
-                    commandArgs.push(`-profile=${selectedAccount.profile}`);
-                }
+                commandArgs.push(`-profile=${account.profile}`);
             }
 
             if (process.platform === 'darwin') {
@@ -41,7 +35,7 @@ module.exports = async function (deps) {
         const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
         const commandArgs = ['-jar', jarPath, '-clean-jagex-launcher'];
 
-        if (proxy) {
+        if (proxy && proxy.proxyIp !== '') {
             commandArgs.push(`-proxy=${proxy.proxyIp}`);
             commandArgs.push(`-proxy-type=${proxy.proxyType}`);
         }
@@ -71,21 +65,25 @@ module.exports = async function (deps) {
     });
 
     function isJavaInstalled(callback) {
-        const javaProcess = spawn('java', ['-version']);
+        try {
+            const javaProcess = spawn('java', ['-version']);
 
-        let stderrData = '';
+            let stderrData = '';
 
-        javaProcess.stderr.on('data', (data) => {
-            stderrData += data.toString();
-        });
+            javaProcess.stderr.on('data', (data) => {
+                stderrData += data.toString();
+            });
 
-        javaProcess.on('error', (err) => {
-            callback(false, err.message);
-        });
+            javaProcess.on('error', (err) => {
+                callback(false, err.message);
+            });
 
-        javaProcess.on('close', (code) => {
-            callback(code === 0, stderrData);
-        });
+            javaProcess.on('close', (code) => {
+                callback(code === 0, stderrData);
+            });
+        } catch (error) {
+            callback(false, error.message);
+        }
     }
 
     function executeJar(commandArgs, dialog) {
@@ -104,29 +102,61 @@ module.exports = async function (deps) {
 
         // use javaw on windows to avoid console window popping up
         const javaCommand = process.platform === 'win32' ? 'javaw' : 'java';
-        const jarProcess = spawn(javaCommand, commandArgs, {
-            detached: true,
-            ...extraArgs
-        });
 
-        jarProcess.stdout.on('data', (data) => {
-            log.info(`[stdout] ${data}`);
-        });
+        let jarProcess = null;
 
-        jarProcess.stderr.on('data', (data) => {
-            log.info(`[stddata] ${data}`);
-        });
+        try {
+            jarProcess = spawn(javaCommand, commandArgs, {
+                detached: true,
+                ...extraArgs
+            });
 
-        jarProcess.on('error', (err) => {
-            log.error(`[error] ${err.message}`);
-            if (dialog) {
-                dialog.showErrorBox('Error running jar!', err.message);
+            /**
+             * We only pipe the output when debugging, to avoid flooding the
+             * launcher log with client output as the client manages its own
+             * logging.
+             */
+            if (process.env.DEBUG) {
+                if (jarProcess.stdout) {
+                    jarProcess.stdout.on('data', (data) => {
+                        log.info(`[stdout] ${data}`);
+                    });
+                }
+                if (jarProcess.stderr) {
+                    jarProcess.stderr.on('data', (data) => {
+                        log.info(`[stddata] ${data}`);
+                    });
+                }
             }
-        });
 
-        jarProcess.on('close', (code) => {
-            log.info(`JAR exited with code ${code}`);
-        });
+            /**
+             * Allow the parent (launcher) to exit independently of the spawned client.
+             * Found in the Node.js documentation: https://nodejs.org/api/child_process.html#optionsdetached
+             */
+            try {
+                jarProcess.unref();
+            } catch (_) {
+                /* ignore */
+            }
+
+            jarProcess.on('error', (err) => {
+                log.error(`[error] ${err.message}`);
+                if (dialog) {
+                    dialog.showErrorBox('Error running jar!', err.message);
+                }
+            });
+
+            jarProcess.on('close', (code) => {
+                log.info(`JAR exited with code ${code}`);
+            });
+        } catch (error) {
+            log.error(`[error] ${error.message}`);
+            if (dialog) {
+                dialog.showErrorBox(
+                    'An error occurred while trying to run the JAR file.'
+                );
+            }
+        }
     }
 
     function checkJavaAndRunJar(commandArgs, dialog, shell) {
@@ -147,7 +177,7 @@ module.exports = async function (deps) {
                     .then((result) => {
                         if (result.response === 0) {
                             shell.openExternal(
-                                'https://www.oracle.com/java/technologies/downloads/'
+                                'https://adoptium.net/temurin/releases/?os=windows&arch=x64&package=jdk&version=17'
                             );
                         } else {
                             log.info('User chose not to download Java.');
