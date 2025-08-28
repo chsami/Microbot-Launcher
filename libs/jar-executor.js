@@ -11,7 +11,7 @@ module.exports = async function (deps) {
                 commandArgs.push(`-proxy-type=${proxy.proxyType}`);
             }
 
-            if (account) {
+            if (account && account.profile) {
                 commandArgs.push(`-profile=${account.profile}`);
             }
 
