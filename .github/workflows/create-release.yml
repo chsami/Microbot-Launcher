@@ -42,18 +42,37 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+            - name: Install jq and verify API secrets
+              run: |
+                  set -euo pipefail
+                  sudo apt-get update
+                  sudo apt-get install -y jq
+                  if ! command -v jq >/dev/null 2>&1; then
+                      echo "::error::jq failed to install"; exit 1; fi
+                  # Verify required secrets are provided (non-empty)
+                  if [ -z "${{ secrets.API_EMAIL }}" ]; then
+                      echo "::error::Missing required secret: API_EMAIL"; exit 1; fi
+                  if [ -z "${{ secrets.API_PASSWORD }}" ]; then
+                      echo "::error::Missing required secret: API_PASSWORD"; exit 1; fi
+                  echo "jq installed and required secrets present"
+
             - name: Get Auth Token (Launcher Version Update)
               id: auth
               run: |
                   set -euo pipefail
-                  RESPONSE=$(curl -s -X POST \
+                  if ! command -v jq >/dev/null 2>&1; then
+                      echo "::error::jq not found"; exit 1; fi
+                  RESPONSE=$(curl -sS --fail \
+                      --connect-timeout 10 --max-time 30 \
+                      --retry 3 --retry-delay 2 --retry-all-errors \
+                      -X POST \
                       -H "Content-Type: application/json" \
                       -d "{\"email\":\"${{ secrets.API_EMAIL }}\",\"password\":\"${{ secrets.API_PASSWORD }}\"}" \
-                      https://microbot.cloud/api/auth/login)
-                  echo "Raw auth response: $RESPONSE" | sed 's/.*/[debug] &/'
-                  TOKEN=$(echo "$RESPONSE" | jq -r '.token // empty')
+                      https://microbot.cloud/api/auth/login || true)
+                  TOKEN=$(printf '%s' "$RESPONSE" | jq -er '.token // empty' 2>/dev/null || true)
                   if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
                       echo "::error::Failed to obtain auth token"; exit 1; fi
+                  echo "::add-mask::$TOKEN"
                   echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
             - name: Update Launcher Version in API
