@@ -41,3 +41,32 @@ jobs:
                       ./artifacts/microbot-launcher-mac-latest/*.dmg
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Get Auth Token (Launcher Version Update)
+              id: auth
+              run: |
+                  set -euo pipefail
+                  RESPONSE=$(curl -s -X POST \
+                      -H "Content-Type: application/json" \
+                      -d "{\"email\":\"${{ secrets.API_EMAIL }}\",\"password\":\"${{ secrets.API_PASSWORD }}\"}" \
+                      https://microbot.cloud/api/auth/login)
+                  echo "Raw auth response: $RESPONSE" | sed 's/.*/[debug] &/'
+                  TOKEN=$(echo "$RESPONSE" | jq -r '.token // empty')
+                  if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+                      echo "::error::Failed to obtain auth token"; exit 1; fi
+                  echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+            - name: Update Launcher Version in API
+              run: |
+                  set -euo pipefail
+                  VERSION=${{ steps.version.outputs.version }}
+                  echo "Updating launcher version to $VERSION via API"
+                  HTTP_CODE=$(curl -s -o response.json -w "%{http_code}" -X PUT \
+                      -H "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
+                      -H "Content-Type: application/json" \
+                      -d "{\"version\":\"$VERSION\"}" \
+                      https://microbot.cloud/api/version/launcher)
+                  echo "API response (HTTP $HTTP_CODE):"; cat response.json || true
+                  if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+                      echo "Launcher version updated successfully"; else
+                      echo "::error::Failed to update launcher version (HTTP $HTTP_CODE)"; exit 1; fi
