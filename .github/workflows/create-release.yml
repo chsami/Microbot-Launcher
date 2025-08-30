@@ -41,3 +41,51 @@ jobs:
                       ./artifacts/microbot-launcher-mac-latest/*.dmg
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Install jq and verify API secrets
+              run: |
+                  set -euo pipefail
+                  sudo apt-get update
+                  sudo apt-get install -y jq
+                  if ! command -v jq >/dev/null 2>&1; then
+                      echo "::error::jq failed to install"; exit 1; fi
+                  # Verify required secrets are provided (non-empty)
+                  if [ -z "${{ secrets.API_EMAIL }}" ]; then
+                      echo "::error::Missing required secret: API_EMAIL"; exit 1; fi
+                  if [ -z "${{ secrets.API_PASSWORD }}" ]; then
+                      echo "::error::Missing required secret: API_PASSWORD"; exit 1; fi
+                  echo "jq installed and required secrets present"
+
+            - name: Get Auth Token (Launcher Version Update)
+              id: auth
+              run: |
+                  set -euo pipefail
+                  if ! command -v jq >/dev/null 2>&1; then
+                      echo "::error::jq not found"; exit 1; fi
+                  RESPONSE=$(curl -sS --fail \
+                      --connect-timeout 10 --max-time 30 \
+                      --retry 3 --retry-delay 2 --retry-all-errors \
+                      -X POST \
+                      -H "Content-Type: application/json" \
+                      -d "{\"email\":\"${{ secrets.API_EMAIL }}\",\"password\":\"${{ secrets.API_PASSWORD }}\"}" \
+                      https://microbot.cloud/api/auth/login || true)
+                  TOKEN=$(printf '%s' "$RESPONSE" | jq -er '.token // empty' 2>/dev/null || true)
+                  if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+                      echo "::error::Failed to obtain auth token"; exit 1; fi
+                  echo "::add-mask::$TOKEN"
+                  echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+            - name: Update Launcher Version in API
+              run: |
+                  set -euo pipefail
+                  VERSION=${{ steps.version.outputs.version }}
+                  echo "Updating launcher version to $VERSION via API"
+                  HTTP_CODE=$(curl -s -o response.json -w "%{http_code}" -X PUT \
+                      -H "Authorization: Bearer ${{ steps.auth.outputs.token }}" \
+                      -H "Content-Type: application/json" \
+                      -d "{\"version\":\"$VERSION\"}" \
+                      https://microbot.cloud/api/version/launcher)
+                  echo "API response (HTTP $HTTP_CODE):"; cat response.json || true
+                  if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+                      echo "Launcher version updated successfully"; else
+                      echo "::error::Failed to update launcher version (HTTP $HTTP_CODE)"; exit 1; fi
