@@ -131,6 +131,8 @@ module.exports = async function (deps) {
      */
     function addProxyArgs(commandArgs, version, proxy) {
         if (!proxy || !proxy.proxyIp) return;
+        if (typeof proxy.proxyIp !== 'string') return;
+        if (proxy.proxyIp.trim() === '') return;
 
         const isNewFormat =
             version.localeCompare('1.9.9.2', undefined, { numeric: true }) >= 0;
