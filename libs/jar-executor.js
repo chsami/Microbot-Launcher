@@ -6,10 +6,8 @@ module.exports = async function (deps) {
             const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
             const commandArgs = ['-jar', jarPath];
 
-            if (proxy && proxy.proxyIp && proxy.proxyType) {
-                commandArgs.push(`-proxy=${proxy.proxyIp}`);
-                commandArgs.push(`-proxy-type=${proxy.proxyType}`);
-            }
+            // apply proxy args (done differently depending on client version)
+            addProxyArgs(commandArgs, version, proxy);
 
             if (account && account.profile) {
                 commandArgs.push(`-profile=${account.profile}`);
@@ -36,10 +34,8 @@ module.exports = async function (deps) {
         const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
         const commandArgs = ['-jar', jarPath, '-clean-jagex-launcher'];
 
-        if (proxy && proxy.proxyIp && proxy.proxyType) {
-            commandArgs.push(`-proxy=${proxy.proxyIp}`);
-            commandArgs.push(`-proxy-type=${proxy.proxyType}`);
-        }
+        // apply proxy args (done differently depending on client version)
+        addProxyArgs(commandArgs, version, proxy);
 
         if (
             fs.existsSync(
@@ -116,6 +112,71 @@ module.exports = async function (deps) {
             });
         } catch (error) {
             callback(false, error.message);
+        }
+    }
+
+    /**
+     * Adds proxy arguments to the commandArgs array.
+     * For versions < 1.9.9.2 we keep the old behavior: -proxy=<ip[:port]> -proxy-type=<type>
+     * For versions >= 1.9.9.2 we only support SOCKS proxies in the following form: scheme://[user:pass@]host:port
+     * Accepted legacy input formats (proxy.proxyIp):
+     *   ip:port
+     *   ip:port:user:pass (password may contain colons; extra segments are joined back for password)
+     *   scheme://user:pass@host:port (already formatted; passed through unchanged)
+     * We do not push -proxy-type for new versions.
+     *
+     * @param {string[]} commandArgs - The command arguments array.
+     * @param {string} version - The client version (e.g. "1.9.9.1").
+     * @param {Object} proxy - The proxy configuration object.
+     */
+    function addProxyArgs(commandArgs, version, proxy) {
+        if (!proxy || !proxy.proxyIp) return;
+
+        const isNewFormat =
+            version.localeCompare('1.9.9.2', undefined, { numeric: true }) >= 0;
+
+        if (!isNewFormat) {
+            // Backwards compatibility: keep existing arguments exactly as before
+            if (proxy.proxyType) {
+                commandArgs.push(`-proxy=${proxy.proxyIp}`);
+                commandArgs.push(`-proxy-type=${proxy.proxyType}`);
+            }
+            return;
+        }
+
+        // New format (>= 1.9.9.2) – only SOCKS proxies supported.
+        // As the UI may be changed in the future, we need to be flexible with input formats.
+        try {
+            let raw = proxy.proxyIp.trim();
+            // if user already supplied in URI format, just use it.
+            if (raw.includes('://')) {
+                commandArgs.push(`-proxy=${raw}`);
+                return;
+            }
+
+            const DEFAULT_SCHEME = 'socks5';
+            const parts = raw.split(':');
+
+            if (parts.length === 2) {
+                const [host, port] = parts;
+                commandArgs.push(`-proxy=${DEFAULT_SCHEME}://${host}:${port}`);
+            } else if (parts.length >= 4) {
+                const host = parts[0];
+                const port = parts[1];
+                const user = parts[2];
+                const pass = parts.slice(3).join(':'); // allow colons in password
+                // encode user and pass (without encoding things may break)
+                const encUser = encodeURIComponent(user);
+                const encPass = encodeURIComponent(pass);
+                commandArgs.push(
+                    `-proxy=${DEFAULT_SCHEME}://${encUser}:${encPass}@${host}:${port}`
+                );
+            } else {
+                // fallback: just attach whatever (may be just host)
+                commandArgs.push(`-proxy=${DEFAULT_SCHEME}://${raw}`);
+            }
+        } catch (err) {
+            log.error(`Failed to construct new proxy URI: ${err.message}`);
         }
     }
 
