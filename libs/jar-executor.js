@@ -180,8 +180,32 @@ module.exports = async function (deps) {
         }
     }
 
+    /**
+     * Redacts sensitive information from command line arguments.
+     * @param {string[]} args - The command line arguments.
+     * @returns {string[]} - The redacted command line arguments.
+     */
+    function redactCommandArgs(args) {
+        return args.map((a) => {
+            if (!a.startsWith('-proxy=')) return a;
+            const value = a.slice('-proxy='.length);
+            try {
+                const u = new URL(value);
+                if (u.username || u.password) {
+                    if (u.username) u.username = '***';
+                    if (u.password) u.password = '***';
+                    return `-proxy=${u.toString()}`;
+                }
+            } catch (_) {
+                // fallback: strip credentials if present
+                return `-proxy=${value.replace(/\/\/[^@]*@/, '//***@')}`;
+            }
+            return a;
+        });
+    }
+
     function executeJar(commandArgs, dialog) {
-        log.info(`java ${commandArgs.join(' ')}`);
+        log.info(`java ${redactCommandArgs(commandArgs).join(' ')}`);
 
         /**
          * Additional arguments for spawn library.
@@ -252,7 +276,8 @@ module.exports = async function (deps) {
     }
 
     function checkJavaAndRunJar(commandArgs, dialog, shell) {
-        log.info(`java ${commandArgs.join(' ')}`);
+        log.info(`java ${redactCommandArgs(commandArgs).join(' ')}`);
+
         isJavaInstalled((isInstalled, error) => {
             if (isInstalled) {
                 log.info('Java is installed, running the JAR...');
