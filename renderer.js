@@ -53,22 +53,80 @@ function updateProgress(percent, status) {
     statusText.textContent = status;
 }
 
-async function playButtonClickHandler() {
+/**
+ * Gets the selected client version from the UI.
+ * @returns {string} The selected client version string.
+ */
+function getSelectedClientVersion() {
+    const clientSelect = document.getElementById('client');
+    return extractVersion(clientSelect.value);
+}
+
+/**
+ * Prompts the user to update if the selected version is outdated.
+ * @param {string} selectedVersion
+ * @param {string} latestVersion
+ * @returns {Promise<boolean>} True if user wants to update, false otherwise.
+ */
+async function promptUserToUpdate(selectedVersion, latestVersion) {
+    return confirm(
+        `A newer client version (${latestVersion}) is available.\nYou are about to launch version ${selectedVersion}.\nDo you want to download and use the latest version?`
+    );
+}
+
+/**
+ * Downloads the latest client version and updates the UI and properties.
+ * @param {string} latestVersion
+ */
+async function downloadAndSwitchToLatestVersion(latestVersion) {
+    document.getElementById('loader-container').style.display = 'block';
+    await window.electron.downloadClient(latestVersion);
+    // Refresh client versions list after download and set to the latest one
+    const orderedClientJars = await orderClientJarsByVersion();
+    populateSelectElement('client', orderedClientJars);
+    document.getElementById('client').value = orderedClientJars[0];
+    // Update version preference
+    const properties = await window.electron.readProperties();
+    properties['version_pref'] = orderedClientJars[0];
+    properties['client'] = latestVersion;
+    await window.electron.writeProperties(properties);
+    document.getElementById('loader-container').style.display = 'none';
+}
+
+async function playButtonClickHandler(event) {
     await checkForOutdatedLaunch();
 
-    if (
-        document.getElementById('play')?.innerText.toLowerCase() ===
-        'Play With Jagex Account'.toLowerCase()
-    ) {
-        await openClient();
-    } else {
-        document.getElementById('play').classList.add('disabled');
-        const result = await window.electron.startAuthFlow();
-        if (result.error) {
-            window.electron.errorAlert(result.error);
+    const selectedVersion = getSelectedClientVersion();
+    const latestVersion = await fetchLatestClientVersionFromApi();
+    if (latestVersion && selectedVersion !== latestVersion) {
+        const userWantsUpdate = await promptUserToUpdate(selectedVersion, latestVersion);
+        if (userWantsUpdate) {
+            await downloadAndSwitchToLatestVersion(latestVersion);
+            return; // Stop further execution, user should click play again
         }
-        document.getElementById('play').classList.remove('disabled');
     }
+
+    if (event.target.id === 'play') {
+        if (
+            document.getElementById('play')?.innerText.toLowerCase() ===
+            'Play With Jagex Account'.toLowerCase()
+        ) {
+            await openClient();
+        } else {
+            document.getElementById('play').classList.add('disabled');
+            const result = await window.electron.startAuthFlow();
+            if (result.error) {
+                window.electron.errorAlert(result.error);
+            }
+            document.getElementById('play').classList.remove('disabled');
+        }
+    } else if (event.target.id === 'play-no-jagex-account') {
+        await playNoJagexAccount();
+        document
+            .getElementById('play-no-jagex-account')
+    }
+
+
 }
 
 /**
@@ -149,7 +207,7 @@ async function handleJagexAccountLogic(properties) {
     }, 1000);
 }
 
-window.onerror = function myErrorHandler(errorMsg, url, lineNumber) {
+window.onerror = function myErrorHandler(errorMsg) {
     alert(`Error occurred: ${errorMsg}`);
     window.electron.logError(errorMsg);
     return false;
@@ -199,7 +257,10 @@ window.addEventListener('load', async () => {
 
     await window.electron.writeProperties(properties);
 
-    const playButton = document.getElementById('play');
+    const playJagexButton = document.getElementById('play');
+    playJagexButton?.removeEventListener('click', playButtonClickHandler);
+    playJagexButton?.addEventListener('click', playButtonClickHandler);
+    const playButton = document.getElementById('play-no-jagex-account');
     playButton?.removeEventListener('click', playButtonClickHandler);
     playButton?.addEventListener('click', playButtonClickHandler);
 
@@ -826,8 +887,8 @@ function loadLandingPageWebview() {
 async function orderClientJarsByVersion() {
     const clientJars = await window.electron.listJars();
     clientJars.sort((a, b) => {
-        const versionA_match = a.match(/-([\d\.]+)\.jar$/);
-        const versionB_match = b.match(/-([\d\.]+)\.jar$/);
+        const versionA_match = a.match(/-([\d.]+)\.jar$/);
+        const versionB_match = b.match(/-([\d.]+)\.jar$/);
 
         if (versionA_match && versionB_match) {
             const partsA = versionA_match[1].split('.').map(Number);
@@ -880,5 +941,22 @@ async function checkForOutdatedLaunch() {
                 target: { value: latestVersion }
             });
         }
+    }
+}
+
+/**
+ * Fetches the latest client version from the remote API endpoint.
+ * @returns {Promise<string>} The latest client version string.
+ */
+async function fetchLatestClientVersionFromApi() {
+    try {
+        const response = await fetch('https://microbot.cloud/api/version/client');
+        if (!response.ok) throw new Error('Failed to fetch latest client version');
+        const data = await response.text();
+        return data.trim();
+    } catch (err) {
+        window.electron.logError('Error fetching latest client version: ' + err.message);
+        // Exception is logged, no need to throw again
+        return null;
     }
 }

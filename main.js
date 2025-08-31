@@ -125,8 +125,8 @@ async function createWindow() {
             contextIsolation: true,
             webviewTag: true
         },
-        titleBarStyle: 'hidden',
-        frame: false
+        titleBarStyle: process.env.DEBUG !== 'true' ? 'hidden': '',
+        frame: process.env.DEBUG === 'true'
     });
 
     if (process.platform === 'darwin') {
