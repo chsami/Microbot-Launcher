@@ -41,7 +41,6 @@ async function loadLibraries() {
             microbotDir: microbotDir,
             packageJson: packageJson,
             path: path,
-            downloadAndSaveFile: downloadAndSaveFile,
             log: log,
             spawn: spawn,
             dialog: dialog,
@@ -156,47 +155,6 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', function () {
     if (process.platform !== 'darwin') app.quit();
 });
-
-async function downloadAndSaveFile(remoteUrl, localPath, srcPath) {
-    if (process.env.DEBUG === 'true') {
-        const destDir = path.join(microbotDir, 'libs');
-        fs.mkdirSync(destDir, { recursive: true });
-        fs.copyFileSync(srcPath, localPath);
-        log.info('successfully copied ' + localPath);
-        return new Promise((resolve, reject) => {
-            resolve();
-        });
-    }
-    return new Promise((resolve, reject) => {
-        // Ensure parent directory exists
-        const dir = path.dirname(localPath);
-        fs.mkdirSync(dir, { recursive: true });
-
-        const file = fs.createWriteStream(localPath);
-        https
-            .get(remoteUrl, (response) => {
-                if (response.statusCode === 200) {
-                    response.pipe(file);
-                    file.on('finish', () => {
-                        file.close(resolve);
-                    });
-                } else {
-                    dialog.showErrorBox(
-                        'Failed to load js files!',
-                        'Failed to load ' + localPath
-                    );
-                    reject(
-                        new Error(
-                            `Failed to download file: ${response.statusCode} - ${localPath}`
-                        )
-                    );
-                }
-            })
-            .on('error', (err) => {
-                fs.unlink(localPath, () => reject(err));
-            });
-    });
-}
 
 async function checkLinuxVersion() {
     if (process.platform === 'linux') {
