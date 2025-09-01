@@ -1,6 +1,11 @@
 let accounts = [];
 let iii = null;
 
+/**
+ * Properties object used for client versioning, etc.
+ * @typedef {{client: string, launcher_html: string, launcher: string, version_pref: string}} MicrobotProperties
+ */
+
 async function openClient() {
     const clientValue = document.getElementById('client').value;
 
@@ -15,7 +20,9 @@ async function openClient() {
     }
 
     const version = extractVersion(clientValue);
-    await downloadClientIfNotExist(version);
+
+    const result = await downloadClientIfNotExist(version);
+    if (!result.exists) return;
 
     const proxy = getProxyValues();
 
@@ -63,70 +70,24 @@ function getSelectedClientVersion() {
 }
 
 /**
- * Prompts the user to update if the selected version is outdated.
- * @param {string} selectedVersion
- * @param {string} latestVersion
- * @returns {Promise<boolean>} True if user wants to update, false otherwise.
+ * Handles the play button click event of Jagex account
  */
-async function promptUserToUpdate(selectedVersion, latestVersion) {
-    return confirm(
-        `A newer client version (${latestVersion}) is available.\nYou are about to launch version ${selectedVersion}.\nDo you want to download and use the latest version?`
-    );
-}
-
-/**
- * Downloads the latest client version and updates the UI and properties.
- * @param {string} latestVersion
- */
-async function downloadAndSwitchToLatestVersion(latestVersion) {
-    document.getElementById('loader-container').style.display = 'block';
-    await window.electron.downloadClient(latestVersion);
-    // Refresh client versions list after download and set to the latest one
-    const orderedClientJars = await orderClientJarsByVersion();
-    populateSelectElement('client', orderedClientJars);
-    document.getElementById('client').value = orderedClientJars[0];
-    // Update version preference
-    const properties = await window.electron.readProperties();
-    properties['version_pref'] = orderedClientJars[0];
-    properties['client'] = latestVersion;
-    await window.electron.writeProperties(properties);
-    document.getElementById('loader-container').style.display = 'none';
-}
-
-async function playButtonClickHandler(event) {
+async function playButtonClickHandler() {
     await checkForOutdatedLaunch();
 
-    const selectedVersion = getSelectedClientVersion();
-    const latestVersion = await fetchLatestClientVersionFromApi();
-    if (latestVersion && selectedVersion !== latestVersion) {
-        const userWantsUpdate = await promptUserToUpdate(selectedVersion, latestVersion);
-        if (userWantsUpdate) {
-            await downloadAndSwitchToLatestVersion(latestVersion);
-            return; // Stop further execution, user should click play again
+    if (
+        document.getElementById('play')?.innerText.toLowerCase() ===
+        'Play With Jagex Account'.toLowerCase()
+    ) {
+        await openClient();
+    } else {
+        document.getElementById('play').classList.add('disabled');
+        const result = await window.electron.startAuthFlow();
+        if (result.error) {
+            window.electron.errorAlert(result.error);
         }
+        document.getElementById('play').classList.remove('disabled');
     }
-
-    if (event.target.id === 'play') {
-        if (
-            document.getElementById('play')?.innerText.toLowerCase() ===
-            'Play With Jagex Account'.toLowerCase()
-        ) {
-            await openClient();
-        } else {
-            document.getElementById('play').classList.add('disabled');
-            const result = await window.electron.startAuthFlow();
-            if (result.error) {
-                window.electron.errorAlert(result.error);
-            }
-            document.getElementById('play').classList.remove('disabled');
-        }
-    } else if (event.target.id === 'play-no-jagex-account') {
-        await playNoJagexAccount();
-        document
-            .getElementById('play-no-jagex-account')
-    }
-
-
 }
 
 /**
@@ -249,20 +210,18 @@ window.addEventListener('load', async () => {
 
     if (properties['client'] === '0.0.0') {
         document.getElementById('loader-container').style.display = 'block';
-        properties['client'] = clientVersion;
-        await window.electron.downloadClient(clientVersion);
+        const result = await window.electron.downloadClient(clientVersion);
+        if (result.error) {
+            window.electron.errorAlert(result.error);
+            properties['client'] = '0.0.0';
+        } else {
+            properties['client'] = clientVersion;
+        }
     }
 
     document.getElementById('loader-container').style.display = 'none';
 
     await window.electron.writeProperties(properties);
-
-    const playJagexButton = document.getElementById('play');
-    playJagexButton?.removeEventListener('click', playButtonClickHandler);
-    playJagexButton?.addEventListener('click', playButtonClickHandler);
-    const playButton = document.getElementById('play-no-jagex-account');
-    playButton?.removeEventListener('click', playButtonClickHandler);
-    playButton?.addEventListener('click', playButtonClickHandler);
 
     /*
      * Whenever the profile select changes, we set the "preferred" profile on accounts.json
@@ -497,63 +456,71 @@ function setupAddAccountsButton() {
  * @returns {string} The extracted version number.
  */
 function extractVersion(versionString) {
-    return versionString.replace(/^microbot-/, '').replace(/\.jar$/, '');
+    return versionString?.replace(/^microbot-/, '').replace(/\.jar$/, '');
 }
 
+/**
+ * Setup play button for launching without Jagex account
+ *
+ * First checks for the attempt of launching an outdated version of the client.
+ * If for some reason the client selected doesn't exist, it will trigger a download.
+ */
 function playNoJagexAccount() {
-    document
-        .querySelector('#play-no-jagex-account')
-        .addEventListener('click', async () => {
-            await checkForOutdatedLaunch();
+    const playNoJagexButton = document.getElementById('play-no-jagex-account');
+    playNoJagexButton?.removeEventListener('click', playButtonClickHandler);
+    playNoJagexButton?.addEventListener('click', async () => {
+        await checkForOutdatedLaunch();
 
-            const proxy = getProxyValues();
-            const selectedVersion = document.getElementById('client').value;
+        const proxy = getProxyValues();
+        const selectedVersion = document.getElementById('client').value;
 
-            // Check if a valid client version is selected
-            if (
-                !selectedVersion ||
-                selectedVersion === '' ||
-                !selectedVersion.includes('microbot-')
-            ) {
-                window.electron.errorAlert(
-                    'Please select a valid client version'
-                );
-                return;
-            }
+        // Check if a valid client version is selected
+        if (
+            !selectedVersion ||
+            selectedVersion === '' ||
+            !selectedVersion.includes('microbot-')
+        ) {
+            window.electron.errorAlert('Please select a valid client version');
+            return;
+        }
 
-            const version = extractVersion(selectedVersion);
+        const version = extractVersion(selectedVersion);
 
-            const selectedProfile =
-                document.getElementById('profile').value || 'default';
-            await window.electron.setProfileNoJagexAccount(selectedProfile);
+        const selectedProfile =
+            document.getElementById('profile').value || 'default';
+        await window.electron.setProfileNoJagexAccount(selectedProfile);
 
-            await downloadClientIfNotExist(version);
+        const result = await downloadClientIfNotExist(version);
+        if (result.exists) {
             await window.electron.playNoJagexAccount(version, proxy);
-        });
+        }
+    });
 }
 
+/**
+ * Checks if the client exists, and downloads it if it doesn't.
+ *
+ * @async
+ * @param {*} version
+ * @returns {Promise<{exists: boolean}>}
+ */
 async function downloadClientIfNotExist(version) {
     if (!(await window.electron.clientExists(version))) {
         window.electron.logError(
             `Client ${version} does not exist. Downloading...`
         );
         document.getElementById('loader-container').style.display = 'block';
-        await window.electron.downloadClient(version);
 
-        // Refresh client versions list after download
-        const orderedClientJars = await orderClientJarsByVersion();
-        populateSelectElement('client', orderedClientJars);
-
-        // Set the newly downloaded version as the selected value
-        const clientSelect = document.getElementById('client');
-        for (let i = 0; i < clientSelect.options.length; i++) {
-            if (clientSelect.options[i].value.includes(version)) {
-                clientSelect.selectedIndex = i;
-                break;
-            }
+        /** @type {{success: boolean, error?: string, path?: string}} */
+        const result = await window.electron.downloadClient(version);
+        if (result.error) {
+            window.electron.errorAlert(result.error);
+            return { exists: false };
         }
     }
     window.electron.logError(`Client ${version} is ready.`);
+    await populateAndSelectClientVersion(version);
+    return { exists: true };
 }
 
 function updateNowBtn() {
@@ -564,21 +531,61 @@ function updateNowBtn() {
             document.querySelector('#update-available').style = 'display:none';
             document.getElementById('loader-container').style.display = 'block';
             const clientVersion = await window.electron.fetchClientVersion();
-            await window.electron.downloadClient(clientVersion);
+            const result = await window.electron.downloadClient(clientVersion);
+            if (result.error) {
+                window.electron.errorAlert(result.error);
+                document.getElementById('loader-container').style.display =
+                    'none';
+                return;
+            }
 
-            // Refresh client versions list after download and set to the latest one
-            const orderedClientJars = await orderClientJarsByVersion();
-            populateSelectElement('client', orderedClientJars);
-            document.getElementById('client').value = orderedClientJars[0];
+            await populateAndSelectClientVersion(clientVersion);
 
-            // Manually trigger the version preference update after setting the value
+            // Update client field in properties to the latest version
             const properties = await window.electron.readProperties();
-            properties['version_pref'] = orderedClientJars[0];
             properties['client'] = clientVersion;
             await window.electron.writeProperties(properties);
 
             document.getElementById('loader-container').style.display = 'none';
         });
+}
+
+/**
+ * Populate and select client version
+ *
+ * @async
+ * @param {string} version
+ */
+async function populateAndSelectClientVersion(version) {
+    // Extract the version
+    version = extractVersion(version);
+
+    // Refresh client versions list after download
+    const orderedClientJars = await orderClientJarsByVersion();
+    populateSelectElement('client', orderedClientJars);
+
+    // Set the newly downloaded version as the selected value
+    await selectClientVersion(version);
+}
+
+/**
+ * Select client version select element value
+ *
+ * @async
+ * @param {string} version - The version to select (e.g. "1.9.9.1")
+ */
+async function selectClientVersion(version) {
+    const clientSelect = document.getElementById('client');
+    for (let i = 0; i < clientSelect.options.length; i++) {
+        if (clientSelect.options[i].value.includes(version)) {
+            clientSelect.selectedIndex = i;
+            clientSelect.value = clientSelect.options[i].value;
+            break;
+        }
+    }
+    await updateVersionPreference({
+        target: { value: version }
+    });
 }
 
 function reminderMeLaterBtn() {
@@ -611,16 +618,23 @@ function startLoading(event) {
     }, 1000);
 }
 
+/**
+ * Reads the current preferred version and selects it on the launcher UI.
+ *
+ * @async
+ * @param {*} properties
+ */
 async function setVersionPreference(properties) {
     if (
         properties &&
         properties['version_pref'] &&
         properties['version_pref'] !== '0.0.0'
     ) {
-        document.getElementById('client').value = properties['version_pref'];
+        await selectClientVersion(properties['version_pref']);
     } else {
-        properties['version_pref'] = document.getElementById('client').value;
-        await window.electron.writeProperties(properties);
+        await updateVersionPreference({
+            target: { value: document.getElementById('client').value }
+        });
     }
 
     /**
@@ -637,7 +651,7 @@ async function setVersionPreference(properties) {
 }
 
 async function updateVersionPreference(event) {
-    const selectedValue = event.target.value;
+    const selectedValue = extractVersion(event.target.value);
     const properties = await window.electron.readProperties();
     properties['version_pref'] = selectedValue;
     await window.electron.writeProperties(properties);
@@ -659,6 +673,8 @@ async function titlebarButtons() {
 
 /**
  * Updates the profile selector based on the selected character or default settings
+ *
+ * @async
  * @returns {Promise<void>}
  */
 async function updateProfileBasedOnCharacter() {
@@ -695,9 +711,16 @@ async function updateProfileBasedOnCharacter() {
 async function initUI(properties) {
     updateNowBtn();
     reminderMeLaterBtn();
-    playNoJagexAccount();
     titlebarButtons();
     setupHamburgerMenu();
+
+    // Setup play button for non-Jagex accounts
+    playNoJagexAccount();
+
+    // Setup play button for Jagex accounts
+    const playJagexButton = document.getElementById('play');
+    playJagexButton?.removeEventListener('click', playButtonClickHandler);
+    playJagexButton?.addEventListener('click', playButtonClickHandler);
 
     const accounts = await window.electron.readAccounts();
     await setupSidebarLayout(accounts?.length || 0);
@@ -792,12 +815,21 @@ function setupHamburgerMenu() {
     });
 }
 
+/**
+ * Check for client updates and prompt the user if necessary.
+ *
+ * @async
+ * @param {MicrobotProperties} properties - The properties object containing client information.
+ */
 async function checkForClientUpdate(properties) {
     const clientVersion = await window.electron.fetchClientVersion();
     window.electron.logError(
         `Current client version: ${clientVersion}, properties client version: ${properties['client']}`
     );
+
+    /** @type {Array<string>} List of available client jars in the Microbot directory. */
     const listOfJars = await window.electron.listJars();
+
     if (listOfJars.length === 0) {
         window.electron.logError(
             'No client jars found. Please download a client.'
@@ -808,13 +840,13 @@ async function checkForClientUpdate(properties) {
         );
     }
     if (
-        properties['client'] !== clientVersion &&
-        listOfJars.every((file) => file.indexOf(clientVersion) < 0)
+        await shouldPromptForClientDownload(
+            clientVersion,
+            listOfJars,
+            properties
+        )
     ) {
         document.querySelector('#update-available').style = 'display:flex';
-    } else if (properties['client'] !== clientVersion) {
-        properties['client'] = clientVersion;
-        await window.electron.writeProperties(properties);
     }
 }
 
@@ -882,6 +914,8 @@ function loadLandingPageWebview() {
 
 /**
  * Order the client jars by version from latest to oldest.
+ *
+ * @async
  * @returns {Promise<string[]>} A promise that resolves to the ordered list of client jar file names.
  */
 async function orderClientJarsByVersion() {
@@ -908,55 +942,96 @@ async function orderClientJarsByVersion() {
 }
 
 /**
+ * Check if the latest client available is installed.
+ * If not, make sure it's not written on properties file so it can be prompted
+ * for re-download again.
+ *
+ * @async
+ * @param {string} latestClientVersion - The version of the latest client available.
+ * @param {Array<string>} installedClientVersions - The list of installed client versions.
+ * @param {MicrobotProperties} properties - The properties object to update if necessary.
+ * @returns {Promise<boolean>} True if the latest client is installed, false otherwise.
+ */
+async function shouldPromptForClientDownload(
+    latestClientVersion,
+    installedClientVersions,
+    properties
+) {
+    const isLatestInstalled = installedClientVersions.some((file) =>
+        file.includes(latestClientVersion)
+    );
+    const isClientVersionOnPropertiesLatest =
+        properties['client'] === latestClientVersion;
+
+    // Latest version is installed, set on properties if not already set
+    if (isLatestInstalled) {
+        if (!isClientVersionOnPropertiesLatest) {
+            properties['client'] = latestClientVersion;
+            await window.electron.writeProperties(properties);
+        }
+        return false;
+    }
+
+    /**
+     * Latest version is not installed.
+     * Properties file is out of sync (e.g., client JAR was deleted).
+     * Correct the properties to the latest version actually installed.
+     */
+    if (isClientVersionOnPropertiesLatest) {
+        const orderedClientJars = await orderClientJarsByVersion();
+        if (orderedClientJars.length > 0) {
+            properties['client'] = extractVersion(orderedClientJars[0]);
+        } else {
+            properties['client'] = '0.0.0';
+        }
+        await window.electron.writeProperties(properties);
+    }
+
+    // Latest is not installed, prompt for download.
+    return true;
+}
+
+/**
  * Check if the selected client version is outdated compared to the latest version
- * before launch.
+ * available before launch.
+ *
+ * If it is outdated, prompt the user to either skip the latest version or
+ * download/launch the latest version.
+ *
+ * @async
  */
 async function checkForOutdatedLaunch() {
-    const selectedVersion = document.getElementById('client').value;
-    const orderedClientJars = await orderClientJarsByVersion();
-    const latestVersion = orderedClientJars[0];
+    const selectedVersion = extractVersion(
+        document.getElementById('client').value
+    );
+    const latestVersion = extractVersion(
+        await window.electron.fetchClientVersion()
+    );
 
     window.electron.logError(
         `Selected version: ${selectedVersion}, Latest version: ${latestVersion}`
     );
     if (
         selectedVersion !== latestVersion &&
-        latestVersion !== localStorage.getItem('skippedVersion')
+        latestVersion !== sessionStorage.getItem('skippedVersion')
     ) {
-        const userConfirmed = await window.electron.showConfirmationDialog(
+        // Show confirmation dialog
+        // Proceed = Skip latest version
+        const userWantsToProceed = await window.electron.showConfirmationDialog(
             'Do you want to proceed?',
-            `You are about to launch an older version (${extractVersion(
-                selectedVersion
-            )}).\r\rThe latest version is ${extractVersion(latestVersion)}.`,
+            `You are about to launch an older version (${selectedVersion}).\r\rThe latest version is ${latestVersion}.`,
             'Outdated Version Warning',
             'Skip latest version',
             'Launch with the latest version'
         );
+        window.electron.logError(`User chose: ${userWantsToProceed}`);
 
-        if (userConfirmed) {
-            localStorage.setItem('skippedVersion', latestVersion);
+        if (userWantsToProceed) {
+            // User chose to skip the latest version
+            sessionStorage.setItem('skippedVersion', latestVersion);
         } else {
-            document.getElementById('client').value = latestVersion;
-            await updateVersionPreference({
-                target: { value: latestVersion }
-            });
+            // User chose to launch with the latest version, download if not exist
+            await downloadClientIfNotExist(latestVersion);
         }
-    }
-}
-
-/**
- * Fetches the latest client version from the remote API endpoint.
- * @returns {Promise<string>} The latest client version string.
- */
-async function fetchLatestClientVersionFromApi() {
-    try {
-        const response = await fetch('https://microbot.cloud/api/version/client');
-        if (!response.ok) throw new Error('Failed to fetch latest client version');
-        const data = await response.text();
-        return data.trim();
-    } catch (err) {
-        window.electron.logError('Error fetching latest client version: ' + err.message);
-        // Exception is logged, no need to throw again
-        return null;
     }
 }
