@@ -37,7 +37,7 @@ async function openClient() {
             proxy,
             selectedAccount
         );
-        if (result.error) {
+        if (result?.error) {
             window.electron.errorAlert(result.error);
         }
     } else {
