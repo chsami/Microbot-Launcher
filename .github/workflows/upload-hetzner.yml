@@ -27,7 +27,6 @@ jobs:
 
                   # Create directories on server if they don't exist
                   ssh root@138.201.81.246 "mkdir -p /var/www/files/releases/microbot-launcher/"
-                  ssh root@138.201.81.246 "mkdir -p /var/www/files/assets/microbot-launcher/"
 
                   # Upload Windows files with error handling
                   if ls ./artifacts/microbot-launcher-exe-latest/*.exe 1> /dev/null 2>&1; then
@@ -52,15 +51,5 @@ jobs:
                   else
                     echo "⚠️  Warning: macOS DMG not found"
                   fi
-
-                  # Upload project assets
-                  scp -r \
-                    ./artifacts/microbot-launcher-assets/css \
-                    ./artifacts/microbot-launcher-assets/images \
-                    ./artifacts/microbot-launcher-assets/libs \
-                    ./artifacts/microbot-launcher-assets/index.html \
-                    ./artifacts/microbot-launcher-assets/renderer.js \
-                    root@138.201.81.246:/var/www/files/assets/microbot-launcher/
-                  echo "✅ Project assets uploaded successfully"
 
                   echo "🎉 All uploads to Hetzner completed!"
