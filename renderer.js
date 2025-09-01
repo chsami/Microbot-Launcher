@@ -71,7 +71,7 @@ async function playButtonClickHandler() {
     } else {
         document.getElementById('play').classList.add('disabled');
         const result = await window.electron.startAuthFlow();
-        if (result.error) {
+        if (result?.error) {
             window.electron.errorAlert(result.error);
         }
         document.getElementById('play').classList.remove('disabled');
@@ -424,7 +424,7 @@ async function addAccountsHandler() {
     const addAccountsButton = document.getElementById('add-accounts');
     addAccountsButton.classList.add('disabled');
     const result = await window.electron.startAuthFlow();
-    if (result.error) {
+    if (result?.error) {
         window.electron.errorAlert(result.error);
     }
     document.getElementById('add-accounts').classList.remove('disabled');
@@ -478,7 +478,7 @@ function playNoJagexAccount() {
                 version,
                 proxy
             );
-            if (result.error) {
+            if (result?.error) {
                 window.electron.errorAlert(result.error);
             }
         });
