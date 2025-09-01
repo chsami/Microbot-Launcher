@@ -39,13 +39,17 @@ async function openClient() {
     );
     if (selectedAccount) {
         await window.electron.overwriteCredentialProperties(selectedAccount);
-        const result = await window.electron.openClient(
-            version,
-            proxy,
-            selectedAccount
-        );
-        if (result?.error) {
-            window.electron.errorAlert(result.error);
+        try {
+            const launchResult = await window.electron.openClient(
+                version,
+                proxy,
+                selectedAccount
+            );
+            if (launchResult?.error) {
+                window.electron.errorAlert(launchResult.error);
+            }
+        } catch (err) {
+            window.electron.errorAlert(err?.message || String(err));
         }
     } else {
         alert('Account not found. Please restart your client.');
@@ -89,11 +93,16 @@ async function playButtonClickHandler() {
         await openClient();
     } else {
         document.getElementById('play').classList.add('disabled');
-        const result = await window.electron.startAuthFlow();
-        if (result?.error) {
-            window.electron.errorAlert(result.error);
+        try {
+            const authResult = await window.electron.startAuthFlow();
+            if (authResult?.error) {
+                window.electron.errorAlert(authResult.error);
+            }
+        } catch (err) {
+            window.electron.errorAlert(err?.message || String(err));
+        } finally {
+            document.getElementById('play').classList.remove('disabled');
         }
-        document.getElementById('play').classList.remove('disabled');
     }
 }
 
@@ -435,11 +444,16 @@ async function setupSidebarLayout(amountOfAccounts) {
 async function addAccountsHandler() {
     const addAccountsButton = document.getElementById('add-accounts');
     addAccountsButton.classList.add('disabled');
-    const result = await window.electron.startAuthFlow();
-    if (result?.error) {
-        window.electron.errorAlert(result.error);
+    try {
+        const authResult = await window.electron.startAuthFlow();
+        if (authResult?.error) {
+            window.electron.errorAlert(authResult.error);
+        }
+    } catch (err) {
+        window.electron.errorAlert(err?.message || String(err));
+    } finally {
+        document.getElementById('add-accounts').classList.remove('disabled');
     }
-    document.getElementById('add-accounts').classList.remove('disabled');
 }
 
 function setupAddAccountsButton() {
@@ -490,12 +504,16 @@ function playNoJagexAccount() {
         await window.electron.setProfileNoJagexAccount(selectedProfile);
         const result = await downloadClientIfNotExist(version);
         if (result?.exists) {
-            const result = await window.electron.playNoJagexAccount(
-                version,
-                proxy
-            );
-            if (result?.error) {
-                window.electron.errorAlert(result.error);
+            try {
+                const playResult = await window.electron.playNoJagexAccount(
+                    version,
+                    proxy
+                );
+                if (playResult?.error) {
+                    window.electron.errorAlert(playResult.error);
+                }
+            } catch (err) {
+                window.electron.errorAlert(err?.message || String(err));
             }
         }
     });
