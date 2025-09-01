@@ -7,7 +7,11 @@ module.exports = async function (deps) {
             const commandArgs = ['-jar', jarPath];
 
             // apply proxy args (done differently depending on client version)
-            addProxyArgs(commandArgs, version, proxy);
+            const err = addProxyArgs(commandArgs, version, proxy);
+            if (err) {
+                log.error(err.message);
+                return { error: err.message };
+            }
 
             if (account && account.profile) {
                 commandArgs.push(`-profile=${account.profile}`);
@@ -35,7 +39,11 @@ module.exports = async function (deps) {
         const commandArgs = ['-jar', jarPath, '-clean-jagex-launcher'];
 
         // apply proxy args (done differently depending on client version)
-        addProxyArgs(commandArgs, version, proxy);
+        const err = addProxyArgs(commandArgs, version, proxy);
+        if (err) {
+            log.error(err.message);
+            return { error: err.message };
+        }
 
         if (
             fs.existsSync(
@@ -128,11 +136,12 @@ module.exports = async function (deps) {
      * @param {string[]} commandArgs - The command arguments array.
      * @param {string} version - The client version (e.g. "1.9.9.1").
      * @param {Object} proxy - The proxy configuration object.
+     * @returns {Error|null} - Returns an error if the proxy configuration is invalid, otherwise null.
      */
     function addProxyArgs(commandArgs, version, proxy) {
-        if (!proxy || !proxy.proxyIp) return;
-        if (typeof proxy.proxyIp !== 'string') return;
-        if (proxy.proxyIp.trim() === '') return;
+        if (!proxy || !proxy.proxyIp) return null;
+        if (typeof proxy.proxyIp !== 'string') return null;
+        if (proxy.proxyIp.trim() === '') return null;
 
         const isNewFormat =
             version.localeCompare('1.9.9.2', undefined, { numeric: true }) >= 0;
@@ -143,7 +152,15 @@ module.exports = async function (deps) {
                 commandArgs.push(`-proxy=${proxy.proxyIp}`);
                 commandArgs.push(`-proxy-type=${proxy.proxyType}`);
             }
-            return;
+            return null;
+        }
+
+        // If <proxy.proxyType> is set and it's not socks we error and return
+        if (proxy.proxyType && proxy.proxyType !== 'socks') {
+            return new Error(
+                'Only SOCKS proxies are supported since client version 1.9.9.2. Found: ' +
+                    proxy.proxyType
+            );
         }
 
         // New format (>= 1.9.9.2) – only SOCKS proxies supported.
@@ -153,7 +170,7 @@ module.exports = async function (deps) {
             // if user already supplied in URI format, just use it.
             if (raw.includes('://')) {
                 commandArgs.push(`-proxy=${raw}`);
-                return;
+                return null;
             }
 
             const DEFAULT_SCHEME = 'socks5';
@@ -178,8 +195,11 @@ module.exports = async function (deps) {
                 commandArgs.push(`-proxy=${DEFAULT_SCHEME}://${raw}`);
             }
         } catch (err) {
-            log.error(`Failed to construct new proxy URI: ${err.message}`);
+            return new Error(
+                'Failed to construct new proxy URI: ' + err.message
+            );
         }
+        return null;
     }
 
     /**

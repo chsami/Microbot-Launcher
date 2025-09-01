@@ -32,7 +32,14 @@ async function openClient() {
     );
     if (selectedAccount) {
         await window.electron.overwriteCredentialProperties(selectedAccount);
-        await window.electron.openClient(version, proxy, selectedAccount);
+        const result = await window.electron.openClient(
+            version,
+            proxy,
+            selectedAccount
+        );
+        if (result.error) {
+            window.electron.errorAlert(result.error);
+        }
     } else {
         alert('Account not found. Please restart your client.');
     }
@@ -467,7 +474,13 @@ function playNoJagexAccount() {
             await window.electron.setProfileNoJagexAccount(selectedProfile);
 
             await downloadClientIfNotExist(version);
-            await window.electron.playNoJagexAccount(version, proxy);
+            const result = await window.electron.playNoJagexAccount(
+                version,
+                proxy
+            );
+            if (result.error) {
+                window.electron.errorAlert(result.error);
+            }
         });
 }
 
