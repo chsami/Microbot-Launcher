@@ -17,11 +17,13 @@ module.exports = async function (deps) {
 
     const { startAuthFlow } = require(path.join(
         projectDir,
-        'libs/oauth-jagex.js'
+        'libs',
+        'oauth-jagex.js'
     ));
     const { isBrowserDownloaded } = require(path.join(
         projectDir,
-        'libs/browser-util.js'
+        'libs',
+        'browser-util.js'
     ));
 
     ipcMain.handle('start-auth-flow', async () => {
@@ -44,22 +46,26 @@ module.exports = async function (deps) {
 
     const propertiesHandler = require(path.join(
         projectDir,
-        'libs/properties.js'
+        'libs',
+        'properties.js'
     ));
     await propertiesHandler(deps);
     const overwriteCredentialsHandler = require(path.join(
         projectDir,
-        'libs/overwrite-credential-properties.js'
+        'libs',
+        'overwrite-credential-properties.js'
     ));
     await overwriteCredentialsHandler(deps);
     const accountLoaderHandler = require(path.join(
         projectDir,
-        'libs/accounts-loader.js'
+        'libs',
+        'accounts-loader.js'
     ));
     await accountLoaderHandler(deps);
     const jarExecutorHandler = require(path.join(
         projectDir,
-        'libs/jar-executor.js'
+        'libs',
+        'jar-executor.js'
     ));
     await jarExecutorHandler(deps);
     const packageVersion = packageJson.version;
