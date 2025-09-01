@@ -38,8 +38,10 @@ async function openClient() {
         (x) => x.accountId === selectedValue
     );
     if (selectedAccount) {
-        await window.electron.overwriteCredentialProperties(selectedAccount);
         try {
+            await window.electron.overwriteCredentialProperties(
+                selectedAccount
+            );
             const launchResult = await window.electron.openClient(
                 version,
                 proxy,
@@ -85,14 +87,15 @@ function getSelectedClientVersion() {
  */
 async function playButtonClickHandler() {
     await checkForOutdatedLaunch();
+    const playBtn = document.getElementById('play');
 
     if (
-        document.getElementById('play')?.innerText.toLowerCase() ===
+        playBtn?.innerText.toLowerCase() ===
         'Play With Jagex Account'.toLowerCase()
     ) {
         await openClient();
     } else {
-        document.getElementById('play').classList.add('disabled');
+        playBtn?.classList.add('disabled');
         try {
             const authResult = await window.electron.startAuthFlow();
             if (authResult?.error) {
@@ -101,7 +104,7 @@ async function playButtonClickHandler() {
         } catch (err) {
             window.electron.errorAlert(err?.message || String(err));
         } finally {
-            document.getElementById('play').classList.remove('disabled');
+            playBtn?.classList.remove('disabled');
         }
     }
 }
@@ -469,7 +472,8 @@ function setupAddAccountsButton() {
  * @returns {string} The extracted version number.
  */
 function extractVersion(versionString) {
-    return versionString?.replace(/^microbot-/, '').replace(/\.jar$/, '');
+    const s = String(versionString ?? '');
+    return s.replace(/^microbot-/, '').replace(/\.jar$/, '');
 }
 
 /**
