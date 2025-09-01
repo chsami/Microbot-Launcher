@@ -193,20 +193,12 @@ window.addEventListener('unhandledrejection', (e) => {
 window.addEventListener('load', async () => {
     const properties = await window.electron.readProperties();
 
-    const launcherVersion = await window.electron.fetchLauncherVersion(); // jagex launcher version
     const clientVersion = await window.electron.fetchClientVersion();
 
     const microbotLauncherVersion = await window.electron.launcherVersion();
 
     document.querySelector('.titlebar-title').innerText =
         'Microbot Launcher - ' + microbotLauncherVersion;
-
-    if (properties['launcher'] !== launcherVersion) {
-        document.getElementById('loader-container').style.display = 'block';
-
-        properties['launcher'] = launcherVersion;
-        await window.electron.downloadMicrobotLauncher();
-    }
 
     if (properties['client'] === '0.0.0') {
         document.getElementById('loader-container').style.display = 'block';

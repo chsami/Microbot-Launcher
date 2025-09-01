@@ -64,33 +64,6 @@ module.exports = async function (deps) {
     await jarExecutorHandler(deps);
     const packageVersion = packageJson.version;
 
-    ipcMain.handle('download-microbot-launcher', async (event) => {
-        try {
-            event.sender.send('progress', {
-                percent: 70,
-                status: 'Downloading Microbot Jagex Launcher...'
-            });
-            const response = await axios.get(
-                filestorage + '/assets/microbot-launcher/microbot-launcher.jar',
-                { responseType: 'arraybuffer' }
-            );
-            event.sender.send('progress', {
-                percent: 80,
-                status: 'Finishing...'
-            });
-            const filePath = path.join(microbotDir, 'microbot-launcher.jar');
-            fs.writeFileSync(filePath, response.data);
-            event.sender.send('progress', {
-                percent: 80,
-                status: 'Completed!'
-            });
-            return { success: true, path: filePath };
-        } catch (error) {
-            log.error(`Error downloading Microbot launcher: ${error}`);
-            return { error: error.message };
-        }
-    });
-
     ipcMain.handle('download-client', async (event, version) => {
         const url = `${filestorage}/releases/microbot/stable/microbot-${version}.jar`;
         try {
@@ -178,16 +151,6 @@ module.exports = async function (deps) {
             return fs.existsSync(filePath);
         } catch (error) {
             log.error(`Error checking if client exists: ${error}`);
-            return { error: error.message };
-        }
-    });
-
-    ipcMain.handle('launcher-exists', async () => {
-        try {
-            const filePath = path.join(microbotDir, 'microbot-launcher.jar');
-            return fs.existsSync(filePath);
-        } catch (error) {
-            log.error(`Error checking if launcher exists: ${error}`);
             return { error: error.message };
         }
     });
