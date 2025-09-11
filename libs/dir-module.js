@@ -157,6 +157,12 @@ async function cleanupUnusedClientsJar(latestVersion) {
                 deletedAny = true;
                 updated = true;
             } catch (err) {
+                if (err.code === 'ENOENT') {
+                    // File already gone: drop TTL entry and continue.
+                    delete ttlData[version];
+                    updated = true;
+                    continue;
+                }
                 return { success: false, error: err.message };
             }
         }
