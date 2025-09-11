@@ -194,6 +194,23 @@ async function updateClientJarTTL(version) {
         return { success: false, error: 'Version not provided' };
     }
 
+    if (!/^[a-zA-Z0-9._-]+$/.test(version)) {
+        return { success: false, error: 'Invalid version format' };
+    }
+
+    const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
+    try {
+        await fs.stat(jarPath);
+    } catch (e) {
+        if (e.code === 'ENOENT') {
+            return {
+                success: false,
+                error: `Jar not found for version: ${version}`
+            };
+        }
+        return { success: false, error: e.message };
+    }
+
     const result = await getClientsJarTTL();
     if (!result.success) {
         return { success: false, error: result.error };
