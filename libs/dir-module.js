@@ -75,7 +75,164 @@ async function openLocation(key) {
     }
 }
 
+/**
+ * Check for the existence of the clients_jar_ttl.json file in the microbot directory.
+ * Creating with an empty object if it does not exist.
+ * @return {Object} The parsed JSON object from the file.
+ */
+async function getClientsJarTTL() {
+    const fs = require('fs').promises;
+    const filePath = path.join(microbotDir, 'clients_jar_ttl.json');
+    try {
+        await fs.mkdir(microbotDir, { recursive: true });
+        try {
+            const data = await fs.readFile(filePath, 'utf8');
+            return { success: true, data: JSON.parse(data) };
+        } catch (readErr) {
+            if (readErr.code === 'ENOENT') {
+                await fs.writeFile(filePath, JSON.stringify({}));
+                return { success: true, data: {} };
+            }
+            return { success: false, error: readErr.message };
+        }
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * Cleanup routines for clients jar using the TTL data.
+ * Delete any jar files that haven't been used in the past 3 days, with the exception
+ * of the latest version.
+ * @param {string} latestVersion The latest version string to exclude from deletion.
+ * @return {Promise<{success: boolean, error?: string}>} Result object indicating success or failure.
+ */
+async function cleanupUnusedClientsJar(latestVersion) {
+    const fs = require('fs').promises;
+    const result = await getClientsJarTTL();
+    if (!result.success) {
+        return { success: false, error: result.error };
+    }
+
+    if (!latestVersion) {
+        return { success: false, error: 'Latest version not provided' };
+    }
+
+    let ttlData = result.data || {};
+    let updated = false;
+    try {
+        const files = await fs.readdir(microbotDir);
+        const jarFiles = files.filter(
+            (f) =>
+                f.endsWith('.jar') &&
+                f.startsWith('microbot-') &&
+                !f.includes('launcher')
+        );
+        const now = Date.now();
+        for (const jarFile of jarFiles) {
+            let version = jarFile.replace('.jar', '');
+            version = version.replace('microbot-', '');
+            if (!(version in ttlData)) {
+                ttlData[version] = now;
+                updated = true;
+            }
+        }
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+
+    const now = Date.now();
+    const threeDays = 3 * 24 * 60 * 60 * 1000;
+    let deletedAny = false;
+
+    for (const [version, lastUsed] of Object.entries(ttlData)) {
+        if (version === latestVersion) {
+            continue;
+        }
+        if (now - lastUsed > threeDays) {
+            const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
+            try {
+                await fs.unlink(jarPath);
+                delete ttlData[version];
+                deletedAny = true;
+                updated = true;
+            } catch (err) {
+                if (err.code === 'ENOENT') {
+                    // File already gone: drop TTL entry and continue.
+                    delete ttlData[version];
+                    updated = true;
+                    continue;
+                }
+                return { success: false, error: err.message };
+            }
+        }
+    }
+
+    // we return if nothing changed
+    if (!updated) {
+        return { success: true };
+    }
+
+    const filePath = path.join(microbotDir, 'clients_jar_ttl.json');
+    try {
+        await fs.writeFile(filePath, JSON.stringify(ttlData, null, 2), 'utf8');
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+
+    return { success: true };
+}
+
+/**
+ * Update the last used timestamp for a specific client version.
+ * @param {string} version The client version to update.
+ * @return {Promise<{success: boolean, error?: string}>} Result object indicating success or failure.
+ */
+async function updateClientJarTTL(version) {
+    const fs = require('fs').promises;
+    if (!version) {
+        return { success: false, error: 'Version not provided' };
+    }
+
+    if (!/^[a-zA-Z0-9._-]+$/.test(version)) {
+        return { success: false, error: 'Invalid version format' };
+    }
+
+    const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
+    try {
+        await fs.stat(jarPath);
+    } catch (e) {
+        if (e.code === 'ENOENT') {
+            return {
+                success: false,
+                error: `Jar not found for version: ${version}`
+            };
+        }
+        return { success: false, error: e.message };
+    }
+
+    const result = await getClientsJarTTL();
+    if (!result.success) {
+        return { success: false, error: result.error };
+    }
+
+    const ttlData = result.data;
+    ttlData[version] = Date.now();
+
+    const filePath = path.join(microbotDir, 'clients_jar_ttl.json');
+    try {
+        await fs.writeFile(filePath, JSON.stringify(ttlData, null, 2), 'utf8');
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+
+    return { success: true };
+}
+
 module.exports = {
     microbotDir,
-    openLocation
+    openLocation,
+    getClientsJarTTL,
+    cleanupUnusedClientsJar,
+    updateClientJarTTL
 };

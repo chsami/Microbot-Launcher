@@ -5,9 +5,7 @@ module.exports = async function (deps) {
 
     // Define your default values here
     const defaultProperties = {
-        launcher: '0.0.0',
         client: '0.0.0',
-        launcher_html: '0.0.0',
         version_pref: '0.0.0'
     };
 

@@ -39,6 +39,10 @@ async function openClient() {
     );
     if (selectedAccount) {
         try {
+            const result = await window.electron.updateClientJarTTL(version);
+            if (result?.error) {
+                window.electron.logError(result.error);
+            }
             await window.electron.overwriteCredentialProperties(
                 selectedAccount
             );
@@ -233,6 +237,11 @@ window.addEventListener('load', async () => {
     document.getElementById('loader-container').style.display = 'none';
 
     await window.electron.writeProperties(properties);
+
+    const result = await window.electron.cleanUnusedClients(clientVersion);
+    if (result?.error) {
+        window.electron.logError(result.error);
+    }
 
     /*
      * Whenever the profile select changes, we set the "preferred" profile on accounts.json
@@ -509,6 +518,12 @@ function playNoJagexAccount() {
         const result = await downloadClientIfNotExist(version);
         if (result?.exists) {
             try {
+                const result = await window.electron.updateClientJarTTL(
+                    version
+                );
+                if (result?.error) {
+                    window.electron.logError(result.error);
+                }
                 const playResult = await window.electron.playNoJagexAccount(
                     version,
                     proxy

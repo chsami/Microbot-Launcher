@@ -286,4 +286,37 @@ module.exports = async function (deps) {
             }
         }
     );
+
+    /**
+     * Cleans up unused client jar files in the microbotDir that haven't been used
+     * in the past 3 days, except for the latest version which is always kept.
+     * Uses a JSON file to track the last used timestamps for each version.
+     * @param {string} latestVersion - The latest version string to exclude from deletion.
+     * @returns {Object} Result object with success status or error message.
+     */
+    ipcMain.handle(
+        'cleanup-unused-clients-jar',
+        async (event, latestVersion) => {
+            const { cleanupUnusedClientsJar } = require(path.join(
+                projectDir,
+                'libs',
+                'dir-module.js'
+            ));
+            return await cleanupUnusedClientsJar(latestVersion);
+        }
+    );
+
+    /**
+     * Updates the last used timestamp for a specific client version.
+     * @param {string} version - The client version to update.
+     * @returns {Object} Result object indicating success or failure.
+     */
+    ipcMain.handle('update-client-jar-ttl', async (event, version) => {
+        const { updateClientJarTTL } = require(path.join(
+            projectDir,
+            'libs',
+            'dir-module.js'
+        ));
+        return await updateClientJarTTL(version);
+    });
 };

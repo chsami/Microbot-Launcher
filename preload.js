@@ -48,6 +48,10 @@ contextBridge.exposeInMainWorld('electron', {
         ),
     openLocation: (locationKey) =>
         ipcRenderer.invoke('open-location', locationKey),
+    cleanUnusedClients: (latestVersion) =>
+        ipcRenderer.invoke('cleanup-unused-clients-jar', latestVersion),
+    updateClientJarTTL: (version) =>
+        ipcRenderer.invoke('update-client-jar-ttl', version),
     ipcRenderer: {
         send: (channel, data) => ipcRenderer.send(channel, data),
         receive: (channel, func) =>
