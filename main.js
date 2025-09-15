@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell } = require('electron');
+const { app, BrowserWindow, dialog, shell, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
@@ -110,16 +110,20 @@ autoUpdater.on('update-available', (info) => {
         .showMessageBox({
             type: 'info',
             title: 'Update available',
-            message: `Version ${info.version} of the launcher is available. Do you want to download it now?`,
-            buttons: ['Yes', 'Later']
+            detail: `Would you like to download version ${info.version} and install it now?`,
+            message: `New version of launcher available!`,
+            buttons: ['Install', 'Later'],
+            cancelId: 1,
+            defaultId: 0,
+            noLink: false
         })
         .then((result) => {
-            dialog.showMessageBox({
-                type: 'info',
-                title: 'Downloading',
-                message: `Downloading version ${info.version} of the launcher...`
-            });
             if (result.response === 0) {
+                dialog.showMessageBox({
+                    type: 'info',
+                    title: 'Downloading',
+                    message: `Downloading version ${info.version} of the launcher...`
+                });
                 autoUpdater.downloadUpdate();
             }
         });

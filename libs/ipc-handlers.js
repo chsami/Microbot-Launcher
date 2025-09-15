@@ -274,7 +274,7 @@ module.exports = async function (deps) {
                     title: defaultTitle,
                     message: message,
                     detail: detail,
-                    buttons: ['&' + yesButton, '&' + noButton],
+                    buttons: [yesButton, noButton],
                     defaultId: 1,
                     cancelId: 1,
                     noLink: false
