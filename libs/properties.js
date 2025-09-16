@@ -6,7 +6,8 @@ module.exports = async function (deps) {
     // Define your default values here
     const defaultProperties = {
         client: '0.0.0',
-        version_pref: '0.0.0'
+        version_pref: '0.0.0',
+        proxyip: ''
     };
 
     ipcMain.handle('write-properties', async (event, data) => {

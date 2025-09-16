@@ -7,7 +7,7 @@ module.exports = async function (deps) {
             const commandArgs = ['-jar', jarPath];
 
             // apply proxy args (done differently depending on client version)
-            const err = addProxyArgs(commandArgs, version, proxy);
+            const err = addProxyArgs(commandArgs, proxy);
             if (err) {
                 log.error(err.message);
                 return { error: err.message };
@@ -39,7 +39,7 @@ module.exports = async function (deps) {
         const commandArgs = ['-jar', jarPath, '-clean-jagex-launcher'];
 
         // apply proxy args (done differently depending on client version)
-        const err = addProxyArgs(commandArgs, version, proxy);
+        const err = addProxyArgs(commandArgs, proxy);
         if (err) {
             log.error(err.message);
             return { error: err.message };
@@ -125,8 +125,7 @@ module.exports = async function (deps) {
 
     /**
      * Adds proxy arguments to the commandArgs array.
-     * For versions < 1.9.9.2 we keep the old behavior: -proxy=<ip[:port]> -proxy-type=<type>
-     * For versions >= 1.9.9.2 we only support SOCKS proxies in the following form: scheme://[user:pass@]host:port
+     * Since version >= 1.9.9.2 we only support SOCKS proxies in the following form: scheme://[user:pass@]host:port
      * Accepted legacy input formats (proxy.proxyIp):
      *   ip:port
      *   ip:port:user:pass (password may contain colons; extra segments are joined back for password)
@@ -134,37 +133,14 @@ module.exports = async function (deps) {
      * We do not push -proxy-type for new versions.
      *
      * @param {string[]} commandArgs - The command arguments array.
-     * @param {string} version - The client version (e.g. "1.9.9.1").
      * @param {Object} proxy - The proxy configuration object.
      * @returns {Error|null} - Returns an error if the proxy configuration is invalid, otherwise null.
      */
-    function addProxyArgs(commandArgs, version, proxy) {
+    function addProxyArgs(commandArgs, proxy) {
         if (!proxy || !proxy.proxyIp) return null;
         if (typeof proxy.proxyIp !== 'string') return null;
         if (proxy.proxyIp.trim() === '') return null;
 
-        const isNewFormat =
-            version.localeCompare('1.9.9.2', undefined, { numeric: true }) >= 0;
-
-        if (!isNewFormat) {
-            // Backwards compatibility: keep existing arguments exactly as before
-            if (proxy.proxyType) {
-                commandArgs.push(`-proxy=${proxy.proxyIp}`);
-                commandArgs.push(`-proxy-type=${proxy.proxyType}`);
-            }
-            return null;
-        }
-
-        // If <proxy.proxyType> is set and it's not socks we error and return
-        if (proxy.proxyType && proxy.proxyType !== 'socks') {
-            return new Error(
-                'Only SOCKS proxies are supported since client version 1.9.9.2. Found: ' +
-                    proxy.proxyType
-            );
-        }
-
-        // New format (>= 1.9.9.2) – only SOCKS proxies supported.
-        // As the UI may be changed in the future, we need to be flexible with input formats.
         try {
             let raw = proxy.proxyIp.trim();
             // if user already supplied in URI format, just use it.

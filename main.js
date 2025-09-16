@@ -65,7 +65,7 @@ async function createWindow() {
     // Create the main window, but don't show it yet
     mainWindow = new BrowserWindow({
         width: 1280,
-        height: 800,
+        height: process.env.DEBUG !== 'true' ? 750 : 800,
         show: false, // Don't show the main window immediately
         title: 'Microbot Launcher',
         autoHideMenuBar: process.env.DEBUG !== 'true',
