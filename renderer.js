@@ -639,7 +639,7 @@ function reminderMeLaterBtn() {
 
 function getProxyValues() {
     // Get the value of the proxy IP
-    return document.getElementById('proxy-ip')?.value;
+    return { proxyIp: document.getElementById('proxy-ip')?.value || '' };
 }
 
 function startLoading(event) {
