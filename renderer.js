@@ -1079,17 +1079,13 @@ async function checkForOutdatedLaunch() {
 async function setupProxyInput() {
     const proxyInput = document.getElementById('proxy-ip');
     if (!proxyInput) {
-        console.error('Proxy input element not found');
         return;
     }
 
     const properties = await window.electron.readProperties();
     const savedProxy = properties['proxyip'];
     if (savedProxy && savedProxy !== '') {
-        console.log('Loaded saved proxy:', savedProxy);
         proxyInput.value = savedProxy;
-    } else {
-        console.log('No saved proxy found');
     }
 
     proxyInput.addEventListener('input', async (event) => {
@@ -1097,7 +1093,6 @@ async function setupProxyInput() {
         const properties = await window.electron.readProperties();
         properties['proxyip'] = value;
         await window.electron.writeProperties(properties);
-        console.log('Saved proxy on input:', value);
     });
 
     proxyInput.addEventListener('blur', async (event) => {
@@ -1105,6 +1100,5 @@ async function setupProxyInput() {
         const properties = await window.electron.readProperties();
         properties['proxyip'] = value;
         await window.electron.writeProperties(properties);
-        console.log('Saved proxy on blur:', value);
     });
 }
