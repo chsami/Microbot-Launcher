@@ -639,15 +639,7 @@ function reminderMeLaterBtn() {
 
 function getProxyValues() {
     // Get the value of the proxy IP
-    var proxyIp = document.getElementById('proxy-ip').value;
-
-    // Get the selected value of the proxy type
-    var proxyType = document.getElementById('proxy-type').value;
-
-    return {
-        proxyIp,
-        proxyType
-    };
+    return { proxyIp: document.getElementById('proxy-ip')?.value || '' };
 }
 
 function startLoading(event) {
@@ -778,6 +770,8 @@ async function initUI(properties) {
 
     await setVersionPreference(properties);
     document.querySelector('.game-info').style = 'display:block';
+
+    await setupProxyInput();
 }
 
 /**
@@ -1075,4 +1069,36 @@ async function checkForOutdatedLaunch() {
             await downloadClientIfNotExist(latestVersion);
         }
     }
+}
+
+/**
+ * Check if there is a saved Proxy IP as a cookie and set it to the input field.
+ * Also setup Proxy IP input field for change events so we can save to a cookie
+ * and persist the value between sessions.
+ */
+async function setupProxyInput() {
+    const proxyInput = document.getElementById('proxy-ip');
+    if (!proxyInput) {
+        return;
+    }
+
+    const properties = await window.electron.readProperties();
+    const savedProxy = properties['proxyip'];
+    if (savedProxy && savedProxy !== '') {
+        proxyInput.value = savedProxy;
+    }
+
+    proxyInput.addEventListener('input', async (event) => {
+        const value = event.target.value;
+        const properties = await window.electron.readProperties();
+        properties['proxyip'] = value;
+        await window.electron.writeProperties(properties);
+    });
+
+    proxyInput.addEventListener('blur', async (event) => {
+        const value = event.target.value;
+        const properties = await window.electron.readProperties();
+        properties['proxyip'] = value;
+        await window.electron.writeProperties(properties);
+    });
 }
