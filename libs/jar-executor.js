@@ -1,10 +1,13 @@
 module.exports = async function (deps) {
     const { spawn, path, dialog, shell, log, fs, microbotDir, ipcMain } = deps;
 
+    const memoryArgs = buildMemoryArgs(process.argv, log);
+    log.info(`Configured client memory: ${memoryArgs.join(' ')}`);
+
     ipcMain.handle('open-client', async (event, version, proxy, account) => {
         try {
             const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
-            const commandArgs = ['-jar', jarPath];
+            const commandArgs = [...memoryArgs, '-jar', jarPath];
 
             // apply proxy args (done differently depending on client version)
             const err = addProxyArgs(commandArgs, proxy);
@@ -36,7 +39,7 @@ module.exports = async function (deps) {
 
     ipcMain.handle('play-no-jagex-account', async (event, version, proxy) => {
         const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
-        const commandArgs = ['-jar', jarPath, '-clean-jagex-launcher'];
+        const commandArgs = [...memoryArgs, '-jar', jarPath, '-clean-jagex-launcher'];
 
         // apply proxy args (done differently depending on client version)
         const err = addProxyArgs(commandArgs, proxy);
@@ -311,3 +314,61 @@ module.exports = async function (deps) {
         });
     }
 };
+
+const DEFAULT_XMS_VALUE = '512m';
+const DEFAULT_XMX_VALUE = '1g';
+const DEFAULT_XMS_MB = 512;
+
+function buildMemoryArgs(argv, log) {
+    const ramValue = extractRamValue(argv);
+    if (!ramValue) {
+        return [`-Xms${DEFAULT_XMS_VALUE}`, `-Xmx${DEFAULT_XMX_VALUE}`];
+    }
+
+    const parsed = normalizeRamValue(ramValue);
+    if (!parsed) {
+        log.warn(
+            `Invalid --ram value "${ramValue}". Falling back to default memory settings.`
+        );
+        return [`-Xms${DEFAULT_XMS_VALUE}`, `-Xmx${DEFAULT_XMX_VALUE}`];
+    }
+
+    const xmsValue = parsed.mb < DEFAULT_XMS_MB ? parsed.normalized : DEFAULT_XMS_VALUE;
+
+    return [`-Xms${xmsValue}`, `-Xmx${parsed.normalized}`];
+}
+
+function extractRamValue(argv) {
+    if (!Array.isArray(argv)) return null;
+
+    for (let i = 0; i < argv.length; i += 1) {
+        const arg = argv[i];
+        if (typeof arg !== 'string') continue;
+
+        if (arg === '--ram') {
+            return argv[i + 1];
+        }
+
+        if (arg.startsWith('--ram=')) {
+            return arg.slice('--ram='.length);
+        }
+    }
+
+    return null;
+}
+
+function normalizeRamValue(value) {
+    if (!value || typeof value !== 'string') return null;
+
+    const trimmed = value.trim().toLowerCase();
+    const match = trimmed.match(/^(\d+(?:\.\d+)?)([mg])$/);
+    if (!match) return null;
+
+    const amount = Number(match[1]);
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+
+    const unit = match[2];
+    const mb = unit === 'g' ? amount * 1024 : amount;
+
+    return { normalized: `${amount}${unit}`, mb };
+}
