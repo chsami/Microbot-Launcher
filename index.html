@@ -7,6 +7,89 @@
         <link rel="stylesheet" href="css/styles.css">
     </head>
     <body>
+        <div id="auth-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true">
+            <div class="auth-card">
+                <h1 class="auth-title">Microbot Launcher</h1>
+                <p class="auth-subtitle">Sign in to continue</p>
+                <div class="auth-tabs" role="tablist">
+                    <button
+                        id="auth-tab-signin"
+                        class="auth-tab active"
+                        data-target="signin"
+                        role="tab"
+                        aria-selected="true"
+                    >
+                        Sign In
+                    </button>
+                    <button
+                        id="auth-tab-signup"
+                        class="auth-tab"
+                        data-target="signup"
+                        role="tab"
+                        aria-selected="false"
+                    >
+                        Create Account
+                    </button>
+                </div>
+                <form id="signin-form" class="auth-form" novalidate>
+                    <label for="signin-email">Email</label>
+                    <input id="signin-email" name="email" type="email" autocomplete="username" required />
+                    <label for="signin-password">Password</label>
+                    <input
+                        id="signin-password"
+                        name="password"
+                        type="password"
+                        autocomplete="current-password"
+                        required
+                    />
+                    <button id="signin-submit" type="submit" class="auth-submit">Sign In</button>
+                </form>
+                <form id="signup-form" class="auth-form auth-hidden" novalidate>
+                    <label for="signup-email">Email</label>
+                    <input id="signup-email" name="email" type="email" autocomplete="email" required />
+                    <label for="signup-password">Password</label>
+                    <input
+                        id="signup-password"
+                        name="password"
+                        type="password"
+                        autocomplete="new-password"
+                        minlength="8"
+                        required
+                    />
+                    <button id="signup-submit" type="submit" class="auth-submit">Create Account</button>
+                </form>
+                <p id="auth-error" class="auth-error" role="alert" aria-live="polite"></p>
+            </div>
+        </div>
+
+        <div
+            id="change-password-modal"
+            class="auth-modal auth-hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="change-password-title"
+        >
+            <div class="auth-card">
+                <h1 id="change-password-title" class="auth-title">Change Password</h1>
+                <form id="change-password-form" class="auth-form" novalidate>
+                    <label for="change-password-input">New Password</label>
+                    <input
+                        id="change-password-input"
+                        name="new-password"
+                        type="password"
+                        autocomplete="new-password"
+                        minlength="8"
+                        required
+                    />
+                    <button id="change-password-submit" type="submit" class="auth-submit">
+                        Save Password
+                    </button>
+                </form>
+                <p id="change-password-error" class="auth-error" role="alert" aria-live="polite"></p>
+                <button id="change-password-cancel" class="auth-cancel" type="button">Cancel</button>
+            </div>
+        </div>
+
         <div id="loader-container">
             <h1>Download and Unpack Progress</h1>
             <div id="loader">
@@ -43,6 +126,11 @@
                     </svg>
                 </button>
                 <span class="titlebar-title">Microbot Launcher - 0.0.0.0</span>
+                <div id="user-session" class="user-session hidden" aria-live="polite">
+                    <span id="session-email" class="session-email"></span>
+                    <button id="change-password-btn" class="session-action" type="button">Change Password</button>
+                    <button id="signout-btn" class="session-action" type="button">Sign Out</button>
+                </div>
                 <div class="titlebar-controls">
                     <button class="titlebar-button" id="minimize-btn">
                         <svg width="20px" height="20px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="#ffffff" stroke="#ffffff">

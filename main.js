@@ -50,6 +50,20 @@ async function loadLibraries() {
             app: app,
             mainWindow: mainWindow
         };
+        try {
+            const mockAuthHandler = require(path.join(
+                __dirname,
+                'libs',
+                'mock-auth.js'
+            ));
+            if (typeof mockAuthHandler === 'function') {
+                mockAuthHandler({ ipcMain, log });
+            } else {
+                log.error('mock-auth does not export a function');
+            }
+        } catch (authError) {
+            log.error('Error requiring mock-auth:', authError);
+        }
         if (typeof handler === 'function') {
             await handler(deps);
         } else {

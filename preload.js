@@ -52,6 +52,14 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.invoke('cleanup-unused-clients-jar', latestVersion),
     updateClientJarTTL: (version) =>
         ipcRenderer.invoke('update-client-jar-ttl', version),
+    auth: {
+        signup: (credentials) => ipcRenderer.invoke('auth:signup', credentials),
+        signin: (credentials) => ipcRenderer.invoke('auth:signin', credentials),
+        signout: () => ipcRenderer.invoke('auth:signout'),
+        changePassword: (payload) =>
+            ipcRenderer.invoke('auth:changepw', payload),
+        status: () => ipcRenderer.invoke('auth:status')
+    },
     ipcRenderer: {
         send: (channel, data) => ipcRenderer.send(channel, data),
         receive: (channel, func) =>
