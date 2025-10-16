@@ -266,20 +266,34 @@ module.exports = async function (deps) {
             detail,
             defaultTitle = 'Confirm',
             yesButton = 'Yes',
-            noButton = 'No'
+            noButton = 'No',
+            options = {}
         ) => {
             try {
-                const result = await dialog.showMessageBox({
-                    type: 'warning',
+                const dialogOptions = {
+                    type: options?.type || 'warning',
                     title: defaultTitle,
                     message: message,
                     detail: detail,
                     buttons: [yesButton, noButton],
-                    defaultId: 1,
-                    cancelId: 1,
+                    defaultId:
+                        typeof options?.defaultId === 'number'
+                            ? options.defaultId
+                            : 1,
+                    cancelId:
+                        typeof options?.cancelId === 'number'
+                            ? options.cancelId
+                            : 1,
                     noLink: false
-                });
-                return result.response === 0; // Return true if 'Yes' is clicked
+                };
+
+                const confirmIndex =
+                    typeof options?.confirmIndex === 'number'
+                        ? options.confirmIndex
+                        : 0;
+
+                const result = await dialog.showMessageBox(dialogOptions);
+                return result.response === confirmIndex; // Return true if confirm button is clicked
             } catch (error) {
                 log.error(`Error showing confirmation dialog: ${error}`);
                 return { error: error.message };

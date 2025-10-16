@@ -1,5 +1,6 @@
 let accounts = [];
 let iii = null;
+let lastAccountsReadError = null;
 
 /**
  * Properties object used for client versioning, etc.
@@ -77,6 +78,36 @@ function updateProgress(percent, status) {
     statusText.textContent = status;
 }
 
+function reportAccountsError(message) {
+    if (!message) {
+        return;
+    }
+
+    if (lastAccountsReadError === message) {
+        window.electron?.logError?.(message);
+        return;
+    }
+
+    lastAccountsReadError = message;
+    window.electron?.errorAlert?.(message);
+}
+
+async function safeReadAccounts() {
+    const result = await window.electron.readAccounts();
+    if (result?.error) {
+        reportAccountsError(`Failed to load accounts: ${result.error}`);
+        return null;
+    }
+
+    if (!Array.isArray(result)) {
+        reportAccountsError('Accounts data is in an unexpected format.');
+        return null;
+    }
+
+    lastAccountsReadError = null;
+    return result;
+}
+
 /**
  * Gets the selected client version from the UI.
  * @returns {string} The selected client version string.
@@ -133,7 +164,11 @@ async function handleJagexAccountLogic(properties) {
         const hasChanged = await window.electron.checkFileChange();
         if (hasChanged) {
             const oldNumberOfAccounts = accounts.length;
-            accounts = await window.electron.readAccounts();
+            const latestAccounts = await safeReadAccounts();
+            if (!latestAccounts) {
+                return;
+            }
+            accounts = latestAccounts;
             const newNumberOfAccounts = accounts.length;
 
             const selectedProfile = document.getElementById('profile')?.value;
@@ -272,10 +307,14 @@ window.addEventListener('load', async () => {
         .getElementById('character')
         .addEventListener('change', async (event) => {
             const selectedAccount = event.target.value;
-            const accounts = await window.electron.readAccounts();
+            const latestAccounts = await safeReadAccounts();
+            if (latestAccounts) {
+                accounts = latestAccounts;
+            }
+            const accountsData = latestAccounts ?? accounts;
 
             if (selectedAccount && selectedAccount !== 'none') {
-                const account = accounts.find(
+                const account = accountsData.find(
                     (x) => x.accountId === selectedAccount
                 );
                 if (account) {
@@ -387,6 +426,113 @@ function populateAccountSelector(characters = [], selectedAccount = null) {
     }
 }
 
+function renderAccountsList() {
+    const listContainer = document.getElementById('accounts-list');
+    if (!listContainer) {
+        return;
+    }
+
+    listContainer.innerHTML = '';
+
+    if (!Array.isArray(accounts) || accounts.length === 0) {
+        listContainer.style.display = 'none';
+        return;
+    }
+
+    listContainer.style.display = 'flex';
+
+    accounts.forEach((account) => {
+        const row = document.createElement('div');
+        row.className = 'account-row';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'account-name';
+        nameSpan.textContent = account.displayName || 'Not set';
+
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'account-delete-button';
+        deleteButton.dataset.accountId = account.accountId;
+        const accountNameLabel = account.displayName || 'account';
+        deleteButton.title = `Delete ${accountNameLabel}`;
+        deleteButton.setAttribute(
+            'aria-label',
+            `Delete ${accountNameLabel}`
+        );
+
+        const icon = document.createElement('span');
+        icon.setAttribute('aria-hidden', 'true');
+        icon.textContent = '🗑️';
+
+        const label = document.createElement('span');
+        label.className = 'account-delete-label';
+        label.textContent = 'Delete';
+
+        deleteButton.append(icon, label);
+        deleteButton.addEventListener('click', () => {
+            handleAccountDelete(account.accountId);
+        });
+
+        row.append(nameSpan, deleteButton);
+        listContainer.appendChild(row);
+    });
+}
+
+async function handleAccountDelete(accountId) {
+    if (!accountId) {
+        return;
+    }
+
+    const account = accounts.find((acc) => acc.accountId === accountId);
+    if (!account) {
+        window.electron.errorAlert('Account not found.');
+        return;
+    }
+
+    const confirmation = await window.electron.showConfirmationDialog(
+        'Delete account?',
+        'This will permanently remove this account. This action cannot be undone.',
+        'Delete account?',
+        'Cancel',
+        'Delete',
+        {
+            defaultId: 0,
+            cancelId: 0,
+            confirmIndex: 1
+        }
+    );
+
+    if (typeof confirmation !== 'boolean') {
+        if (confirmation?.error) {
+            window.electron.errorAlert(
+                `Failed to confirm deletion: ${confirmation.error}`
+            );
+        }
+        return;
+    }
+
+    if (!confirmation) {
+        return;
+    }
+
+    const result = await window.electron.deleteAccount(accountId);
+    if (result?.error) {
+        window.electron.errorAlert(
+            `Failed to delete account: ${result.error}`
+        );
+        return;
+    }
+
+    const updatedAccounts = await safeReadAccounts();
+    if (!updatedAccounts) {
+        return;
+    }
+
+    accounts = updatedAccounts;
+    await setupSidebarLayout(accounts.length);
+    await updateProfileBasedOnCharacter();
+}
+
 async function removeAccountsHandler() {
     const userConfirmed = confirm('Are you sure you want to proceed?');
     if (!userConfirmed) return;
@@ -423,6 +569,7 @@ async function setupSidebarLayout(amountOfAccounts) {
     const characterSelectLabel = document.querySelector(
         'label[for="character"]'
     );
+    renderAccountsList();
 
     if (amountOfAccounts > 0) {
         playJagexButton.innerHTML = 'Play With Jagex Account';
@@ -432,6 +579,16 @@ async function setupSidebarLayout(amountOfAccounts) {
         characterSelect.style.display = 'block';
         addAccountsButton.style.display = 'block';
         populateAccountSelector(accounts, selectedAccount);
+        const accountStillExists = accounts.some(
+            (acc) => acc.accountId === selectedAccount
+        );
+        if (!accountStillExists) {
+            if (accounts.length > 0) {
+                updateCharacterSelection(accounts[0].accountId);
+            } else {
+                updateCharacterSelection('none');
+            }
+        }
         // Note: populateAccountSelector uses updateCharacterSelection which
         // triggers the profile update via the change event
         setupLogoutButton();
@@ -755,8 +912,9 @@ async function initUI(properties) {
     playJagexButton?.removeEventListener('click', playButtonClickHandler);
     playJagexButton?.addEventListener('click', playButtonClickHandler);
 
-    const accounts = await window.electron.readAccounts();
-    await setupSidebarLayout(accounts?.length || 0);
+    const accountsData = await safeReadAccounts();
+    accounts = accountsData ?? [];
+    await setupSidebarLayout(accounts.length);
 
     const orderedClientJars = await orderClientJarsByVersion();
     populateSelectElement('client', orderedClientJars);
