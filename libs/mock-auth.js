@@ -7,9 +7,7 @@ const crypto = require('crypto');
 module.exports = function setupMockAuth(deps) {
     const { ipcMain, log } = deps;
 
-    const isMockEnabled =
-        String(process.env.MOCK_AUTH || '').toLowerCase() === '1' ||
-        String(process.env.MOCK_AUTH || '').toLowerCase() === 'true';
+    const isMockEnabled = false;
 
     const latency = Number.parseInt(process.env.MOCK_LATENCY_MS || '0', 10) || 0;
     const failurePct = Number.parseFloat(process.env.MOCK_FAIL_PCT || '0') || 0;
