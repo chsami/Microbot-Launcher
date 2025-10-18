@@ -117,7 +117,15 @@
                     <label for="client">Version</label>
                     <select id="client"></select>
                     <label for="character">Jagex Account</label>
-                    <div id="accounts-dropdown-container" class="accounts-dropdown-container" aria-live="polite"></div>
+                    <div class="accounts-refresh-row">
+                        <div id="accounts-dropdown-container" class="accounts-dropdown-container" aria-live="polite">
+                        </div>
+                        <button id="refresh-accounts" class="refresh-accounts-btn"
+                            title="Refresh the account list and update any outdated display names"
+                            aria-label="Refresh account list and update names">
+                            <span aria-hidden="true">⟳</span>
+                        </button>
+                    </div>
                     <select id="character" class="account-select-hidden" aria-hidden="true" tabindex="-1"></select>
                     <label for="profile">Profile</label>
                     <select id="profile">

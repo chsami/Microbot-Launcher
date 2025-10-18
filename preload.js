@@ -73,6 +73,7 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.invoke('cleanup-unused-clients-jar', latestVersion),
     updateClientJarTTL: (version) =>
         ipcRenderer.invoke('update-client-jar-ttl', version),
+    refreshAccounts: () => ipcRenderer.invoke('refresh-accounts'),
     ipcRenderer: {
         send: (channel, data) => ipcRenderer.send(channel, data),
         receive: (channel, func) =>
