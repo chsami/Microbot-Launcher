@@ -59,7 +59,6 @@
             <button id="change-password-cancel" class="auth-cancel" type="button">Cancel</button>
         </div>
     </div>
-
     <div id="loader-container">
         <h1>Download and Unpack Progress</h1>
         <div id="loader">
@@ -172,9 +171,22 @@
                     <select id="client"></select>
                     <label for="character">Jagex Account</label>
                     <select id="character"></select>
+                    <div id="accounts-dropdown-container" class="accounts-dropdown-container" aria-live="polite">
+                    </div>
+                    <select id="character" class="account-select-hidden" aria-hidden="true" tabindex="-1"></select>
                     <label for="profile">Profile</label>
                     <select id="profile">
                         <option value="default">Default</option>
+                    </select>
+                    label for="client-ram">Client RAM</label>
+                    <select id="client-ram">
+                        <option value="256m">256 MB</option>
+                        <option value="512m">512 MB</option>
+                        <option value="1g">1 GB</option>
+                        <option value="2g" selected>2 GB</option>
+                        <option value="4g">4 GB</option>
+                        <option value="6g">6 GB</option>
+                        <option value="8g">8 GB</option>
                     </select>
                 </div>
                 <div class="proxy-section">

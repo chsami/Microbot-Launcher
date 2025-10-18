@@ -7,7 +7,8 @@ module.exports = async function (deps) {
     const defaultProperties = {
         client: '0.0.0',
         version_pref: '0.0.0',
-        proxyip: ''
+        proxyip: '',
+        client_ram: '1g'
     };
 
     ipcMain.handle('write-properties', async (event, data) => {

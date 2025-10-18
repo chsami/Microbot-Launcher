@@ -52,6 +52,42 @@ module.exports = async function (deps) {
         }
     });
 
+    ipcMain.handle('delete-account', async (event, accountId) => {
+        try {
+            if (!accountId) {
+                return { error: 'Invalid account id' };
+            }
+
+            if (!fs.existsSync(filePath)) {
+                return { error: 'Accounts file does not exist' };
+            }
+
+            const data = fs.readFileSync(filePath, 'utf8');
+            let accounts = [];
+
+            try {
+                accounts = JSON.parse(data);
+            } catch (parseError) {
+                log.error(parseError.message);
+                return { error: 'Accounts file is corrupted or unreadable' };
+            }
+
+            const updatedAccounts = accounts.filter(
+                (account) => account.accountId !== accountId
+            );
+
+            if (updatedAccounts.length === accounts.length) {
+                return { error: 'Account not found' };
+            }
+
+            fs.writeFileSync(filePath, JSON.stringify(updatedAccounts, null, 2));
+            return { success: true };
+        } catch (error) {
+            log.error(error.message);
+            return { error: error.message };
+        }
+    });
+
     let lastModifiedTime = null;
     let fileExistedLastCheck = fs.existsSync(filePath);
 

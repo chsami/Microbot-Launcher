@@ -1,5 +1,9 @@
 let accounts = [];
 let iii = null;
+let lastAccountsReadError = null;
+let cleanupAccountsDropdownListeners = null;
+
+const DEFAULT_CLIENT_RAM = '1g';
 let launcherInitialized = false;
 let authUiReady = false;
 let mockAuthEnabled = false;
@@ -296,6 +300,7 @@ async function openClient() {
     if (!result.exists) return;
 
     const proxy = getProxyValues();
+    const ramPreference = getClientRamPreference();
 
     document.getElementById('loader-container').style.display = 'none';
 
@@ -320,7 +325,8 @@ async function openClient() {
             const launchResult = await window.electron.openClient(
                 version,
                 proxy,
-                selectedAccount
+                selectedAccount,
+                ramPreference
             );
             if (launchResult?.error) {
                 window.electron.errorAlert(launchResult.error);
@@ -346,6 +352,36 @@ function updateProgress(percent, status) {
     progressBar.style.width = percent + '%';
     progressBar.textContent = percent + '%';
     statusText.textContent = status;
+}
+
+function reportAccountsError(message) {
+    if (!message) {
+        return;
+    }
+
+    if (lastAccountsReadError === message) {
+        window.electron?.logError?.(message);
+        return;
+    }
+
+    lastAccountsReadError = message;
+    window.electron?.errorAlert?.(message);
+}
+
+async function safeReadAccounts() {
+    const result = await window.electron.readAccounts();
+    if (result?.error) {
+        reportAccountsError(`Failed to load accounts: ${result.error}`);
+        return null;
+    }
+
+    if (!Array.isArray(result)) {
+        reportAccountsError('Accounts data is in an unexpected format.');
+        return null;
+    }
+
+    lastAccountsReadError = null;
+    return result;
 }
 
 /**
@@ -387,15 +423,20 @@ async function playButtonClickHandler() {
 /**
  * Helper function to update character select and trigger profile update
  * @param {string} accountId - The account ID to select
+ * @param {{suppressRender?: boolean}} [options] - Optional flags
  * @returns {void}
  */
-function updateCharacterSelection(accountId) {
+function updateCharacterSelection(accountId, options = {}) {
     const characterSelect = document.getElementById('character');
     if (characterSelect) {
         characterSelect.value = accountId;
         // Manually dispatch a change event to trigger the onChange handler
         const changeEvent = new Event('change');
         characterSelect.dispatchEvent(changeEvent);
+    }
+
+    if (!options?.suppressRender) {
+        renderAccountsList();
     }
 }
 
@@ -404,7 +445,11 @@ async function handleJagexAccountLogic(properties) {
         const hasChanged = await window.electron.checkFileChange();
         if (hasChanged) {
             const oldNumberOfAccounts = accounts.length;
-            accounts = await window.electron.readAccounts();
+            const latestAccounts = await safeReadAccounts();
+            if (!latestAccounts) {
+                return;
+            }
+            accounts = latestAccounts;
             const newNumberOfAccounts = accounts.length;
 
             const selectedProfile = document.getElementById('profile')?.value;
@@ -543,10 +588,14 @@ async function initializeLauncher() {
         .getElementById('character')
         .addEventListener('change', async (event) => {
             const selectedAccount = event.target.value;
-            const accounts = await window.electron.readAccounts();
+            const latestAccounts = await safeReadAccounts();
+            if (latestAccounts) {
+                accounts = latestAccounts;
+            }
+            const accountsData = latestAccounts ?? accounts;
 
             if (selectedAccount && selectedAccount !== 'none') {
-                const account = accounts.find(
+                const account = accountsData.find(
                     (x) => x.accountId === selectedAccount
                 );
                 if (account) {
@@ -659,8 +708,325 @@ function populateAccountSelector(characters = [], selectedAccount = null) {
     });
 
     if (selectedAccount) {
-        updateCharacterSelection(selectedAccount);
+        updateCharacterSelection(selectedAccount, { suppressRender: true });
     }
+}
+
+function renderAccountsList() {
+    const listContainer = document.getElementById(
+        'accounts-dropdown-container'
+    );
+    if (!listContainer) {
+        return;
+    }
+
+    listContainer.innerHTML = '';
+
+    if (typeof cleanupAccountsDropdownListeners === 'function') {
+        cleanupAccountsDropdownListeners();
+        cleanupAccountsDropdownListeners = null;
+    }
+
+    if (!Array.isArray(accounts) || accounts.length === 0) {
+        listContainer.style.display = 'none';
+        return;
+    }
+
+    listContainer.style.display = 'block';
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'accounts-dropdown';
+
+    const toggleButton = document.createElement('button');
+    toggleButton.type = 'button';
+    toggleButton.className = 'accounts-dropdown-toggle';
+    toggleButton.setAttribute('aria-haspopup', 'listbox');
+    toggleButton.setAttribute('aria-expanded', 'false');
+
+    const toggleLabel = document.createElement('span');
+    toggleLabel.className = 'accounts-dropdown-label';
+
+    const countBadge = document.createElement('span');
+    countBadge.className = 'accounts-dropdown-count';
+    countBadge.textContent = String(accounts.length);
+
+    const toggleIcon = document.createElement('span');
+    toggleIcon.className = 'accounts-dropdown-icon';
+    toggleIcon.setAttribute('aria-hidden', 'true');
+    toggleIcon.textContent = '▾';
+
+    const characterSelect = document.getElementById('character');
+    const initialSelectedValue = characterSelect?.value || 'none';
+    let currentSelectedValue = initialSelectedValue;
+
+    const getAccountLabel = (account) => {
+        const label = account?.displayName?.trim();
+        return label && label.length > 0 ? label : 'Not set';
+    };
+
+    const updateToggleLabel = (value) => {
+        if (value === 'none') {
+            toggleLabel.textContent = 'None';
+            toggleButton.setAttribute('aria-label', 'No Jagex account selected');
+            toggleButton.title = 'No Jagex account selected';
+            return;
+        }
+
+        const matchingAccount = accounts.find(
+            (account) => account.accountId === value
+        );
+
+        if (matchingAccount) {
+            const label = getAccountLabel(matchingAccount);
+            toggleLabel.textContent = label;
+            toggleButton.setAttribute('aria-label', `Selected ${label}`);
+            toggleButton.title = `Selected ${label}`;
+        } else {
+            toggleLabel.textContent = 'Select Jagex account';
+            toggleButton.setAttribute('aria-label', 'Select a Jagex account');
+            toggleButton.title = 'Select a Jagex account';
+        }
+    };
+
+    updateToggleLabel(currentSelectedValue);
+
+    toggleButton.append(toggleLabel, countBadge, toggleIcon);
+
+    const panel = document.createElement('div');
+    panel.className = 'accounts-dropdown-panel';
+    panel.setAttribute('role', 'listbox');
+
+    const searchWrapper = document.createElement('div');
+    searchWrapper.className = 'accounts-search-wrapper';
+
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.className = 'accounts-search-input';
+    searchInput.placeholder = 'Search accounts…';
+    searchInput.setAttribute('aria-label', 'Search saved accounts');
+
+    searchWrapper.appendChild(searchInput);
+
+    const optionsList = document.createElement('div');
+    optionsList.className = 'accounts-options';
+
+    const emptyMessage = document.createElement('div');
+    emptyMessage.className = 'accounts-options-empty';
+    emptyMessage.textContent = 'No accounts match your search.';
+
+    const closeDropdown = () => {
+        dropdown.classList.remove('open');
+        toggleButton.setAttribute('aria-expanded', 'false');
+        searchInput.value = '';
+    };
+
+    const setSelectedAccount = (value) => {
+        currentSelectedValue = value;
+        updateToggleLabel(value);
+        updateCharacterSelection(value, { suppressRender: true });
+        closeDropdown();
+        toggleButton.focus();
+    };
+
+    const createNoneOption = () => {
+        const optionRow = document.createElement('div');
+        optionRow.className = 'account-option';
+        optionRow.setAttribute('role', 'option');
+        if (currentSelectedValue === 'none') {
+            optionRow.classList.add('selected');
+            optionRow.setAttribute('aria-selected', 'true');
+        } else {
+            optionRow.setAttribute('aria-selected', 'false');
+        }
+
+        const nameButton = document.createElement('button');
+        nameButton.type = 'button';
+        nameButton.className = 'account-option-name';
+        nameButton.textContent = 'None';
+        nameButton.title = 'Use no Jagex account';
+        nameButton.addEventListener('click', () => {
+            setSelectedAccount('none');
+        });
+
+        optionRow.appendChild(nameButton);
+        return optionRow;
+    };
+
+    const createAccountOption = (account) => {
+        const optionRow = document.createElement('div');
+        optionRow.className = 'account-option';
+        optionRow.setAttribute('role', 'option');
+        optionRow.dataset.accountId = account.accountId;
+
+        if (account.accountId === currentSelectedValue) {
+            optionRow.classList.add('selected');
+            optionRow.setAttribute('aria-selected', 'true');
+        } else {
+            optionRow.setAttribute('aria-selected', 'false');
+        }
+
+        const label = getAccountLabel(account);
+
+        const nameButton = document.createElement('button');
+        nameButton.type = 'button';
+        nameButton.className = 'account-option-name';
+        nameButton.textContent = label;
+        nameButton.title = `Select ${label}`;
+        nameButton.addEventListener('click', () => {
+            setSelectedAccount(account.accountId);
+        });
+
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'account-option-delete';
+        deleteButton.dataset.accountId = account.accountId;
+        deleteButton.title = `Delete ${label}`;
+        deleteButton.setAttribute('aria-label', `Delete ${label}`);
+        deleteButton.innerHTML = '<span aria-hidden="true">🗑️</span>';
+        deleteButton.addEventListener('click', async (event) => {
+            event.stopPropagation();
+            closeDropdown();
+            await handleAccountDelete(account.accountId);
+        });
+
+        optionRow.append(nameButton, deleteButton);
+        return optionRow;
+    };
+
+    const renderOptions = (filterText = '') => {
+        optionsList.innerHTML = '';
+        const normalizedFilter = filterText.trim().toLowerCase();
+        let visibleCount = 0;
+
+        const shouldShowNone =
+            normalizedFilter.length === 0 ||
+            'none'.includes(normalizedFilter);
+
+        if (shouldShowNone) {
+            optionsList.appendChild(createNoneOption());
+            visibleCount += 1;
+        }
+
+        accounts.forEach((account) => {
+            const displayName = getAccountLabel(account).toLowerCase();
+            if (
+                normalizedFilter &&
+                !displayName.includes(normalizedFilter)
+            ) {
+                return;
+            }
+
+            optionsList.appendChild(createAccountOption(account));
+            visibleCount += 1;
+        });
+
+        if (visibleCount === 0) {
+            optionsList.appendChild(emptyMessage.cloneNode(true));
+        }
+    };
+
+    const openDropdown = () => {
+        dropdown.classList.add('open');
+        toggleButton.setAttribute('aria-expanded', 'true');
+        renderOptions(searchInput.value);
+        requestAnimationFrame(() => {
+            searchInput.focus();
+        });
+    };
+
+    toggleButton.addEventListener('click', () => {
+        if (dropdown.classList.contains('open')) {
+            closeDropdown();
+        } else {
+            openDropdown();
+        }
+    });
+
+    searchInput.addEventListener('input', (event) => {
+        renderOptions(event.target.value);
+    });
+
+    const handleOutsideClick = (event) => {
+        if (!dropdown.contains(event.target)) {
+            closeDropdown();
+        }
+    };
+
+    const handleEscapeKey = (event) => {
+        if (event.key === 'Escape') {
+            if (dropdown.classList.contains('open')) {
+                closeDropdown();
+                toggleButton.focus();
+            }
+        }
+    };
+
+    document.addEventListener('click', handleOutsideClick);
+    document.addEventListener('keydown', handleEscapeKey);
+
+    cleanupAccountsDropdownListeners = () => {
+        document.removeEventListener('click', handleOutsideClick);
+        document.removeEventListener('keydown', handleEscapeKey);
+    };
+
+    panel.append(searchWrapper, optionsList);
+    dropdown.append(toggleButton, panel);
+    listContainer.appendChild(dropdown);
+}
+
+async function handleAccountDelete(accountId) {
+    if (!accountId) {
+        return;
+    }
+
+    const account = accounts.find((acc) => acc.accountId === accountId);
+    if (!account) {
+        window.electron.errorAlert('Account not found.');
+        return;
+    }
+
+    const confirmation = await window.electron.showConfirmationDialog(
+        'Delete account?',
+        'This will permanently remove this account. This action cannot be undone.',
+        'Delete account?',
+        'Cancel',
+        'Delete',
+        {
+            defaultId: 0,
+            cancelId: 0,
+            confirmIndex: 1
+        }
+    );
+
+    if (typeof confirmation !== 'boolean') {
+        if (confirmation?.error) {
+            window.electron.errorAlert(
+                `Failed to confirm deletion: ${confirmation.error}`
+            );
+        }
+        return;
+    }
+
+    if (!confirmation) {
+        return;
+    }
+
+    const result = await window.electron.deleteAccount(accountId);
+    if (result?.error) {
+        window.electron.errorAlert(
+            `Failed to delete account: ${result.error}`
+        );
+        return;
+    }
+
+    const updatedAccounts = await safeReadAccounts();
+    if (!updatedAccounts) {
+        return;
+    }
+
+    accounts = updatedAccounts;
+    await setupSidebarLayout(accounts.length);
+    await updateProfileBasedOnCharacter();
 }
 
 async function removeAccountsHandler() {
@@ -695,19 +1061,37 @@ async function setupSidebarLayout(amountOfAccounts) {
     const playButtonsDiv = document.querySelector('.play-buttons');
     const logoutButton = document.getElementById('logout');
     const addAccountsButton = document.getElementById('add-accounts');
-    const characterSelect = document.getElementById('character');
     const characterSelectLabel = document.querySelector(
         'label[for="character"]'
+    );
+    const accountsDropdownContainer = document.getElementById(
+        'accounts-dropdown-container'
     );
 
     if (amountOfAccounts > 0) {
         playJagexButton.innerHTML = 'Play With Jagex Account';
         logoutButton.style.display = 'block';
         playButtonsDiv.style.display = 'flex';
-        characterSelectLabel.style.display = 'block';
-        characterSelect.style.display = 'block';
+        if (characterSelectLabel) {
+            characterSelectLabel.style.display = 'block';
+        }
+        if (accountsDropdownContainer) {
+            accountsDropdownContainer.style.display = 'block';
+        }
         addAccountsButton.style.display = 'block';
         populateAccountSelector(accounts, selectedAccount);
+        const accountStillExists = accounts.some(
+            (acc) => acc.accountId === selectedAccount
+        );
+        if (!accountStillExists) {
+            if (accounts.length > 0) {
+                updateCharacterSelection(accounts[0].accountId, {
+                    suppressRender: true
+                });
+            } else {
+                updateCharacterSelection('none', { suppressRender: true });
+            }
+        }
         // Note: populateAccountSelector uses updateCharacterSelection which
         // triggers the profile update via the change event
         setupLogoutButton();
@@ -717,8 +1101,12 @@ async function setupSidebarLayout(amountOfAccounts) {
         playJagexButton.innerHTML = 'Login Jagex Account';
         logoutButton.style.display = 'none';
         playButtonsDiv.style.display = 'block';
-        characterSelectLabel.style.display = 'none';
-        characterSelect.style.display = 'none';
+        if (characterSelectLabel) {
+            characterSelectLabel.style.display = 'none';
+        }
+        if (accountsDropdownContainer) {
+            accountsDropdownContainer.style.display = 'none';
+        }
         addAccountsButton.style.display = 'none';
 
         // Clear character selector and make sure 'none' is selected
@@ -727,6 +1115,8 @@ async function setupSidebarLayout(amountOfAccounts) {
         // Also update the profile to use non-Jagex profile or default
         updateProfileBasedOnCharacter();
     }
+
+    renderAccountsList();
 }
 
 async function addAccountsHandler() {
@@ -774,6 +1164,7 @@ function playNoJagexAccount() {
         await checkForOutdatedLaunch();
 
         const proxy = getProxyValues();
+        const ramPreference = getClientRamPreference();
         const selectedVersion = document.getElementById('client').value;
 
         // Check if a valid client version is selected
@@ -802,7 +1193,8 @@ function playNoJagexAccount() {
                 }
                 const playResult = await window.electron.playNoJagexAccount(
                     version,
-                    proxy
+                    proxy,
+                    ramPreference
                 );
                 if (playResult?.error) {
                     window.electron.errorAlert(playResult.error);
@@ -918,6 +1310,15 @@ function getProxyValues() {
     return { proxyIp: document.getElementById('proxy-ip')?.value || '' };
 }
 
+function getClientRamPreference() {
+    const ramSelect = document.getElementById('client-ram');
+    if (!ramSelect) {
+        return DEFAULT_CLIENT_RAM;
+    }
+
+    return sanitizeRamPreference(ramSelect.value);
+}
+
 function startLoading(event) {
     const button = event.target;
     button.classList.add('loading');
@@ -1031,8 +1432,9 @@ async function initUI(properties) {
     playJagexButton?.removeEventListener('click', playButtonClickHandler);
     playJagexButton?.addEventListener('click', playButtonClickHandler);
 
-    const accounts = await window.electron.readAccounts();
-    await setupSidebarLayout(accounts?.length || 0);
+    const accountsData = await safeReadAccounts();
+    accounts = accountsData ?? [];
+    await setupSidebarLayout(accounts.length);
 
     const orderedClientJars = await orderClientJarsByVersion();
     populateSelectElement('client', orderedClientJars);
@@ -1047,6 +1449,7 @@ async function initUI(properties) {
     await setVersionPreference(properties);
     document.querySelector('.game-info').style = 'display:block';
 
+    await setupRamInput();
     await setupProxyInput();
 }
 
@@ -1352,6 +1755,42 @@ async function checkForOutdatedLaunch() {
  * Also setup Proxy IP input field for change events so we can save to a cookie
  * and persist the value between sessions.
  */
+async function setupRamInput() {
+    const ramSelect = document.getElementById('client-ram');
+    if (!ramSelect) {
+        return;
+    }
+
+    const properties = await window.electron.readProperties();
+    const savedPreference = sanitizeRamPreference(properties['client_ram']);
+
+    if (savedPreference !== properties['client_ram']) {
+        properties['client_ram'] = savedPreference;
+        await window.electron.writeProperties(properties);
+    }
+
+    ensureRamOption(ramSelect, savedPreference);
+
+    const persistPreference = async (rawValue) => {
+        const normalized = sanitizeRamPreference(rawValue);
+        ensureRamOption(ramSelect, normalized);
+
+        const latestProperties = await window.electron.readProperties();
+        if (latestProperties['client_ram'] !== normalized) {
+            latestProperties['client_ram'] = normalized;
+            await window.electron.writeProperties(latestProperties);
+        }
+    };
+
+    ramSelect.addEventListener('change', async (event) => {
+        await persistPreference(event.target.value);
+    });
+
+    ramSelect.addEventListener('blur', async (event) => {
+        await persistPreference(event.target.value);
+    });
+}
+
 async function setupProxyInput() {
     const proxyInput = document.getElementById('proxy-ip');
     if (!proxyInput) {
@@ -1377,4 +1816,56 @@ async function setupProxyInput() {
         properties['proxyip'] = value;
         await window.electron.writeProperties(properties);
     });
+}
+
+function sanitizeRamPreference(value) {
+    if (!value || typeof value !== 'string') {
+        return DEFAULT_CLIENT_RAM;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (normalized === '') {
+        return DEFAULT_CLIENT_RAM;
+    }
+
+    const match = normalized.match(/^(\d+(?:\.\d+)?)([mg])$/);
+    if (!match) {
+        return DEFAULT_CLIENT_RAM;
+    }
+
+    const amount = match[1];
+    const unit = match[2];
+    return `${amount}${unit}`;
+}
+
+function ensureRamOption(selectElement, value) {
+    if (!selectElement) {
+        return;
+    }
+
+    const options = Array.from(selectElement.options || []);
+    if (!options.some((option) => option.value === value)) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = formatRamLabel(value);
+        option.dataset.custom = 'true';
+        selectElement.appendChild(option);
+    }
+
+    selectElement.value = value;
+}
+
+function formatRamLabel(value) {
+    if (typeof value !== 'string') {
+        return value;
+    }
+
+    const match = value.match(/^(\d+(?:\.\d+)?)([mg])$/i);
+    if (!match) {
+        return value;
+    }
+
+    const [, amount, unit] = match;
+    const unitLabel = unit.toLowerCase() === 'g' ? 'GB' : 'MB';
+    return `${amount} ${unitLabel}`;
 }

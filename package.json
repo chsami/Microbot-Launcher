@@ -1,12 +1,14 @@
 {
   "name": "microbot-launcher",
-  "version": "3.2.4",
+  "version": "3.2.5",
   "description": "Launcher for the microbot client",
   "main": "main.js",
   "scripts": {
     "dev": "cross-env DEBUG=true electron .",
     "start": "electron-forge start",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
     "release": "electron-builder --publish always",
     "linux": "electron-builder --linux",
     "mac": "electron-builder --mac"
@@ -24,7 +26,8 @@
     "@electron/fuses": "^1.8.0",
     "cross-env": "^7.0.3",
     "electron": "^33.2.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "jest": "^30.2.0"
   },
   "dependencies": {
     "adm-zip": "^0.5.15",
