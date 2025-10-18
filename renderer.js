@@ -1,6 +1,7 @@
 let accounts = [];
 let iii = null;
 let lastAccountsReadError = null;
+let cleanupAccountsDropdownListeners = null;
 
 /**
  * Properties object used for client versioning, etc.
@@ -434,48 +435,172 @@ function renderAccountsList() {
 
     listContainer.innerHTML = '';
 
+    if (typeof cleanupAccountsDropdownListeners === 'function') {
+        cleanupAccountsDropdownListeners();
+        cleanupAccountsDropdownListeners = null;
+    }
+
     if (!Array.isArray(accounts) || accounts.length === 0) {
         listContainer.style.display = 'none';
         return;
     }
 
-    listContainer.style.display = 'flex';
+    listContainer.style.display = 'block';
 
-    accounts.forEach((account) => {
-        const row = document.createElement('div');
-        row.className = 'account-row';
+    const dropdown = document.createElement('div');
+    dropdown.className = 'accounts-dropdown';
 
-        const nameSpan = document.createElement('span');
-        nameSpan.className = 'account-name';
-        nameSpan.textContent = account.displayName || 'Not set';
+    const toggleButton = document.createElement('button');
+    toggleButton.type = 'button';
+    toggleButton.className = 'accounts-dropdown-toggle';
+    toggleButton.setAttribute('aria-haspopup', 'listbox');
+    toggleButton.setAttribute('aria-expanded', 'false');
+
+    const toggleLabel = document.createElement('span');
+    toggleLabel.className = 'accounts-dropdown-label';
+    toggleLabel.textContent = 'Manage accounts';
+
+    const countBadge = document.createElement('span');
+    countBadge.className = 'accounts-dropdown-count';
+    countBadge.textContent = String(accounts.length);
+
+    const toggleIcon = document.createElement('span');
+    toggleIcon.className = 'accounts-dropdown-icon';
+    toggleIcon.setAttribute('aria-hidden', 'true');
+    toggleIcon.textContent = '▾';
+
+    toggleButton.append(toggleLabel, countBadge, toggleIcon);
+
+    const panel = document.createElement('div');
+    panel.className = 'accounts-dropdown-panel';
+    panel.setAttribute('role', 'listbox');
+
+    const searchWrapper = document.createElement('div');
+    searchWrapper.className = 'accounts-search-wrapper';
+
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.className = 'accounts-search-input';
+    searchInput.placeholder = 'Search accounts…';
+    searchInput.setAttribute('aria-label', 'Search saved accounts');
+
+    searchWrapper.appendChild(searchInput);
+
+    const optionsList = document.createElement('div');
+    optionsList.className = 'accounts-options';
+
+    const emptyMessage = document.createElement('div');
+    emptyMessage.className = 'accounts-options-empty';
+    emptyMessage.textContent = 'No accounts match your search.';
+
+    const createAccountOption = (account) => {
+        const optionRow = document.createElement('div');
+        optionRow.className = 'account-option';
+        optionRow.setAttribute('role', 'option');
+
+        const nameButton = document.createElement('button');
+        nameButton.type = 'button';
+        nameButton.className = 'account-option-name';
+        nameButton.textContent = account.displayName || 'Not set';
+        nameButton.title = `Select ${account.displayName || 'account'}`;
+        nameButton.addEventListener('click', () => {
+            updateCharacterSelection(account.accountId);
+            closeDropdown();
+        });
 
         const deleteButton = document.createElement('button');
         deleteButton.type = 'button';
-        deleteButton.className = 'account-delete-button';
+        deleteButton.className = 'account-option-delete';
         deleteButton.dataset.accountId = account.accountId;
         const accountNameLabel = account.displayName || 'account';
         deleteButton.title = `Delete ${accountNameLabel}`;
-        deleteButton.setAttribute(
-            'aria-label',
-            `Delete ${accountNameLabel}`
-        );
-
-        const icon = document.createElement('span');
-        icon.setAttribute('aria-hidden', 'true');
-        icon.textContent = '🗑️';
-
-        const label = document.createElement('span');
-        label.className = 'account-delete-label';
-        label.textContent = 'Delete';
-
-        deleteButton.append(icon, label);
-        deleteButton.addEventListener('click', () => {
+        deleteButton.setAttribute('aria-label', `Delete ${accountNameLabel}`);
+        deleteButton.innerHTML = '<span aria-hidden="true">🗑️</span>';
+        deleteButton.addEventListener('click', (event) => {
+            event.stopPropagation();
             handleAccountDelete(account.accountId);
         });
 
-        row.append(nameSpan, deleteButton);
-        listContainer.appendChild(row);
+        optionRow.append(nameButton, deleteButton);
+        return optionRow;
+    };
+
+    const renderOptions = (filterText = '') => {
+        optionsList.innerHTML = '';
+        const normalizedFilter = filterText.trim().toLowerCase();
+        let visibleCount = 0;
+
+        accounts.forEach((account) => {
+            const displayName = (account.displayName || 'Not set').toLowerCase();
+            if (
+                normalizedFilter &&
+                !displayName.includes(normalizedFilter)
+            ) {
+                return;
+            }
+
+            visibleCount += 1;
+            optionsList.appendChild(createAccountOption(account));
+        });
+
+        if (visibleCount === 0) {
+            optionsList.appendChild(emptyMessage.cloneNode(true));
+        }
+    };
+
+    const openDropdown = () => {
+        dropdown.classList.add('open');
+        toggleButton.setAttribute('aria-expanded', 'true');
+        renderOptions(searchInput.value);
+        requestAnimationFrame(() => {
+            searchInput.focus();
+        });
+    };
+
+    const closeDropdown = () => {
+        dropdown.classList.remove('open');
+        toggleButton.setAttribute('aria-expanded', 'false');
+        searchInput.value = '';
+    };
+
+    toggleButton.addEventListener('click', () => {
+        if (dropdown.classList.contains('open')) {
+            closeDropdown();
+        } else {
+            openDropdown();
+        }
     });
+
+    searchInput.addEventListener('input', (event) => {
+        renderOptions(event.target.value);
+    });
+
+    const handleOutsideClick = (event) => {
+        if (!dropdown.contains(event.target)) {
+            closeDropdown();
+        }
+    };
+
+    const handleEscapeKey = (event) => {
+        if (event.key === 'Escape') {
+            if (dropdown.classList.contains('open')) {
+                closeDropdown();
+                toggleButton.focus();
+            }
+        }
+    };
+
+    document.addEventListener('click', handleOutsideClick);
+    document.addEventListener('keydown', handleEscapeKey);
+
+    cleanupAccountsDropdownListeners = () => {
+        document.removeEventListener('click', handleOutsideClick);
+        document.removeEventListener('keydown', handleEscapeKey);
+    };
+
+    panel.append(searchWrapper, optionsList);
+    dropdown.append(toggleButton, panel);
+    listContainer.appendChild(dropdown);
 }
 
 async function handleAccountDelete(accountId) {

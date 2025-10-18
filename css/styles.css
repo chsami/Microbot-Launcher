@@ -211,62 +211,184 @@ h2 {
 
 .accounts-list {
     display: none;
-    flex-direction: column;
-    gap: 10px;
     margin-bottom: 20px;
+    position: relative;
     width: 100%;
 }
 
-.account-row {
+.accounts-dropdown {
+    position: relative;
+    width: 100%;
+}
+
+.accounts-dropdown-toggle {
     align-items: center;
     background-color: #1f2638;
-    border-radius: 6px;
+    border: 1px solid #2f3950;
+    border-radius: 8px;
+    color: #ffffff;
+    cursor: pointer;
     display: flex;
+    font-size: 14px;
+    font-weight: 600;
+    gap: 10px;
     justify-content: space-between;
-    padding: 8px 12px;
+    padding: 10px 14px;
     width: 100%;
 }
 
-.account-name {
+.accounts-dropdown-toggle:focus-visible {
+    outline: 2px solid #00d4a4;
+    outline-offset: 2px;
+}
+
+.accounts-dropdown-label {
+    flex: 1;
+    text-align: left;
+}
+
+.accounts-dropdown-count {
+    align-items: center;
+    background-color: #2f3950;
+    border-radius: 12px;
+    display: inline-flex;
+    font-size: 12px;
+    font-weight: 700;
+    justify-content: center;
+    min-width: 24px;
+    padding: 2px 8px;
+}
+
+.accounts-dropdown-icon {
+    font-size: 12px;
+    margin-left: 8px;
+}
+
+.accounts-dropdown.open .accounts-dropdown-icon {
+    transform: rotate(180deg);
+}
+
+.accounts-dropdown-panel {
+    background-color: #1a1f2d;
+    border: 1px solid #2f3950;
+    border-radius: 10px;
+    box-shadow: 0 12px 30px rgba(5, 10, 26, 0.35);
+    display: none;
+    left: 0;
+    margin-top: 8px;
+    max-height: 320px;
+    overflow: hidden;
+    position: absolute;
+    width: 100%;
+    z-index: 10;
+}
+
+.accounts-dropdown.open .accounts-dropdown-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+.accounts-search-wrapper {
+    border-bottom: 1px solid #2f3950;
+    padding: 10px;
+}
+
+.accounts-search-input {
+    background-color: #151927;
+    border: 1px solid #2f3950;
+    border-radius: 6px;
     color: #ffffff;
     font-size: 14px;
+    padding: 8px 10px;
+    width: 100%;
+}
+
+.accounts-search-input::placeholder {
+    color: #8991a9;
+}
+
+.accounts-options {
+    display: flex;
+    flex-direction: column;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 6px;
+    scrollbar-width: thin;
+}
+
+.accounts-options::-webkit-scrollbar {
+    width: 8px;
+}
+
+.accounts-options::-webkit-scrollbar-thumb {
+    background-color: #2f3950;
+    border-radius: 4px;
+}
+
+.account-option {
+    align-items: center;
+    background: transparent;
+    border-radius: 6px;
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+    padding: 6px 8px;
+    transition: background-color 0.2s ease;
+}
+
+.account-option:hover {
+    background-color: rgba(0, 212, 164, 0.08);
+}
+
+.account-option-name {
+    background: none;
+    border: none;
+    color: #ffffff;
+    cursor: pointer;
+    flex: 1;
+    font-size: 14px;
     font-weight: 500;
-    margin-right: 12px;
     overflow: hidden;
+    padding: 4px 0;
+    text-align: left;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.account-delete-button {
+.account-option-name:focus-visible {
+    outline: 2px solid #00d4a4;
+    outline-offset: 2px;
+}
+
+.account-option-delete {
     align-items: center;
-    background: transparent;
+    background: none;
     border: none;
     color: #ff5c5c;
     cursor: pointer;
-    display: flex;
-    font-size: 13px;
-    font-weight: 600;
-    gap: 6px;
-    padding: 4px 6px;
+    display: inline-flex;
+    font-size: 16px;
+    height: 28px;
+    justify-content: center;
+    padding: 4px;
     transition: color 0.2s ease;
+    width: 28px;
 }
 
-.account-delete-button:hover {
+.account-option-delete:hover {
     color: #ff8a8a;
 }
 
-.account-delete-button:focus-visible {
+.account-option-delete:focus-visible {
     outline: 2px solid #ff5c5c;
     outline-offset: 2px;
 }
 
-.account-delete-button span[aria-hidden='true'] {
-    font-size: 14px;
-    line-height: 1;
-}
-
-.account-delete-label {
+.accounts-options-empty {
+    color: #8991a9;
     font-size: 13px;
+    padding: 12px 8px;
+    text-align: center;
 }
 
 .logout-button:hover,
