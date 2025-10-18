@@ -1,13 +1,99 @@
 module.exports = async function (deps) {
     const { spawn, path, dialog, shell, log, fs, microbotDir, ipcMain } = deps;
 
-    const memoryArgs = buildMemoryArgs(process.argv, log);
-    log.info(`Configured client memory: ${memoryArgs.join(' ')}`);
+    const cliRamValue = extractRamValue(process.argv);
+    const cliMemory = buildMemoryArgsFromRam(cliRamValue, log, '--ram');
+    const defaultMemoryConfig =
+        cliMemory ?? {
+            args: [`-Xms${DEFAULT_XMS_VALUE}`, `-Xmx${DEFAULT_XMX_VALUE}`],
+            normalized: DEFAULT_CLIENT_RAM
+        };
+    const defaultMemorySource = cliMemory
+        ? `CLI --ram (${cliMemory.normalized})`
+        : `launcher default (${DEFAULT_CLIENT_RAM})`;
 
-    ipcMain.handle('open-client', async (event, version, proxy, account) => {
-        try {
+    log.info(
+        `Configured default client memory (${defaultMemorySource}): ${defaultMemoryConfig.args.join(' ')}`
+    );
+
+    function selectMemoryArgs(requestedRam) {
+        const rawValue =
+            typeof requestedRam === 'string'
+                ? requestedRam.trim().toLowerCase()
+                : '';
+        const override = buildMemoryArgsFromRam(
+            rawValue,
+            log,
+            'client RAM preference'
+        );
+
+        if (override) {
+            return {
+                args: override.args,
+                source: `client preference (${override.normalized})`
+            };
+        }
+
+        return {
+            args: [...defaultMemoryConfig.args],
+            source: defaultMemorySource
+        };
+    }
+
+    ipcMain.handle(
+        'open-client',
+        async (event, version, proxy, account, ramPreference) => {
+            try {
+                const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
+                const memoryConfig = selectMemoryArgs(ramPreference);
+                log.info(
+                    `Launching client with ${memoryConfig.source} memory settings: ${memoryConfig.args.join(' ')}`
+                );
+                const commandArgs = [...memoryConfig.args, '-jar', jarPath];
+
+                // apply proxy args (done differently depending on client version)
+                const err = addProxyArgs(commandArgs, proxy);
+                if (err) {
+                    log.error(err.message);
+                    return { error: err.message };
+                }
+
+                if (account && account.profile) {
+                    commandArgs.push(`-profile=${account.profile}`);
+                }
+
+                if (process.platform === 'darwin') {
+                    commandArgs.unshift(
+                        '--add-opens=java.desktop/com.apple.eawt=ALL-UNNAMED'
+                    );
+                    commandArgs.unshift(
+                        '--add-opens=java.desktop/sun.awt=ALL-UNNAMED'
+                    );
+                }
+
+                checkJavaAndRunJar(commandArgs, dialog, shell);
+                return { success: true };
+            } catch (error) {
+                log.error(error.message);
+                return { error: error.message };
+            }
+        }
+    );
+
+    ipcMain.handle(
+        'play-no-jagex-account',
+        async (event, version, proxy, ramPreference) => {
             const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
-            const commandArgs = [...memoryArgs, '-jar', jarPath];
+            const memoryConfig = selectMemoryArgs(ramPreference);
+            log.info(
+                `Launching non-Jagex client with ${memoryConfig.source} memory settings: ${memoryConfig.args.join(' ')}`
+            );
+            const commandArgs = [
+                ...memoryConfig.args,
+                '-jar',
+                jarPath,
+                '-clean-jagex-launcher'
+            ];
 
             // apply proxy args (done differently depending on client version)
             const err = addProxyArgs(commandArgs, proxy);
@@ -16,10 +102,31 @@ module.exports = async function (deps) {
                 return { error: err.message };
             }
 
-            if (account && account.profile) {
-                commandArgs.push(`-profile=${account.profile}`);
+            if (
+                fs.existsSync(
+                    path.join(microbotDir, 'non-jagex-preferred-profile.json')
+                )
+            ) {
+                try {
+                    const profileData = JSON.parse(
+                        fs.readFileSync(
+                            path.join(
+                                microbotDir,
+                                'non-jagex-preferred-profile.json'
+                            ),
+                            'utf8'
+                        )
+                    );
+                    if (profileData?.profile && profileData.profile !== 'default') {
+                        commandArgs.push(`-profile=${profileData.profile}`);
+                    }
+                } catch (error) {
+                    log.error(
+                        'Invalid non-jagex-preferred-profile.json:',
+                        error.message
+                    );
+                }
             }
-
             if (process.platform === 'darwin') {
                 commandArgs.unshift(
                     '--add-opens=java.desktop/com.apple.eawt=ALL-UNNAMED'
@@ -31,57 +138,8 @@ module.exports = async function (deps) {
 
             checkJavaAndRunJar(commandArgs, dialog, shell);
             return { success: true };
-        } catch (error) {
-            log.error(error.message);
-            return { error: error.message };
         }
-    });
-
-    ipcMain.handle('play-no-jagex-account', async (event, version, proxy) => {
-        const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
-        const commandArgs = [...memoryArgs, '-jar', jarPath, '-clean-jagex-launcher'];
-
-        // apply proxy args (done differently depending on client version)
-        const err = addProxyArgs(commandArgs, proxy);
-        if (err) {
-            log.error(err.message);
-            return { error: err.message };
-        }
-
-        if (
-            fs.existsSync(
-                path.join(microbotDir, 'non-jagex-preferred-profile.json')
-            )
-        ) {
-            try {
-                const profileData = JSON.parse(
-                    fs.readFileSync(
-                        path.join(
-                            microbotDir,
-                            'non-jagex-preferred-profile.json'
-                        ),
-                        'utf8'
-                    )
-                );
-                if (profileData?.profile && profileData.profile !== 'default') {
-                    commandArgs.push(`-profile=${profileData.profile}`);
-                }
-            } catch (error) {
-                log.error(
-                    'Invalid non-jagex-preferred-profile.json:',
-                    error.message
-                );
-            }
-        }
-        if (process.platform === 'darwin') {
-            commandArgs.unshift(
-                '--add-opens=java.desktop/com.apple.eawt=ALL-UNNAMED'
-            );
-            commandArgs.unshift('--add-opens=java.desktop/sun.awt=ALL-UNNAMED');
-        }
-        checkJavaAndRunJar(commandArgs, dialog, shell);
-        return { success: true };
-    });
+    );
 
     function isJavaInstalled(callback) {
         try {
@@ -318,24 +376,29 @@ module.exports = async function (deps) {
 const DEFAULT_XMS_VALUE = '512m';
 const DEFAULT_XMX_VALUE = '1g';
 const DEFAULT_XMS_MB = 512;
+const DEFAULT_CLIENT_RAM = DEFAULT_XMX_VALUE;
 
-function buildMemoryArgs(argv, log) {
-    const ramValue = extractRamValue(argv);
-    if (!ramValue) {
-        return [`-Xms${DEFAULT_XMS_VALUE}`, `-Xmx${DEFAULT_XMX_VALUE}`];
+function buildMemoryArgsFromRam(ramValue, log, contextLabel) {
+    if (!ramValue || typeof ramValue !== 'string') {
+        return null;
     }
 
     const parsed = normalizeRamValue(ramValue);
     if (!parsed) {
-        log.warn(
-            `Invalid --ram value "${ramValue}". Falling back to default memory settings.`
-        );
-        return [`-Xms${DEFAULT_XMS_VALUE}`, `-Xmx${DEFAULT_XMX_VALUE}`];
+        if (contextLabel) {
+            log.warn(
+                `Invalid ${contextLabel} value "${ramValue}". Falling back to default memory settings.`
+            );
+        }
+        return null;
     }
 
     const xmsValue = parsed.mb < DEFAULT_XMS_MB ? parsed.normalized : DEFAULT_XMS_VALUE;
 
-    return [`-Xms${xmsValue}`, `-Xmx${parsed.normalized}`];
+    return {
+        args: [`-Xms${xmsValue}`, `-Xmx${parsed.normalized}`],
+        normalized: parsed.normalized
+    };
 }
 
 function extractRamValue(argv) {
