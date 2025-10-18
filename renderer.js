@@ -3,6 +3,8 @@ let iii = null;
 let lastAccountsReadError = null;
 let cleanupAccountsDropdownListeners = null;
 
+const DEFAULT_CLIENT_RAM = '1g';
+
 /**
  * Properties object used for client versioning, etc.
  * @typedef {{client: string, launcher_html: string, launcher: string, version_pref: string}} MicrobotProperties
@@ -27,6 +29,7 @@ async function openClient() {
     if (!result.exists) return;
 
     const proxy = getProxyValues();
+    const ramPreference = getClientRamPreference();
 
     document.getElementById('loader-container').style.display = 'none';
 
@@ -51,7 +54,8 @@ async function openClient() {
             const launchResult = await window.electron.openClient(
                 version,
                 proxy,
-                selectedAccount
+                selectedAccount,
+                ramPreference
             );
             if (launchResult?.error) {
                 window.electron.errorAlert(launchResult.error);
@@ -884,6 +888,7 @@ function playNoJagexAccount() {
         await checkForOutdatedLaunch();
 
         const proxy = getProxyValues();
+        const ramPreference = getClientRamPreference();
         const selectedVersion = document.getElementById('client').value;
 
         // Check if a valid client version is selected
@@ -912,7 +917,8 @@ function playNoJagexAccount() {
                 }
                 const playResult = await window.electron.playNoJagexAccount(
                     version,
-                    proxy
+                    proxy,
+                    ramPreference
                 );
                 if (playResult?.error) {
                     window.electron.errorAlert(playResult.error);
@@ -1026,6 +1032,15 @@ function reminderMeLaterBtn() {
 function getProxyValues() {
     // Get the value of the proxy IP
     return { proxyIp: document.getElementById('proxy-ip')?.value || '' };
+}
+
+function getClientRamPreference() {
+    const ramSelect = document.getElementById('client-ram');
+    if (!ramSelect) {
+        return DEFAULT_CLIENT_RAM;
+    }
+
+    return sanitizeRamPreference(ramSelect.value);
 }
 
 function startLoading(event) {
@@ -1158,6 +1173,7 @@ async function initUI(properties) {
     await setVersionPreference(properties);
     document.querySelector('.game-info').style = 'display:block';
 
+    await setupRamInput();
     await setupProxyInput();
 }
 
@@ -1463,6 +1479,42 @@ async function checkForOutdatedLaunch() {
  * Also setup Proxy IP input field for change events so we can save to a cookie
  * and persist the value between sessions.
  */
+async function setupRamInput() {
+    const ramSelect = document.getElementById('client-ram');
+    if (!ramSelect) {
+        return;
+    }
+
+    const properties = await window.electron.readProperties();
+    const savedPreference = sanitizeRamPreference(properties['client_ram']);
+
+    if (savedPreference !== properties['client_ram']) {
+        properties['client_ram'] = savedPreference;
+        await window.electron.writeProperties(properties);
+    }
+
+    ensureRamOption(ramSelect, savedPreference);
+
+    const persistPreference = async (rawValue) => {
+        const normalized = sanitizeRamPreference(rawValue);
+        ensureRamOption(ramSelect, normalized);
+
+        const latestProperties = await window.electron.readProperties();
+        if (latestProperties['client_ram'] !== normalized) {
+            latestProperties['client_ram'] = normalized;
+            await window.electron.writeProperties(latestProperties);
+        }
+    };
+
+    ramSelect.addEventListener('change', async (event) => {
+        await persistPreference(event.target.value);
+    });
+
+    ramSelect.addEventListener('blur', async (event) => {
+        await persistPreference(event.target.value);
+    });
+}
+
 async function setupProxyInput() {
     const proxyInput = document.getElementById('proxy-ip');
     if (!proxyInput) {
@@ -1488,4 +1540,56 @@ async function setupProxyInput() {
         properties['proxyip'] = value;
         await window.electron.writeProperties(properties);
     });
+}
+
+function sanitizeRamPreference(value) {
+    if (!value || typeof value !== 'string') {
+        return DEFAULT_CLIENT_RAM;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (normalized === '') {
+        return DEFAULT_CLIENT_RAM;
+    }
+
+    const match = normalized.match(/^(\d+(?:\.\d+)?)([mg])$/);
+    if (!match) {
+        return DEFAULT_CLIENT_RAM;
+    }
+
+    const amount = match[1];
+    const unit = match[2];
+    return `${amount}${unit}`;
+}
+
+function ensureRamOption(selectElement, value) {
+    if (!selectElement) {
+        return;
+    }
+
+    const options = Array.from(selectElement.options || []);
+    if (!options.some((option) => option.value === value)) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = formatRamLabel(value);
+        option.dataset.custom = 'true';
+        selectElement.appendChild(option);
+    }
+
+    selectElement.value = value;
+}
+
+function formatRamLabel(value) {
+    if (typeof value !== 'string') {
+        return value;
+    }
+
+    const match = value.match(/^(\d+(?:\.\d+)?)([mg])$/i);
+    if (!match) {
+        return value;
+    }
+
+    const [, amount, unit] = match;
+    const unitLabel = unit.toLowerCase() === 'g' ? 'GB' : 'MB';
+    return `${amount} ${unitLabel}`;
 }
