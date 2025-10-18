@@ -148,15 +148,20 @@ async function playButtonClickHandler() {
 /**
  * Helper function to update character select and trigger profile update
  * @param {string} accountId - The account ID to select
+ * @param {{suppressRender?: boolean}} [options] - Optional flags
  * @returns {void}
  */
-function updateCharacterSelection(accountId) {
+function updateCharacterSelection(accountId, options = {}) {
     const characterSelect = document.getElementById('character');
     if (characterSelect) {
         characterSelect.value = accountId;
         // Manually dispatch a change event to trigger the onChange handler
         const changeEvent = new Event('change');
         characterSelect.dispatchEvent(changeEvent);
+    }
+
+    if (!options?.suppressRender) {
+        renderAccountsList();
     }
 }
 
@@ -423,12 +428,14 @@ function populateAccountSelector(characters = [], selectedAccount = null) {
     });
 
     if (selectedAccount) {
-        updateCharacterSelection(selectedAccount);
+        updateCharacterSelection(selectedAccount, { suppressRender: true });
     }
 }
 
 function renderAccountsList() {
-    const listContainer = document.getElementById('accounts-list');
+    const listContainer = document.getElementById(
+        'accounts-dropdown-container'
+    );
     if (!listContainer) {
         return;
     }
@@ -458,7 +465,6 @@ function renderAccountsList() {
 
     const toggleLabel = document.createElement('span');
     toggleLabel.className = 'accounts-dropdown-label';
-    toggleLabel.textContent = 'Manage accounts';
 
     const countBadge = document.createElement('span');
     countBadge.className = 'accounts-dropdown-count';
@@ -468,6 +474,41 @@ function renderAccountsList() {
     toggleIcon.className = 'accounts-dropdown-icon';
     toggleIcon.setAttribute('aria-hidden', 'true');
     toggleIcon.textContent = '▾';
+
+    const characterSelect = document.getElementById('character');
+    const initialSelectedValue = characterSelect?.value || 'none';
+    let currentSelectedValue = initialSelectedValue;
+
+    const getAccountLabel = (account) => {
+        const label = account?.displayName?.trim();
+        return label && label.length > 0 ? label : 'Not set';
+    };
+
+    const updateToggleLabel = (value) => {
+        if (value === 'none') {
+            toggleLabel.textContent = 'None';
+            toggleButton.setAttribute('aria-label', 'No Jagex account selected');
+            toggleButton.title = 'No Jagex account selected';
+            return;
+        }
+
+        const matchingAccount = accounts.find(
+            (account) => account.accountId === value
+        );
+
+        if (matchingAccount) {
+            const label = getAccountLabel(matchingAccount);
+            toggleLabel.textContent = label;
+            toggleButton.setAttribute('aria-label', `Selected ${label}`);
+            toggleButton.title = `Selected ${label}`;
+        } else {
+            toggleLabel.textContent = 'Select Jagex account';
+            toggleButton.setAttribute('aria-label', 'Select a Jagex account');
+            toggleButton.title = 'Select a Jagex account';
+        }
+    };
+
+    updateToggleLabel(currentSelectedValue);
 
     toggleButton.append(toggleLabel, countBadge, toggleIcon);
 
@@ -493,32 +534,79 @@ function renderAccountsList() {
     emptyMessage.className = 'accounts-options-empty';
     emptyMessage.textContent = 'No accounts match your search.';
 
-    const createAccountOption = (account) => {
+    const closeDropdown = () => {
+        dropdown.classList.remove('open');
+        toggleButton.setAttribute('aria-expanded', 'false');
+        searchInput.value = '';
+    };
+
+    const setSelectedAccount = (value) => {
+        currentSelectedValue = value;
+        updateToggleLabel(value);
+        updateCharacterSelection(value, { suppressRender: true });
+        closeDropdown();
+        toggleButton.focus();
+    };
+
+    const createNoneOption = () => {
         const optionRow = document.createElement('div');
         optionRow.className = 'account-option';
         optionRow.setAttribute('role', 'option');
+        if (currentSelectedValue === 'none') {
+            optionRow.classList.add('selected');
+            optionRow.setAttribute('aria-selected', 'true');
+        } else {
+            optionRow.setAttribute('aria-selected', 'false');
+        }
 
         const nameButton = document.createElement('button');
         nameButton.type = 'button';
         nameButton.className = 'account-option-name';
-        nameButton.textContent = account.displayName || 'Not set';
-        nameButton.title = `Select ${account.displayName || 'account'}`;
+        nameButton.textContent = 'None';
+        nameButton.title = 'Use no Jagex account';
         nameButton.addEventListener('click', () => {
-            updateCharacterSelection(account.accountId);
-            closeDropdown();
+            setSelectedAccount('none');
+        });
+
+        optionRow.appendChild(nameButton);
+        return optionRow;
+    };
+
+    const createAccountOption = (account) => {
+        const optionRow = document.createElement('div');
+        optionRow.className = 'account-option';
+        optionRow.setAttribute('role', 'option');
+        optionRow.dataset.accountId = account.accountId;
+
+        if (account.accountId === currentSelectedValue) {
+            optionRow.classList.add('selected');
+            optionRow.setAttribute('aria-selected', 'true');
+        } else {
+            optionRow.setAttribute('aria-selected', 'false');
+        }
+
+        const label = getAccountLabel(account);
+
+        const nameButton = document.createElement('button');
+        nameButton.type = 'button';
+        nameButton.className = 'account-option-name';
+        nameButton.textContent = label;
+        nameButton.title = `Select ${label}`;
+        nameButton.addEventListener('click', () => {
+            setSelectedAccount(account.accountId);
         });
 
         const deleteButton = document.createElement('button');
         deleteButton.type = 'button';
         deleteButton.className = 'account-option-delete';
         deleteButton.dataset.accountId = account.accountId;
-        const accountNameLabel = account.displayName || 'account';
-        deleteButton.title = `Delete ${accountNameLabel}`;
-        deleteButton.setAttribute('aria-label', `Delete ${accountNameLabel}`);
+        deleteButton.title = `Delete ${label}`;
+        deleteButton.setAttribute('aria-label', `Delete ${label}`);
         deleteButton.innerHTML = '<span aria-hidden="true">🗑️</span>';
-        deleteButton.addEventListener('click', (event) => {
+        deleteButton.addEventListener('click', async (event) => {
             event.stopPropagation();
-            handleAccountDelete(account.accountId);
+            closeDropdown();
+            await handleAccountDelete(account.accountId);
         });
 
         optionRow.append(nameButton, deleteButton);
@@ -530,8 +618,17 @@ function renderAccountsList() {
         const normalizedFilter = filterText.trim().toLowerCase();
         let visibleCount = 0;
 
+        const shouldShowNone =
+            normalizedFilter.length === 0 ||
+            'none'.includes(normalizedFilter);
+
+        if (shouldShowNone) {
+            optionsList.appendChild(createNoneOption());
+            visibleCount += 1;
+        }
+
         accounts.forEach((account) => {
-            const displayName = (account.displayName || 'Not set').toLowerCase();
+            const displayName = getAccountLabel(account).toLowerCase();
             if (
                 normalizedFilter &&
                 !displayName.includes(normalizedFilter)
@@ -539,8 +636,8 @@ function renderAccountsList() {
                 return;
             }
 
-            visibleCount += 1;
             optionsList.appendChild(createAccountOption(account));
+            visibleCount += 1;
         });
 
         if (visibleCount === 0) {
@@ -555,12 +652,6 @@ function renderAccountsList() {
         requestAnimationFrame(() => {
             searchInput.focus();
         });
-    };
-
-    const closeDropdown = () => {
-        dropdown.classList.remove('open');
-        toggleButton.setAttribute('aria-expanded', 'false');
-        searchInput.value = '';
     };
 
     toggleButton.addEventListener('click', () => {
@@ -690,18 +781,23 @@ async function setupSidebarLayout(amountOfAccounts) {
     const playButtonsDiv = document.querySelector('.play-buttons');
     const logoutButton = document.getElementById('logout');
     const addAccountsButton = document.getElementById('add-accounts');
-    const characterSelect = document.getElementById('character');
     const characterSelectLabel = document.querySelector(
         'label[for="character"]'
     );
-    renderAccountsList();
+    const accountsDropdownContainer = document.getElementById(
+        'accounts-dropdown-container'
+    );
 
     if (amountOfAccounts > 0) {
         playJagexButton.innerHTML = 'Play With Jagex Account';
         logoutButton.style.display = 'block';
         playButtonsDiv.style.display = 'flex';
-        characterSelectLabel.style.display = 'block';
-        characterSelect.style.display = 'block';
+        if (characterSelectLabel) {
+            characterSelectLabel.style.display = 'block';
+        }
+        if (accountsDropdownContainer) {
+            accountsDropdownContainer.style.display = 'block';
+        }
         addAccountsButton.style.display = 'block';
         populateAccountSelector(accounts, selectedAccount);
         const accountStillExists = accounts.some(
@@ -709,9 +805,11 @@ async function setupSidebarLayout(amountOfAccounts) {
         );
         if (!accountStillExists) {
             if (accounts.length > 0) {
-                updateCharacterSelection(accounts[0].accountId);
+                updateCharacterSelection(accounts[0].accountId, {
+                    suppressRender: true
+                });
             } else {
-                updateCharacterSelection('none');
+                updateCharacterSelection('none', { suppressRender: true });
             }
         }
         // Note: populateAccountSelector uses updateCharacterSelection which
@@ -723,8 +821,12 @@ async function setupSidebarLayout(amountOfAccounts) {
         playJagexButton.innerHTML = 'Login Jagex Account';
         logoutButton.style.display = 'none';
         playButtonsDiv.style.display = 'block';
-        characterSelectLabel.style.display = 'none';
-        characterSelect.style.display = 'none';
+        if (characterSelectLabel) {
+            characterSelectLabel.style.display = 'none';
+        }
+        if (accountsDropdownContainer) {
+            accountsDropdownContainer.style.display = 'none';
+        }
         addAccountsButton.style.display = 'none';
 
         // Clear character selector and make sure 'none' is selected
@@ -733,6 +835,8 @@ async function setupSidebarLayout(amountOfAccounts) {
         // Also update the profile to use non-Jagex profile or default
         updateProfileBasedOnCharacter();
     }
+
+    renderAccountsList();
 }
 
 async function addAccountsHandler() {

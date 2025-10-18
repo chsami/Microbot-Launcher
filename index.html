@@ -98,11 +98,6 @@
                     <button id="add-accounts" class="add-accounts loadingButton">
                         Add accounts
                     </button>
-                    <div
-                        id="accounts-list"
-                        class="accounts-list"
-                        aria-live="polite"
-                    ></div>
                     <button id="logout" class="logout-button loadingButton">
                         Remove All Accounts
                     </button>
@@ -110,7 +105,17 @@
                         <label for="client">Version</label>
                         <select id="client"></select>
                         <label for="character">Jagex Account</label>
-                        <select id="character"></select>
+                        <div
+                            id="accounts-dropdown-container"
+                            class="accounts-dropdown-container"
+                            aria-live="polite"
+                        ></div>
+                        <select
+                            id="character"
+                            class="account-select-hidden"
+                            aria-hidden="true"
+                            tabindex="-1"
+                        ></select>
                         <label for="profile">Profile</label>
                         <select id="profile">
                             <option value="default">Default</option>

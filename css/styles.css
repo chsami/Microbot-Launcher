@@ -209,11 +209,16 @@ h2 {
     display: none;
 }
 
-.accounts-list {
+
+.accounts-dropdown-container {
     display: none;
-    margin-bottom: 20px;
+    margin-bottom: 15px;
     position: relative;
     width: 100%;
+}
+
+.account-select-hidden {
+    display: none;
 }
 
 .accounts-dropdown {
@@ -338,6 +343,14 @@ h2 {
 
 .account-option:hover {
     background-color: rgba(0, 212, 164, 0.08);
+}
+
+.account-option.selected {
+    background-color: rgba(0, 212, 164, 0.12);
+}
+
+.account-option.selected .account-option-name {
+    font-weight: 600;
 }
 
 .account-option-name {
