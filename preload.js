@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('electron', {
             ramPreference
         ),
     readAccounts: () => ipcRenderer.invoke('read-accounts'),
+    deleteAccount: (accountId) =>
+        ipcRenderer.invoke('delete-account', accountId),
     removeAccounts: () => ipcRenderer.invoke('remove-accounts'),
     setProfileJagexAccount: (account, profile) =>
         ipcRenderer.invoke('set-profile-jagex', account, profile),
@@ -48,14 +50,22 @@ contextBridge.exposeInMainWorld('electron', {
     launcherVersion: () => ipcRenderer.invoke('launcher-version'),
     logError: (message) => ipcRenderer.invoke('log-error', message),
     errorAlert: (options) => ipcRenderer.invoke('error-alert', options),
-    showConfirmationDialog: (message, detail, title, yesButton, noButton) =>
+    showConfirmationDialog: (
+        message,
+        detail,
+        title,
+        yesButton,
+        noButton,
+        options
+    ) =>
         ipcRenderer.invoke(
             'show-confirmation-dialog',
             message,
             detail,
             title,
             yesButton,
-            noButton
+            noButton,
+            options
         ),
     openLocation: (locationKey) =>
         ipcRenderer.invoke('open-location', locationKey),
