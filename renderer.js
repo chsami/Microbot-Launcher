@@ -905,6 +905,7 @@ function setupRefreshAccountsButton() {
                 });
                 await setupSidebarLayout(accounts.length);
                 await updateProfileBasedOnCharacter();
+                await restoreSelectedAccountIfAny();
             } else {
                 // fallback: re-read accounts via existing flow
                 const latestAccounts = await safeReadAccounts();
@@ -912,6 +913,7 @@ function setupRefreshAccountsButton() {
                     accounts = latestAccounts; // already sorted in safeReadAccounts
                     await setupSidebarLayout(accounts.length);
                     await updateProfileBasedOnCharacter();
+                    await restoreSelectedAccountIfAny();
                 }
             }
         } catch (err) {
