@@ -375,7 +375,6 @@ module.exports = async function (deps) {
 
 const DEFAULT_XMS_VALUE = '512m';
 const DEFAULT_XMX_VALUE = '1g';
-const DEFAULT_XMS_MB = 512;
 const DEFAULT_CLIENT_RAM = DEFAULT_XMX_VALUE;
 
 function buildMemoryArgsFromRam(ramValue, log, contextLabel) {
@@ -393,10 +392,8 @@ function buildMemoryArgsFromRam(ramValue, log, contextLabel) {
         return null;
     }
 
-    const xmsValue = parsed.mb < DEFAULT_XMS_MB ? parsed.normalized : DEFAULT_XMS_VALUE;
-
     return {
-        args: [`-Xms${xmsValue}`, `-Xmx${parsed.normalized}`],
+        args: [`-Xms${parsed.normalized}`, `-Xmx${parsed.normalized}`],
         normalized: parsed.normalized
     };
 }
