@@ -64,6 +64,7 @@ async function loadLibraries() {
 async function createWindow() {
     // Create the main window, but don't show it yet
     mainWindow = new BrowserWindow({
+        fullScreen: true,
         width: 1280,
         height: process.env.DEBUG !== 'true' ? 750 : 800,
         show: false, // Don't show the main window immediately

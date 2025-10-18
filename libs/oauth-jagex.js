@@ -195,8 +195,7 @@ async function getToken(code) {
         return response.data.id_token;
     } catch (error) {
         log.error(
-            `Error getting token: ${
-                error.response ? error.response.data : error.message
+            `Error getting token: ${error.response ? error.response.data : error.message
             }`
         );
         return null;
@@ -220,8 +219,7 @@ async function getSessionId(idToken) {
         return response.data.sessionId;
     } catch (error) {
         log.error(
-            `Error getting session ID: ${
-                error.response ? error.response.data : error.message
+            `Error getting session ID: ${error.response ? error.response.data : error.message
             }`
         );
         return null;
@@ -418,4 +416,4 @@ async function startAuthFlow() {
     });
 }
 
-module.exports = { startAuthFlow };
+module.exports = { startAuthFlow, writeAccountsToFile };

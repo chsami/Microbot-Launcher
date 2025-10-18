@@ -70,6 +70,56 @@ module.exports = async function (deps) {
     await jarExecutorHandler(deps);
     const packageVersion = packageJson.version;
 
+    ipcMain.handle('refresh-accounts', async () => {
+        try {
+            const { writeAccountsToFile } = require(path.join(
+                projectDir,
+                'libs',
+                'oauth-jagex.js'
+            ));
+
+            const accountsPath = path.join(microbotDir, 'accounts.json');
+            if (!fs.existsSync(accountsPath)) {
+                return { error: 'accounts.json does not exist' };
+            }
+
+            let accountsData = [];
+            try {
+                const raw = fs.readFileSync(accountsPath, 'utf8');
+                accountsData = JSON.parse(raw);
+            } catch (err) {
+                log.error('Failed to read accounts.json for refresh:', err.message);
+                return { error: 'Failed to read accounts.json' };
+            }
+
+            if (!Array.isArray(accountsData) || accountsData.length === 0) {
+                return { error: 'No accounts found to refresh' };
+            }
+
+            // Use first account's sessionId (assuming all accounts share the same session scope)
+            const firstAccount = accountsData[0];
+            const sessionId = firstAccount && firstAccount.sessionId;
+            if (!sessionId) {
+                return { error: 'No sessionId found in accounts.json' };
+            }
+
+            await writeAccountsToFile(sessionId);
+
+            // Re-read accounts after refresh
+            try {
+                const updatedRaw = fs.readFileSync(accountsPath, 'utf8');
+                const updatedAccounts = JSON.parse(updatedRaw);
+                return { success: true, accounts: updatedAccounts };
+            } catch (err) {
+                log.error('Failed to read updated accounts.json after refresh:', err.message);
+                return { success: true };
+            }
+        } catch (error) {
+            log.error('Error refreshing accounts:', error.message);
+            return { error: error.message };
+        }
+    });
+
     ipcMain.handle('download-client', async (event, version) => {
         const url = `${filestorage}/releases/microbot/stable/microbot-${version}.jar`;
         try {
