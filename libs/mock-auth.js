@@ -7,7 +7,7 @@ const crypto = require('crypto');
 module.exports = function setupMockAuth(deps) {
     const { ipcMain, log } = deps;
 
-    const isMockEnabled = false;
+    const isMockEnabled = process.env.MOCK_AUTH === '1' || process.env.MOCK_AUTH === 'true';
 
     const latency = Number.parseInt(process.env.MOCK_LATENCY_MS || '0', 10) || 0;
     const failurePct = Number.parseFloat(process.env.MOCK_FAIL_PCT || '0') || 0;
@@ -130,15 +130,35 @@ module.exports = function setupMockAuth(deps) {
             if (!currentUser) {
                 return { error: 'Not authenticated.' };
             }
+            const currentPassword = String(payload?.currentPassword || '').trim();
             const newPassword = String(payload?.newPassword || '').trim();
-            if (newPassword.length < 8) {
-                return { error: 'Password must be at least 8 characters.' };
+
+            if (!currentPassword) {
+                return { error: 'Current password is required.' };
             }
+            if (newPassword.length < 8) {
+                return { error: 'New password must be at least 8 characters.' };
+            }
+
             const user = users.get(currentUser.normalizedEmail);
             if (!user) {
                 return { error: 'Not authenticated.' };
             }
-            user.passwordHash = hashPassword(newPassword);
+
+            // Verify current password
+            const currentPasswordHash = hashPassword(currentPassword);
+            if (currentPasswordHash !== user.passwordHash) {
+                registerFailure(user);
+                return { error: 'Current password is incorrect.' };
+            }
+
+            // Check if new password is same as current
+            const newPasswordHash = hashPassword(newPassword);
+            if (newPasswordHash === user.passwordHash) {
+                return { error: 'New password must be different from current password.' };
+            }
+
+            user.passwordHash = newPasswordHash;
             resetFailures(user);
             return { success: true };
         } catch (error) {

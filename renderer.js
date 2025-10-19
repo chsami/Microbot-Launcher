@@ -87,7 +87,7 @@ function showChangePasswordModal() {
     $('change-password-form')?.reset();
     setAuthError('', 'change-password-error');
     modal.classList.remove('auth-hidden');
-    const input = $('change-password-input');
+    const input = $('current-password-input');
     if (input) {
         setTimeout(() => input.focus(), 0);
     }
@@ -200,9 +200,15 @@ async function handleSignOut() {
 async function handleChangePassword(event) {
     event.preventDefault();
     if (!mockAuthEnabled) return;
+    const currentPassword = $('current-password-input')?.value || '';
     const newPassword = $('change-password-input')?.value || '';
+
+    if (!currentPassword) {
+        setAuthError('Current password is required.', 'change-password-error');
+        return;
+    }
     if (newPassword.length < 8) {
-        setAuthError('Password must be at least 8 characters.', 'change-password-error');
+        setAuthError('New password must be at least 8 characters.', 'change-password-error');
         return;
     }
     setAuthError('', 'change-password-error');
@@ -210,6 +216,7 @@ async function handleChangePassword(event) {
     setButtonLoading(button, true, 'Saving...');
     try {
         const result = await window.electron.auth.changePassword({
+            currentPassword,
             newPassword
         });
         if (result?.success) {
