@@ -1,4 +1,5 @@
 let accounts = [];
+let restoringSelectedAccount = false;
 let iii = null;
 let lastAccountsReadError = null;
 let cleanupAccountsDropdownListeners = null;
@@ -388,6 +389,18 @@ async function safeReadAccounts() {
     }
 
     lastAccountsReadError = null;
+    // Sort alphabetically by displayName (case-insensitive); fallback to accountId
+    try {
+        result.sort((a, b) => {
+            const nameA = (a?.displayName || a?.accountId || '').toString().trim().toLowerCase();
+            const nameB = (b?.displayName || b?.accountId || '').toString().trim().toLowerCase();
+            if (nameA < nameB) return -1;
+            if (nameA > nameB) return 1;
+            return 0;
+        });
+    } catch (_) {
+        // Ignore sort errors
+    }
     return result;
 }
 
@@ -510,6 +523,8 @@ async function handleJagexAccountLogic(properties) {
                     updateCharacterSelection(accounts[0].accountId);
                 }
             }
+            // Attempt to restore persisted selection after any file change
+            await restoreSelectedAccountIfAny();
         }
     }, 1000);
 }
@@ -616,6 +631,9 @@ async function initializeLauncher() {
                     await window.electron.readNonJagexProfile();
                 const profile = nonJagexProfile || 'default';
                 document.getElementById('profile').value = profile;
+            }
+            if (!restoringSelectedAccount) {
+                await persistSelectedAccount(selectedAccount);
             }
         });
 
@@ -1147,6 +1165,48 @@ function setupAddAccountsButton() {
     addAccountsButton?.addEventListener('click', addAccountsHandler);
 }
 
+function setupRefreshAccountsButton() {
+    const refreshBtn = document.getElementById('refresh-accounts');
+    if (!refreshBtn) return;
+    refreshBtn.addEventListener('click', async () => {
+        refreshBtn.disabled = true;
+        try {
+            const result = await window.electron.refreshAccounts();
+            if (result?.error) {
+                window.electron.errorAlert(result.error);
+                return;
+            }
+            const updated = result?.accounts;
+            if (Array.isArray(updated)) {
+                // Sort updated accounts alphabetically
+                accounts = [...updated].sort((a, b) => {
+                    const nameA = (a?.displayName || a?.accountId || '').toString().trim().toLowerCase();
+                    const nameB = (b?.displayName || b?.accountId || '').toString().trim().toLowerCase();
+                    if (nameA < nameB) return -1;
+                    if (nameA > nameB) return 1;
+                    return 0;
+                });
+                await setupSidebarLayout(accounts.length);
+                await updateProfileBasedOnCharacter();
+                await restoreSelectedAccountIfAny();
+            } else {
+                // fallback: re-read accounts via existing flow
+                const latestAccounts = await safeReadAccounts();
+                if (latestAccounts) {
+                    accounts = latestAccounts; // already sorted in safeReadAccounts
+                    await setupSidebarLayout(accounts.length);
+                    await updateProfileBasedOnCharacter();
+                    await restoreSelectedAccountIfAny();
+                }
+            }
+        } catch (err) {
+            window.electron.errorAlert(err?.message || String(err));
+        } finally {
+            refreshBtn.disabled = false;
+        }
+    });
+}
+
 /**
  * Extracts the version number from a string.
  * e.g., "microbot-1.9.6.1.jar" becomes "1.9.6.1"
@@ -1425,6 +1485,45 @@ async function updateProfileBasedOnCharacter() {
     }
 }
 
+async function persistSelectedAccount(accountId) {
+    try {
+        const props = await window.electron.readProperties();
+        if (!accountId || accountId === 'none') {
+            if (props['selected_account']) {
+                delete props['selected_account'];
+                await window.electron.writeProperties(props);
+            }
+            return;
+        }
+        if (props['selected_account'] !== accountId) {
+            props['selected_account'] = accountId;
+            await window.electron.writeProperties(props);
+        }
+    } catch (err) {
+        window.electron.logError(`Failed to persist selected account: ${err?.message || err}`);
+    }
+}
+
+async function restoreSelectedAccountIfAny() {
+    try {
+        const props = await window.electron.readProperties();
+        const saved = props['selected_account'];
+        if (!saved) return;
+        const exists = accounts.some((a) => a.accountId === saved);
+        if (!exists) {
+            delete props['selected_account'];
+            await window.electron.writeProperties(props);
+            return;
+        }
+        restoringSelectedAccount = true;
+        updateCharacterSelection(saved, { suppressRender: true });
+        restoringSelectedAccount = false;
+        await updateProfileBasedOnCharacter();
+    } catch (err) {
+        window.electron.logError(`Failed to restore selected account: ${err?.message || err}`);
+    }
+}
+
 async function initUI(properties) {
     updateNowBtn();
     reminderMeLaterBtn();
@@ -1442,6 +1541,7 @@ async function initUI(properties) {
     const accountsData = await safeReadAccounts();
     accounts = accountsData ?? [];
     await setupSidebarLayout(accounts.length);
+    await restoreSelectedAccountIfAny();
 
     const orderedClientJars = await orderClientJarsByVersion();
     populateSelectElement('client', orderedClientJars);
@@ -1458,6 +1558,8 @@ async function initUI(properties) {
 
     await setupRamInput();
     await setupProxyInput();
+
+    setupRefreshAccountsButton();
 }
 
 /**

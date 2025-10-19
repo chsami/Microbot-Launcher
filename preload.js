@@ -73,6 +73,7 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.invoke('cleanup-unused-clients-jar', latestVersion),
     updateClientJarTTL: (version) =>
         ipcRenderer.invoke('update-client-jar-ttl', version),
+    refreshAccounts: () => ipcRenderer.invoke('refresh-accounts'),
     auth: {
         signup: (credentials) => ipcRenderer.invoke('auth:signup', credentials),
         signin: (credentials) => ipcRenderer.invoke('auth:signin', credentials),
