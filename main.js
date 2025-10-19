@@ -50,6 +50,20 @@ async function loadLibraries() {
             app: app,
             mainWindow: mainWindow
         };
+        try {
+            const mockAuthHandler = require(path.join(
+                __dirname,
+                'libs',
+                'mock-auth.js'
+            ));
+            if (typeof mockAuthHandler === 'function') {
+                mockAuthHandler({ ipcMain, log });
+            } else {
+                log.error('mock-auth does not export a function');
+            }
+        } catch (authError) {
+            log.error('Error requiring mock-auth:', authError);
+        }
         if (typeof handler === 'function') {
             await handler(deps);
         } else {
@@ -144,7 +158,6 @@ autoUpdater.on('update-downloaded', () => {
 app.whenReady().then(async () => {
     log.info('App starting...');
 
-    await checkLinuxVersion();
     await loadLibraries();
     await createWindow();
 
@@ -159,27 +172,3 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', function () {
     if (process.platform !== 'darwin') app.quit();
 });
-
-async function checkLinuxVersion() {
-    if (process.platform === 'linux') {
-        // Check for new version on Linux
-        try {
-            const response = await axios.get(
-                'https://microbot.cloud/api/file/launcher'
-            );
-            const remoteVersion = response.data;
-            const currentVersion = packageJson.version;
-
-            if (remoteVersion !== currentVersion) {
-                dialog.showMessageBox({
-                    type: 'info',
-                    title: 'New Version Available',
-                    message: `A new version (${remoteVersion}) of Microbot Launcher is available. Your current version is ${currentVersion}. Please download the latest version from https://themicrobot.com`,
-                    buttons: ['OK']
-                });
-            }
-        } catch (error) {
-            log.error('Failed to check for new version:', error);
-        }
-    }
-}

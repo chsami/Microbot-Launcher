@@ -42,6 +42,16 @@ npm install
 npm run dev
 ```
 
+## Mock Authentication Mode
+
+The launcher now includes an optional in-memory authentication flow that can be enabled for UI testing and demos.
+
+- Set `MOCK_AUTH=1` to activate mock mode. Accounts exist only in memory and reset when the app restarts.
+- (Optional) Provide `MOCK_USERS` to preload accounts. Accepts either JSON (e.g. `[{"email":"demo@site.com","password":"Password1"}]`) or a delimited list such as `demo@site.com:Password1,guest@site.com:Password2`.
+- Use `MOCK_LATENCY_MS` to simulate network latency (in milliseconds) and `MOCK_FAIL_PCT` to simulate intermittent failures (percentage between 0-100).
+
+When mock mode is disabled, the launcher skips the mock login screen and behaves as before.
+
 ## Package for Windows
 For 64-bit
 ```bash

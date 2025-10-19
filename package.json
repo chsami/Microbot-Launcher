@@ -1,10 +1,11 @@
 {
   "name": "microbot-launcher",
-  "version": "3.2.6",
+  "version": "3.2.8",
   "description": "Launcher for the microbot client",
   "main": "main.js",
   "scripts": {
     "dev": "cross-env DEBUG=true electron .",
+    "dev:mock": "cross-env DEBUG=true MOCK_AUTH=1 MOCK_USERS='demo@microbot.com:DemoPassword123,test@example.com:TestPassword123' electron .",
     "start": "electron-forge start",
     "test": "jest",
     "test:watch": "jest --watch",

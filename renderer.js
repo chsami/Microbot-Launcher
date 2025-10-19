@@ -5,6 +5,284 @@ let lastAccountsReadError = null;
 let cleanupAccountsDropdownListeners = null;
 
 const DEFAULT_CLIENT_RAM = '1g';
+let launcherInitialized = false;
+let authUiReady = false;
+let mockAuthEnabled = false;
+let currentSessionEmail = '';
+
+function $(id) {
+    return document.getElementById(id);
+}
+
+function toggleClass(element, className, shouldAdd) {
+    if (!element) return;
+    if (shouldAdd) {
+        element.classList.add(className);
+    } else {
+        element.classList.remove(className);
+    }
+}
+
+function setButtonLoading(button, isLoading, loadingText) {
+    if (!button) return;
+    if (isLoading) {
+        if (!button.dataset.originalText) {
+            button.dataset.originalText = button.textContent;
+        }
+        if (loadingText) {
+            button.textContent = loadingText;
+        }
+        button.disabled = true;
+    } else {
+        if (button.dataset.originalText) {
+            button.textContent = button.dataset.originalText;
+            delete button.dataset.originalText;
+        }
+        button.disabled = false;
+    }
+}
+
+function setAuthError(message, elementId = 'auth-error', isSuccess = false) {
+    const element = $(elementId);
+    if (!element) return;
+    element.textContent = message || '';
+    toggleClass(element, 'success', Boolean(isSuccess && message));
+}
+
+function setActiveAuthTab(target) {
+    const signinTab = $('auth-tab-signin');
+    const signupTab = $('auth-tab-signup');
+    const signinForm = $('signin-form');
+    const signupForm = $('signup-form');
+    const isSignin = target === 'signin';
+
+    toggleClass(signinTab, 'active', isSignin);
+    toggleClass(signupTab, 'active', !isSignin);
+    if (signinTab) signinTab.setAttribute('aria-selected', isSignin ? 'true' : 'false');
+    if (signupTab) signupTab.setAttribute('aria-selected', isSignin ? 'false' : 'true');
+    toggleClass(signinForm, 'auth-hidden', !isSignin);
+    toggleClass(signupForm, 'auth-hidden', isSignin);
+    setAuthError('');
+}
+
+function showAuthModal() {
+    const modal = $('auth-modal');
+    if (!modal) return;
+    modal.classList.remove('auth-hidden');
+    $('signin-form')?.reset();
+    $('signup-form')?.reset();
+    setActiveAuthTab('signin');
+}
+
+function hideAuthModal() {
+    const modal = $('auth-modal');
+    if (!modal) return;
+    modal.classList.add('auth-hidden');
+    setAuthError('');
+}
+
+function showChangePasswordModal() {
+    if (!mockAuthEnabled) return;
+    const modal = $('change-password-modal');
+    if (!modal) return;
+    $('change-password-form')?.reset();
+    setAuthError('', 'change-password-error');
+    modal.classList.remove('auth-hidden');
+    const input = $('current-password-input');
+    if (input) {
+        setTimeout(() => input.focus(), 0);
+    }
+}
+
+function hideChangePasswordModal() {
+    const modal = $('change-password-modal');
+    if (!modal) return;
+    modal.classList.add('auth-hidden');
+    setAuthError('', 'change-password-error');
+}
+
+function updateSessionEmail(email) {
+    currentSessionEmail = email || '';
+    const sessionContainer = $('user-session');
+    const emailLabel = $('session-email');
+    if (!sessionContainer || !emailLabel) return;
+    if (!mockAuthEnabled || !currentSessionEmail) {
+        sessionContainer.classList.add('hidden');
+        emailLabel.textContent = '';
+    } else {
+        emailLabel.textContent = currentSessionEmail;
+        sessionContainer.classList.remove('hidden');
+    }
+}
+
+async function handleSignIn(event) {
+    event.preventDefault();
+    if (!mockAuthEnabled) {
+        hideAuthModal();
+        await ensureLauncherInitialized();
+        return;
+    }
+    const email = $('signin-email')?.value?.trim();
+    const password = $('signin-password')?.value || '';
+    if (!email || !password) {
+        setAuthError('Email and password are required');
+        return;
+    }
+    setAuthError('');
+    const button = $('signin-submit');
+    setButtonLoading(button, true, 'Signing In...');
+    try {
+        const result = await window.electron.auth.signin({ email, password });
+        if (result?.success) {
+            await refreshAuthStatus();
+        } else {
+            setAuthError(result?.error || 'Unable to sign in');
+        }
+    } catch (error) {
+        setAuthError(error?.message || 'Unable to sign in');
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
+
+async function handleSignUp(event) {
+    event.preventDefault();
+    if (!mockAuthEnabled) {
+        hideAuthModal();
+        await ensureLauncherInitialized();
+        return;
+    }
+    const email = $('signup-email')?.value?.trim();
+    const password = $('signup-password')?.value || '';
+    if (!email || !password) {
+        setAuthError('Email and password are required');
+        return;
+    }
+    if (password.length < 8) {
+        setAuthError('Password must be at least 8 characters.');
+        return;
+    }
+    setAuthError('');
+    const button = $('signup-submit');
+    setButtonLoading(button, true, 'Creating Account...');
+    try {
+        const result = await window.electron.auth.signup({ email, password });
+        if (result?.success) {
+            await refreshAuthStatus();
+        } else {
+            setAuthError(result?.error || 'Unable to create account');
+        }
+    } catch (error) {
+        setAuthError(error?.message || 'Unable to create account');
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
+
+async function handleSignOut() {
+    if (!mockAuthEnabled) return;
+    const button = $('signout-btn');
+    setButtonLoading(button, true, 'Signing Out...');
+    try {
+        const result = await window.electron.auth.signout();
+        if (result?.success) {
+            await refreshAuthStatus();
+        } else if (result?.error) {
+            window.electron.errorAlert(result.error);
+        }
+    } catch (error) {
+        window.electron.errorAlert(error?.message || 'Unable to sign out.');
+    } finally {
+        setButtonLoading(button, false);
+        hideChangePasswordModal();
+    }
+}
+
+async function handleChangePassword(event) {
+    event.preventDefault();
+    if (!mockAuthEnabled) return;
+    const currentPassword = $('current-password-input')?.value || '';
+    const newPassword = $('change-password-input')?.value || '';
+
+    if (!currentPassword) {
+        setAuthError('Current password is required.', 'change-password-error');
+        return;
+    }
+    if (newPassword.length < 8) {
+        setAuthError('New password must be at least 8 characters.', 'change-password-error');
+        return;
+    }
+    setAuthError('', 'change-password-error');
+    const button = $('change-password-submit');
+    setButtonLoading(button, true, 'Saving...');
+    try {
+        const result = await window.electron.auth.changePassword({
+            currentPassword,
+            newPassword
+        });
+        if (result?.success) {
+            $('change-password-form')?.reset();
+            setAuthError('Password updated successfully.', 'change-password-error', true);
+            setTimeout(() => {
+                hideChangePasswordModal();
+                setAuthError('', 'change-password-error');
+            }, 1200);
+        } else if (result?.error) {
+            setAuthError(result.error, 'change-password-error');
+        }
+    } catch (error) {
+        setAuthError(error?.message || 'Unable to change password.', 'change-password-error');
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
+
+function setupAuthUI() {
+    if (authUiReady) return;
+    authUiReady = true;
+    $('signin-form')?.addEventListener('submit', handleSignIn);
+    $('signup-form')?.addEventListener('submit', handleSignUp);
+    $('auth-tab-signin')?.addEventListener('click', () => setActiveAuthTab('signin'));
+    $('auth-tab-signup')?.addEventListener('click', () => setActiveAuthTab('signup'));
+    $('signout-btn')?.addEventListener('click', handleSignOut);
+    $('change-password-btn')?.addEventListener('click', showChangePasswordModal);
+    $('change-password-cancel')?.addEventListener('click', hideChangePasswordModal);
+    $('change-password-form')?.addEventListener('submit', handleChangePassword);
+    setActiveAuthTab('signin');
+}
+
+async function refreshAuthStatus() {
+    let status = null;
+    try {
+        status = await window.electron.auth.status();
+    } catch (error) {
+        status = { authenticated: true, mock: false };
+    }
+
+    mockAuthEnabled = Boolean(status?.mock);
+    if (!mockAuthEnabled) {
+        hideAuthModal();
+        hideChangePasswordModal();
+        updateSessionEmail(status?.user?.email || '');
+        await ensureLauncherInitialized();
+        return;
+    }
+
+    if (status?.authenticated) {
+        hideAuthModal();
+        updateSessionEmail(status?.user?.email || '');
+        await ensureLauncherInitialized();
+    } else {
+        showAuthModal();
+        updateSessionEmail('');
+    }
+}
+
+async function ensureLauncherInitialized() {
+    if (launcherInitialized) return;
+    launcherInitialized = true;
+    await initializeLauncher();
+}
 
 /**
  * Properties object used for client versioning, etc.
@@ -273,7 +551,7 @@ window.addEventListener('unhandledrejection', (e) => {
     window.electron.logError(e.reason.stack);
 });
 
-window.addEventListener('load', async () => {
+async function initializeLauncher() {
     const properties = await window.electron.readProperties();
 
     const clientVersion = await window.electron.fetchClientVersion();
@@ -376,6 +654,11 @@ window.addEventListener('load', async () => {
     });
 
     loadLandingPageWebview();
+}
+
+window.addEventListener('load', async () => {
+    setupAuthUI();
+    await refreshAuthStatus();
 });
 
 function populateSelectElement(selectId, options) {
