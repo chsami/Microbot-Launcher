@@ -179,7 +179,7 @@ async function checkLinuxVersion() {
         // Check for new version on Linux
         try {
             const response = await axios.get(
-                'https://microbot.cloud/api/file/launcher'
+                'https://microbot.cloud/api/version/launcher'
             );
             const remoteVersion = response.data;
             const currentVersion = packageJson.version;
