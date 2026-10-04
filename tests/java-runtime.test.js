@@ -61,7 +61,7 @@ describe('evaluateRuntime', () => {
 
     test('accepts Java 11 and newer 64-bit runtimes', () => {
         for (const name of ['linux-temurin-11.0.28', 'linux-java-17-openjdk-amd64', 'linux-java-25-openjdk-amd64', 'synthetic-mac-zulu-21-aarch64']) {
-            expect(javaRuntime.evaluateRuntime(info(name), { heapMb: 4096 })).toEqual({ compatible: true, problems: [] });
+            expect(javaRuntime.evaluateRuntime(info(name), { heapMb: 4096 })).toEqual({ compatible: true, problems: [], warnings: [] });
         }
     });
 
@@ -86,8 +86,11 @@ describe('evaluateRuntime', () => {
         expect(result.problems.map((p) => p.code)).toEqual(['too-old', '32-bit-heap']);
     });
 
-    test('rejects an undetermined version', () => {
-        expect(javaRuntime.evaluateRuntime({ major: null }).problems[0].code).toBe('unknown-version');
+    test('warns but still allows an undetermined version', () => {
+        const result = javaRuntime.evaluateRuntime({ major: null, dataModel: 64 }, { heapMb: 2048 });
+        expect(result.compatible).toBe(true);
+        expect(result.problems).toEqual([]);
+        expect(result.warnings[0].code).toBe('unknown-version');
     });
 });
 
@@ -105,26 +108,65 @@ describe('heapMbFromArgs', () => {
 });
 
 describe('supportedVmArgs', () => {
-    const args = [
-        '-Xms512m', '-Xmx600m', '-XX:+UseZGC', '-XX:SoftMaxHeapSize=500m', '-XX:+ZUncommit',
+    const base = (xms, xmx) => [
+        `-Xms${xms}`, `-Xmx${xmx}`, '-XX:+UseZGC', '-XX:SoftMaxHeapSize=500m', '-XX:+ZUncommit',
         '-XX:ZUncommitDelay=30', '-XX:+UseStringDedup', '-Xss512k', '-XX:+IgnoreUnrecognizedVMOptions',
         '-jar', 'microbot.jar'
     ];
+    const java = (major, dataModel = 64) => ({ major, dataModel });
+    const noZgc = ['-XX:+UseStringDedup', '-Xss512k', '-XX:+IgnoreUnrecognizedVMOptions', '-jar', 'microbot.jar'];
 
-    test('keeps ZGC flags on Java 15 and newer', () => {
-        expect(javaRuntime.supportedVmArgs(15, args)).toEqual(args);
-        expect(javaRuntime.supportedVmArgs(21, args)).toEqual(args);
+    test('keeps ZGC on 64-bit Java 15+ with a soft heap target derived from the maximum heap', () => {
+        expect(javaRuntime.supportedVmArgs(java(17), base('512m', '600m'))).toEqual([
+            '-Xms256m', '-Xmx600m', '-XX:+UseZGC', '-XX:SoftMaxHeapSize=480m', '-XX:+ZUncommit',
+            '-XX:ZUncommitDelay=30', ...noZgc
+        ]);
+        expect(javaRuntime.supportedVmArgs(java(15), base('512m', '600m'))).toContain('-XX:+UseZGC');
     });
 
-    test('drops only ZGC flags before Java 15', () => {
-        expect(javaRuntime.supportedVmArgs(11, args)).toEqual([
-            '-Xms512m', '-Xmx600m', '-XX:+UseStringDedup', '-Xss512k',
-            '-XX:+IgnoreUnrecognizedVMOptions', '-jar', 'microbot.jar'
+    test.each([
+        ['256m', '256m', '204m'],
+        ['512m', '512m', '409m'],
+        ['2g', '2048m', '1638m'],
+        ['8g', '8192m', '6553m']
+    ])('RAM setting %s keeps the maximum, starts small and never exceeds it', (ram, _mb, softMax) => {
+        const result = javaRuntime.supportedVmArgs(java(21), base(ram, ram));
+        expect(result).toContain(`-Xmx${ram}`);
+        expect(result).toContain(`-XX:SoftMaxHeapSize=${softMax}`);
+        expect(result).toContain('-Xms256m');
+        expect(result).not.toContain('-XX:SoftMaxHeapSize=500m');
+    });
+
+    test('keeps a small initial heap unchanged', () => {
+        expect(javaRuntime.supportedVmArgs(java(17), base('128m', '1g'))).toContain('-Xms128m');
+        expect(javaRuntime.supportedVmArgs(java(17), base('0.5m', '0.5m'))).toEqual([
+            '-Xms0.5m', '-Xmx0.5m', '-XX:+UseZGC', '-XX:+ZUncommit', '-XX:ZUncommitDelay=30', ...noZgc
         ]);
+    });
+
+    test('drops ZGC flags before Java 15', () => {
+        expect(javaRuntime.supportedVmArgs(java(11), base('512m', '600m'))).toEqual(['-Xms256m', '-Xmx600m', ...noZgc]);
+    });
+
+    test('drops ZGC flags on 32-bit Java 17', () => {
+        const x86 = javaRuntime.parseJavaSettings(fixture('synthetic-windows-temurin-17-x86'));
+        expect(javaRuntime.supportsZgc(x86)).toBe(false);
+        expect(javaRuntime.supportedVmArgs(x86, base('1g', '1g'))).toEqual(['-Xms256m', '-Xmx1g', ...noZgc]);
+    });
+
+    test('drops ZGC flags when the version is unknown', () => {
+        expect(javaRuntime.supportedVmArgs(java(null), base('512m', '600m'))).toEqual(['-Xms256m', '-Xmx600m', ...noZgc]);
     });
 });
 
 describe('redactText and boundedTail', () => {
+    test('removes known account names that appear without a key', () => {
+        const text = 'Logged in as Zezima the Great (account 1234567) on profile MainAccount';
+        expect(javaRuntime.redactText(text, { secrets: ['Zezima the Great', '1234567', 'MainAccount', '', 'x'] }))
+            .toBe('Logged in as *** (account ***) on profile ***');
+        expect(javaRuntime.redactText('name a+b(c) here', { secrets: ['a+b(c)'] })).toBe('name *** here');
+    });
+
     test('removes credentials, account identifiers and the home directory', () => {
         const text = [
             'java -jar c.jar -proxy=socks5://bob:hunter2@10.0.0.5:1080 -profile=MainAccount',
@@ -188,7 +230,8 @@ describe('classifyLaunchFailure', () => {
         ['# There is insufficient memory for the Java Runtime Environment to continue.', 'Lower the client RAM'],
         ['Error: Unable to access jarfile /x/microbot-2.jar', 'client file is missing or damaged'],
         ['Exception in thread "main" java.lang.UnsupportedClassVersionError: net/runelite/client/RuneLite has been compiled by a more recent version', 'too old'],
-        ['Error: Could not create the Java Virtual Machine.', 'Install Java 17']
+        ['Error: Could not create the Java Virtual Machine.', 'Install Java 17'],
+        ['SoftMaxHeapSize must be less than or equal to the maximum heap size\nError: Could not create the Java Virtual Machine.', 'Choose a higher client RAM setting']
     ])('VM failure %#', (stderr, recovery) => {
         const problem = javaRuntime.classifyLaunchFailure({ code: 1, stderr });
         expect(problem.kind).toBe('vm-failure');

@@ -75,7 +75,7 @@ module.exports = async function (deps) {
                     );
                 }
 
-                checkJavaAndRunJar(commandArgs);
+                checkJavaAndRunJar(commandArgs, accountSecrets(account));
                 return { success: true };
             } catch (error) {
                 log.error(error.message);
@@ -276,7 +276,14 @@ module.exports = async function (deps) {
         });
     }
 
-    function showLaunchProblem(problem, { runtime, executable, stderr } = {}) {
+    function accountSecrets(account) {
+        if (!account) return [];
+        return [account.displayName, account.accountId, account.profile].filter(
+            (value) => typeof value === 'string' && value !== 'Not set' && value !== 'default'
+        );
+    }
+
+    function showLaunchProblem(problem, { runtime, executable, stderr, secrets } = {}) {
         const details = javaRuntime.formatProblemDetails({
             problem,
             runtime,
@@ -285,7 +292,8 @@ module.exports = async function (deps) {
             launcherVersion: packageJson && packageJson.version,
             platform: process.platform,
             arch: process.arch,
-            homeDir: os.homedir()
+            homeDir: os.homedir(),
+            secrets
         });
         log.error(`[launch problem]\n${details}`);
         if (!dialog) return;
@@ -320,7 +328,7 @@ module.exports = async function (deps) {
             .catch((err) => log.error(`Failed to show launch problem: ${err.message}`));
     }
 
-    function executeJar(executable, commandArgs, runtime) {
+    function executeJar(executable, commandArgs, runtime, secrets) {
         log.info(`${executable} ${redactCommandArgs(commandArgs).join(' ')}`);
 
         /**
@@ -342,7 +350,7 @@ module.exports = async function (deps) {
         const report = (problem) => {
             if (reported) return;
             reported = true;
-            showLaunchProblem(problem, { runtime, executable, stderr: stderrData });
+            showLaunchProblem(problem, { runtime, executable, stderr: stderrData, secrets });
         };
 
         try {
@@ -409,10 +417,10 @@ module.exports = async function (deps) {
         }
     }
 
-    function checkJavaAndRunJar(commandArgs) {
+    function checkJavaAndRunJar(commandArgs, secrets = []) {
         probeJava(({ runtime, problem }) => {
             if (problem) {
-                showLaunchProblem(problem, { stderr: problem.stderr });
+                showLaunchProblem(problem, { stderr: problem.stderr, secrets });
                 return;
             }
 
@@ -420,6 +428,7 @@ module.exports = async function (deps) {
             const evaluation = javaRuntime.evaluateRuntime(runtime, {
                 heapMb: javaRuntime.heapMbFromArgs(commandArgs)
             });
+            evaluation.warnings.forEach((warning) => log.warn(warning.message));
             if (!evaluation.compatible) {
                 showLaunchProblem(
                     {
@@ -429,18 +438,18 @@ module.exports = async function (deps) {
                         recovery: evaluation.problems.map((p) => p.recovery).join(' '),
                         offerDownload: true
                     },
-                    { runtime }
+                    { runtime, secrets }
                 );
                 return;
             }
 
-            const launchArgs = javaRuntime.supportedVmArgs(runtime.major, commandArgs);
-            if (launchArgs.length !== commandArgs.length) {
-                log.info(`Java ${runtime.major} does not support ZGC; launching without ZGC flags.`);
+            const launchArgs = javaRuntime.supportedVmArgs(runtime, commandArgs);
+            if (!javaRuntime.supportsZgc(runtime)) {
+                log.info(`${javaRuntime.describeRuntime(runtime)} cannot use ZGC; launching without ZGC flags.`);
             }
             const executable = javaRuntime.launcherExecutable(runtime, process.platform, fs.existsSync);
             log.info('Java runtime is compatible, running the JAR...');
-            executeJar(executable, launchArgs, runtime);
+            executeJar(executable, launchArgs, runtime, secrets);
         });
     }
 

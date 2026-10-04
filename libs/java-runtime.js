@@ -2,6 +2,8 @@ const MIN_JAVA_MAJOR = 11;
 const RECOMMENDED_JAVA_MAJOR = 17;
 const ZGC_MIN_JAVA_MAJOR = 15;
 const MAX_32_BIT_HEAP_MB = 1024;
+const MAX_INITIAL_HEAP_MB = 256;
+const SOFT_MAX_HEAP_RATIO = 0.8;
 const PROBE_ARGS = ['-XshowSettings:properties', '-version'];
 const ZGC_ONLY_FLAGS = [
     '-XX:+UseZGC',
@@ -52,17 +54,25 @@ function parseJavaSettings(output) {
     };
 }
 
-function heapMbFromArgs(args) {
+function heapSizeMb(value) {
+    const match = typeof value === 'string' && value.match(/^(\d+(?:\.\d+)?)([kmgt]?)$/i);
+    if (!match) return null;
+    const factor = { '': 1 / (1024 * 1024), k: 1 / 1024, m: 1, g: 1024, t: 1024 * 1024 }[match[2].toLowerCase()];
+    return Number(match[1]) * factor;
+}
+
+function heapArgMb(args, prefix) {
     let heapMb = null;
     for (const arg of args || []) {
-        const match = typeof arg === 'string' && arg.match(/^-Xmx(\d+(?:\.\d+)?)([kmgt]?)$/i);
-        if (!match) continue;
-        const amount = Number(match[1]);
-        const unit = match[2].toLowerCase();
-        const factor = { '': 1 / (1024 * 1024), k: 1 / 1024, m: 1, g: 1024, t: 1024 * 1024 }[unit];
-        heapMb = amount * factor;
+        if (typeof arg !== 'string' || !arg.startsWith(prefix)) continue;
+        const size = heapSizeMb(arg.slice(prefix.length));
+        if (size !== null) heapMb = size;
     }
     return heapMb;
+}
+
+function heapMbFromArgs(args) {
+    return heapArgMb(args, '-Xmx');
 }
 
 function describeRuntime(info) {
@@ -78,11 +88,11 @@ function describeRuntime(info) {
 
 function evaluateRuntime(info, { heapMb } = {}) {
     const problems = [];
+    const warnings = [];
     if (!info || !info.major) {
-        problems.push({
+        warnings.push({
             code: 'unknown-version',
-            message: 'The Java version could not be determined.',
-            recovery: `Install Java ${RECOMMENDED_JAVA_MAJOR} (64-bit) and make it the default "java" on your PATH.`
+            message: 'The Java version could not be determined; launching anyway.'
         });
     } else if (info.major < MIN_JAVA_MAJOR) {
         problems.push({
@@ -98,17 +108,51 @@ function evaluateRuntime(info, { heapMb } = {}) {
             recovery: `Install 64-bit Java ${RECOMMENDED_JAVA_MAJOR}, or lower the client RAM to ${MAX_32_BIT_HEAP_MB} MB or less.`
         });
     }
-    return { compatible: problems.length === 0, problems };
+    return { compatible: problems.length === 0, problems, warnings };
 }
 
-function supportedVmArgs(major, args) {
-    if (major && major >= ZGC_MIN_JAVA_MAJOR) return [...args];
-    return args.filter((arg) => !ZGC_ONLY_FLAGS.some((zgc) => arg.startsWith(zgc)));
+function supportsZgc(info) {
+    return Boolean(info && info.major && info.major >= ZGC_MIN_JAVA_MAJOR && info.dataModel !== 32);
 }
 
-function redactText(text, { homeDir } = {}) {
+function formatMb(mb) {
+    return `${Math.floor(mb)}m`;
+}
+
+function supportedVmArgs(info, args) {
+    const zgc = supportsZgc(info);
+    const maxMb = heapMbFromArgs(args);
+    const initialMb = heapArgMb(args, '-Xms');
+    const softMaxMb = maxMb ? Math.floor(maxMb * SOFT_MAX_HEAP_RATIO) : 0;
+    const result = [];
+    for (const arg of args) {
+        if (ZGC_ONLY_FLAGS.some((flag) => arg.startsWith(flag))) {
+            if (!zgc) continue;
+            if (arg.startsWith('-XX:SoftMaxHeapSize=')) {
+                if (softMaxMb >= 1) result.push(`-XX:SoftMaxHeapSize=${formatMb(softMaxMb)}`);
+                continue;
+            }
+        } else if (arg.startsWith('-Xms') && initialMb !== null && initialMb > MAX_INITIAL_HEAP_MB) {
+            result.push(`-Xms${formatMb(Math.min(MAX_INITIAL_HEAP_MB, maxMb || MAX_INITIAL_HEAP_MB))}`);
+            continue;
+        }
+        result.push(arg);
+    }
+    return result;
+}
+
+function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function redactText(text, { homeDir, secrets = [] } = {}) {
     if (typeof text !== 'string') return '';
-    let result = text
+    let result = text;
+    for (const secret of secrets) {
+        if (typeof secret !== 'string' || secret.trim().length < 2) continue;
+        result = result.replace(new RegExp(escapeRegExp(secret.trim()), 'gi'), '***');
+    }
+    result = result
         .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, '$1***@')
         .replace(/(-proxy=)\S+/g, '$1***')
         .replace(/(-profile=)\S+/g, '$1***')
@@ -174,6 +218,10 @@ const VM_FAILURE_HINTS = [
     {
         pattern: /Could not reserve enough space|insufficient memory for the Java Runtime|Initial heap size set to a larger value|Invalid (?:maximum|initial) heap size/i,
         recovery: 'Lower the client RAM setting, or install 64-bit Java if you are using 32-bit Java.'
+    },
+    {
+        pattern: /SoftMaxHeapSize must be less than or equal to the maximum heap size/i,
+        recovery: 'The launcher memory flags do not fit the selected client RAM. Choose a higher client RAM setting or update the launcher.'
     },
     {
         pattern: /UnsupportedClassVersionError|has been compiled by a more recent version/i,
@@ -254,7 +302,7 @@ function launcherExecutable(info, platform, existsSync) {
     return name;
 }
 
-function formatProblemDetails({ problem, runtime, executable, stderr, launcherVersion, platform, arch, homeDir }) {
+function formatProblemDetails({ problem, runtime, executable, stderr, launcherVersion, platform, arch, homeDir, secrets }) {
     const lines = [
         `Problem: ${problem.title} (${problem.kind})`,
         `Details: ${problem.message}`,
@@ -266,7 +314,7 @@ function formatProblemDetails({ problem, runtime, executable, stderr, launcherVe
     lines.push(`Launcher: ${launcherVersion || 'unknown'} on ${platform} ${arch}`);
     const tail = boundedTail(stderr || problem.stderr || '');
     if (tail) lines.push('', 'Java output:', tail);
-    return redactText(lines.join('\n'), { homeDir });
+    return redactText(lines.join('\n'), { homeDir, secrets });
 }
 
 module.exports = {
@@ -274,12 +322,14 @@ module.exports = {
     RECOMMENDED_JAVA_MAJOR,
     ZGC_MIN_JAVA_MAJOR,
     MAX_32_BIT_HEAP_MB,
+    MAX_INITIAL_HEAP_MB,
     PROBE_ARGS,
     parseJavaMajor,
     parseJavaSettings,
     heapMbFromArgs,
     describeRuntime,
     evaluateRuntime,
+    supportsZgc,
     supportedVmArgs,
     redactText,
     boundedTail,

@@ -18,6 +18,7 @@ public class Main {
                 System.err.println("args: " + all);
                 System.err.println("proxy socks5://bob:hunter2@10.0.0.5:1080 password=hunter2 JX_SESSION_ID=abc123 mail bob@example.com");
                 System.err.println("home " + System.getProperty("user.home") + "/.microbot");
+                System.err.println("logged in as Zezima the Great");
                 System.exit(3);
                 break;
             case "spam":

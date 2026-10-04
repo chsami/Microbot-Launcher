@@ -67,9 +67,9 @@ function createHarness({ clipboard = true, response = 0, startupWindowMs = 2500 
     return { deps, handlers, spawnCalls, dialogs, dialogShown, log };
 }
 
-async function launch(harness, { ram = '', proxy = null, profile } = {}) {
+async function launch(harness, { ram = '', proxy = null, profile, displayName } = {}) {
     await require('../libs/jar-executor')(harness.deps);
-    const account = profile ? { profile } : null;
+    const account = profile || displayName ? { profile, displayName } : null;
     return harness.handlers['open-client']({}, VERSION, proxy, account, ram);
 }
 
@@ -147,7 +147,7 @@ describe('open-client launch diagnostics with real Java runtimes', () => {
         expect(launchCall.args).not.toContain('-XX:+UseZGC');
         expect(launchCall.args).toContain('-Xmx600m');
         expect(launchCall.options.stdio).toEqual(['ignore', 'ignore', 'pipe']);
-        expect(harness.log.info).toHaveBeenCalledWith('Java 11 does not support ZGC; launching without ZGC flags.');
+        expect(harness.log.info).toHaveBeenCalledWith(expect.stringMatching(/^Java 11\.0\.28 .* cannot use ZGC; launching without ZGC flags\.$/));
     }, 15000);
 
     withJdk(11)('Java 11 VM startup failure is reported with stderr and a specific fix', async () => {
@@ -174,6 +174,28 @@ describe('open-client launch diagnostics with real Java runtimes', () => {
         await launch(harness);
         expect(await within(harness.dialogShown, 5000)).toBeNull();
         expect(harness.spawnCalls[1].args).toContain('-XX:+UseZGC');
+    }, 15000);
+
+    withJdk(17)('256 MB RAM setting starts on Java 17 with a soft heap target below the maximum', async () => {
+        useJava(17);
+        process.env.M07_MODE = 'sleep';
+        const harness = createHarness();
+        await launch(harness, { ram: '256m' });
+        expect(await within(harness.dialogShown, 5000)).toBeNull();
+        const args = harness.spawnCalls[1].args;
+        expect(args).toEqual(expect.arrayContaining(['-Xms256m', '-Xmx256m', '-XX:+UseZGC', '-XX:SoftMaxHeapSize=204m']));
+        expect(args).not.toContain('-XX:SoftMaxHeapSize=500m');
+    }, 15000);
+
+    withJdk(17)('2 GB RAM setting keeps the maximum but no longer reserves it up front', async () => {
+        useJava(17);
+        process.env.M07_MODE = 'sleep';
+        const harness = createHarness();
+        await launch(harness, { ram: '2g' });
+        expect(await within(harness.dialogShown, 5000)).toBeNull();
+        const args = harness.spawnCalls[1].args;
+        expect(args).toEqual(expect.arrayContaining(['-Xms256m', '-Xmx2g', '-XX:SoftMaxHeapSize=1638m']));
+        expect(args).not.toContain('-Xms2g');
     }, 15000);
 
     withJdk(17)('rejected heap setting is explained as a VM memory failure', async () => {
@@ -204,10 +226,12 @@ describe('open-client launch diagnostics with real Java runtimes', () => {
         const harness = createHarness({ response: 1 });
         await launch(harness, {
             proxy: { proxyIp: '10.0.0.5:1080:bob:hunter2' },
-            profile: 'MainAccount'
+            profile: 'MainAccount',
+            displayName: 'Zezima the Great'
         });
         const shown = await within(harness.dialogShown, 10000);
-        for (const secret of ['hunter2', 'abc123', 'MainAccount', 'bob@example.com', os.homedir()]) {
+        expect(shown.detail).toContain('logged in as ***');
+        for (const secret of ['hunter2', 'abc123', 'MainAccount', 'bob@example.com', 'Zezima', os.homedir()]) {
             expect(shown.detail).not.toContain(secret);
         }
         expect(shown.detail).toContain('-proxy=***');
@@ -223,6 +247,50 @@ describe('open-client launch diagnostics with real Java runtimes', () => {
         expect(output).toContain('noise line 499');
         expect(output).not.toContain('noise line 100\n');
     }, 25000);
+
+    function fakeRuntimeHarness(probeOutput) {
+        const { EventEmitter } = require('events');
+        const harness = createHarness({ response: 1 });
+        harness.deps.spawn = (command, args) => {
+            harness.spawnCalls.push({ command, args });
+            const proc = new EventEmitter();
+            proc.stdout = new EventEmitter();
+            proc.stderr = new EventEmitter();
+            proc.stderr.destroy = jest.fn();
+            proc.unref = jest.fn();
+            proc.kill = jest.fn();
+            setImmediate(() => {
+                if (args[0] === '-XshowSettings:properties') {
+                    proc.stderr.emit('data', Buffer.from(probeOutput));
+                    proc.emit('close', 0);
+                }
+            });
+            return proc;
+        };
+        return harness;
+    }
+
+    test('an unparseable Java version warns and still launches', async () => {
+        const harness = fakeRuntimeHarness('    java.vendor = Mystery\n    sun.arch.data.model = 64\nmystery version "banana"\n');
+        await launch(harness, { ram: '1g' });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(harness.deps.dialog.showMessageBox).not.toHaveBeenCalled();
+        expect(harness.spawnCalls).toHaveLength(2);
+        expect(harness.spawnCalls[1].args).not.toContain('-XX:+UseZGC');
+        expect(harness.log.warn).toHaveBeenCalledWith('The Java version could not be determined; launching anyway.');
+    });
+
+    test('32-bit Java 17 launches without ZGC flags', async () => {
+        const harness = fakeRuntimeHarness(
+            fs.readFileSync(path.join(__dirname, '__fixtures__', 'java-probe', 'synthetic-windows-temurin-17-x86.txt'), 'utf8')
+        );
+        await launch(harness, { ram: '512m' });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(harness.deps.dialog.showMessageBox).not.toHaveBeenCalled();
+        const args = harness.spawnCalls[1].args;
+        expect(args).toEqual(expect.arrayContaining(['-Xms256m', '-Xmx512m']));
+        expect(args.some((arg) => /ZGC|SoftMaxHeapSize|ZUncommit/.test(arg))).toBe(false);
+    });
 
     test('spawn failures of the resolved executable are process-launch problems', async () => {
         const fakeRuntime = [
