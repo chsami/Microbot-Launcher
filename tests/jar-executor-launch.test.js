@@ -117,7 +117,7 @@ describe('open-client launch diagnostics with real Java runtimes', () => {
         expect(shown.detail).toContain('(missing-java)');
         await flush();
         expect(harness.deps.shell.openExternal).toHaveBeenCalledWith(
-            expect.stringContaining('adoptium.net/temurin/releases/?os=linux')
+            require('../libs/java-runtime').javaDownloadUrl(process.platform, process.arch)
         );
         expect(harness.spawnCalls).toHaveLength(1);
     });
@@ -290,6 +290,41 @@ describe('open-client launch diagnostics with real Java runtimes', () => {
         const args = harness.spawnCalls[1].args;
         expect(args).toEqual(expect.arrayContaining(['-Xms256m', '-Xmx512m']));
         expect(args.some((arg) => /ZGC|SoftMaxHeapSize|ZUncommit/.test(arg))).toBe(false);
+    });
+
+    test('multibyte characters split across stderr chunks are still redacted', async () => {
+        const { EventEmitter } = require('events');
+        const { PassThrough } = require('stream');
+        const probe = '    java.version = 17.0.1\n    sun.arch.data.model = 64\nopenjdk version "17.0.1"\n';
+        const harness = createHarness({ response: 1 });
+        harness.deps.spawn = (command, args) => {
+            harness.spawnCalls.push({ command, args });
+            const proc = new EventEmitter();
+            proc.stdout = new PassThrough();
+            proc.stderr = new PassThrough();
+            proc.unref = jest.fn();
+            proc.kill = jest.fn();
+            setImmediate(() => {
+                if (args[0] === '-XshowSettings:properties') {
+                    proc.stderr.end(probe);
+                    setImmediate(() => proc.emit('close', 0));
+                    return;
+                }
+                const line = Buffer.from('logged in as Zézima\n', 'utf8');
+                const split = line.indexOf(0xc3) + 1;
+                proc.stderr.write(line.subarray(0, split));
+                setImmediate(() => {
+                    proc.stderr.end(line.subarray(split));
+                    setImmediate(() => proc.emit('close', 1, null));
+                });
+            });
+            return proc;
+        };
+        await launch(harness, { displayName: 'Zézima' });
+        const shown = await within(harness.dialogShown, 5000);
+        expect(shown.detail).toContain('logged in as ***');
+        expect(shown.detail).not.toContain('ima');
+        expect(shown.detail).not.toContain('\ufffd');
     });
 
     test('spawn failures of the resolved executable are process-launch problems', async () => {

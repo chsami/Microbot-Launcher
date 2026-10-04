@@ -176,8 +176,11 @@ module.exports = async function (deps) {
             const collect = (data) => {
                 if (output.length < MAX_CAPTURED_STDERR) output += data.toString();
             };
-            if (javaProcess.stdout) javaProcess.stdout.on('data', collect);
-            if (javaProcess.stderr) javaProcess.stderr.on('data', collect);
+            for (const stream of [javaProcess.stdout, javaProcess.stderr]) {
+                if (!stream) continue;
+                if (stream.setEncoding) stream.setEncoding('utf8');
+                stream.on('data', collect);
+            }
 
             javaProcess.on('error', (err) => {
                 finish({ problem: javaRuntime.classifyProbeFailure({ error: err }) });
@@ -370,6 +373,7 @@ module.exports = async function (deps) {
                 });
             }
             if (jarProcess.stderr) {
+                if (jarProcess.stderr.setEncoding) jarProcess.stderr.setEncoding('utf8');
                 jarProcess.stderr.on('data', (data) => {
                     if (process.env.DEBUG) log.info(`[stderr] ${data}`);
                     stderrData += data.toString();
