@@ -1,0 +1,10 @@
+    java.home = /home/user/.jdks/openjdk-24.0.1
+    java.runtime.name = OpenJDK Runtime Environment
+    java.vendor = Oracle Corporation
+    java.version = 24.0.1
+    java.vm.name = OpenJDK 64-Bit Server VM
+    os.arch = amd64
+    sun.arch.data.model = 64
+openjdk version "24.0.1" 2025-04-15
+OpenJDK Runtime Environment (build 24.0.1+9-30)
+OpenJDK 64-Bit Server VM (build 24.0.1+9-30, mixed mode, sharing)

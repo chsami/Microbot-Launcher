@@ -1,0 +1,10 @@
+    java.home = /Library/Java/JavaVirtualMachines/zulu-21.jdk/Contents/Home
+    java.runtime.name = OpenJDK Runtime Environment
+    java.vendor = Azul Systems, Inc.
+    java.version = 21.0.4
+    java.vm.name = OpenJDK 64-Bit Server VM
+    os.arch = aarch64
+    sun.arch.data.model = 64
+openjdk version "21.0.4" 2024-07-16 LTS
+OpenJDK Runtime Environment Zulu21.36+17-CA (build 21.0.4+7-LTS)
+OpenJDK 64-Bit Server VM Zulu21.36+17-CA (build 21.0.4+7-LTS, mixed mode, sharing)
