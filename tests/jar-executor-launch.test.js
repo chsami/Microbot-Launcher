@@ -5,12 +5,13 @@ const childProcess = require('child_process');
 
 const JDKS = {
     8: process.env.M07_JAVA8_HOME,
-    11: process.env.M07_JAVA11_HOME || path.join(os.homedir(), '.jdks', 'temurin-11.0.28'),
+    11: process.env.M07_JAVA11_HOME || path.join(os.userInfo().homedir, '.jdks', 'temurin-11.0.28'),
     17: process.env.M07_JAVA17_HOME || '/usr/lib/jvm/java-17-openjdk-amd64'
 };
 const hasJdk = (major) => Boolean(JDKS[major]) && fs.existsSync(path.join(JDKS[major], 'bin', 'java'));
 const withJdk = (major) => (hasJdk(major) ? test : test.skip);
 const VERSION = '9.9.9';
+const HOMES = [...new Set([os.homedir(), os.userInfo().homedir])];
 
 let workDir;
 let microbotDir;
@@ -161,7 +162,7 @@ describe('open-client launch diagnostics with real Java runtimes', () => {
             expect(shown.detail).toContain('(vm-failure)');
             expect(shown.detail).toContain('Error: Unable to access jarfile');
             expect(shown.detail).toContain('Delete it from the .microbot folder');
-            expect(shown.detail).not.toContain(os.homedir());
+            for (const home of HOMES) expect(shown.detail).not.toContain(home);
         } finally {
             fs.renameSync(path.join(workDir, 'hidden.jar'), path.join(microbotDir, `microbot-${VERSION}.jar`));
         }
@@ -231,7 +232,7 @@ describe('open-client launch diagnostics with real Java runtimes', () => {
         });
         const shown = await within(harness.dialogShown, 10000);
         expect(shown.detail).toContain('logged in as ***');
-        for (const secret of ['hunter2', 'abc123', 'MainAccount', 'bob@example.com', 'Zezima', os.homedir()]) {
+        for (const secret of ['hunter2', 'abc123', 'MainAccount', 'bob@example.com', 'Zezima', ...HOMES]) {
             expect(shown.detail).not.toContain(secret);
         }
         expect(shown.detail).toContain('-proxy=***');

@@ -158,8 +158,11 @@ function redactText(text, { homeDir, secrets = [] } = {}) {
         .replace(/(-profile=)\S+/g, '$1***')
         .replace(/\b(JX_[A-Z_]+|[\w.-]*(?:password|passwd|token|secret|session(?:id)?|credential)s?)(\s*[=:]\s*)\S+/gi, '$1$2***')
         .replace(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, '***@***');
-    if (homeDir && homeDir.length > 1) {
-        result = result.split(homeDir).join('~');
+    const homes = [...new Set([].concat(homeDir || []))]
+        .filter((home) => typeof home === 'string' && home.length > 1)
+        .sort((a, b) => b.length - a.length);
+    for (const home of homes) {
+        result = result.split(home).join('~');
     }
     return result;
 }

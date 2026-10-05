@@ -279,6 +279,14 @@ module.exports = async function (deps) {
         });
     }
 
+    function homeDirectories() {
+        const homes = [os.homedir()];
+        try {
+            homes.push(os.userInfo().homedir);
+        } catch (_) {}
+        return homes;
+    }
+
     function accountSecrets(account) {
         if (!account) return [];
         return [account.displayName, account.accountId, account.profile].filter(
@@ -295,7 +303,7 @@ module.exports = async function (deps) {
             launcherVersion: packageJson && packageJson.version,
             platform: process.platform,
             arch: process.arch,
-            homeDir: os.homedir(),
+            homeDir: homeDirectories(),
             secrets
         });
         log.error(`[launch problem]\n${details}`);

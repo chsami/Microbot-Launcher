@@ -160,6 +160,12 @@ describe('supportedVmArgs', () => {
 });
 
 describe('redactText and boundedTail', () => {
+    test('redacts every known home directory, longest first', () => {
+        const text = 'java home /home/alice/.cache/iso/.microbot and /home/alice/.microbot';
+        expect(javaRuntime.redactText(text, { homeDir: ['/home/alice', '/home/alice/.cache/iso', null, '/'] }))
+            .toBe('java home ~/.microbot and ~/.microbot');
+    });
+
     test('removes known account names that appear without a key', () => {
         const text = 'Logged in as Zezima the Great (account 1234567) on profile MainAccount';
         expect(javaRuntime.redactText(text, { secrets: ['Zezima the Great', '1234567', 'MainAccount', '', 'x'] }))
