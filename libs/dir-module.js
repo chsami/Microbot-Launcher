@@ -1,5 +1,12 @@
 const os = require('os');
 const path = require('path');
+const fsSync = require('fs');
+const {
+    parseClientJar,
+    isSafeClientVersion,
+    readDownloadedClients,
+    writeDownloadedClients
+} = require('./client-jars');
 
 // shell is only required lazily to avoid cyclic requires when this file is imported early.
 let _shell = null;
@@ -102,8 +109,8 @@ async function getClientsJarTTL() {
 
 /**
  * Cleanup routines for clients jar using the TTL data.
- * Delete any jar files that haven't been used in the past 3 days, with the exception
- * of the latest version.
+ * Delete jar files the launcher downloaded that haven't been used in the past 3 days,
+ * with the exception of the latest version. Jars placed in the folder manually are kept.
  * @param {string} latestVersion The latest version string to exclude from deletion.
  * @return {Promise<{success: boolean, error?: string}>} Result object indicating success or failure.
  */
@@ -122,16 +129,9 @@ async function cleanupUnusedClientsJar(latestVersion) {
     let updated = false;
     try {
         const files = await fs.readdir(microbotDir);
-        const jarFiles = files.filter(
-            (f) =>
-                f.endsWith('.jar') &&
-                f.startsWith('microbot-') &&
-                !f.includes('launcher')
-        );
         const now = Date.now();
-        for (const jarFile of jarFiles) {
-            let version = jarFile.replace('.jar', '');
-            version = version.replace('microbot-', '');
+        for (const jar of files.map(parseClientJar).filter(Boolean)) {
+            const version = jar.version;
             if (!(version in ttlData)) {
                 ttlData[version] = now;
                 updated = true;
@@ -143,28 +143,43 @@ async function cleanupUnusedClientsJar(latestVersion) {
 
     const now = Date.now();
     const threeDays = 3 * 24 * 60 * 60 * 1000;
-    let deletedAny = false;
+    const downloaded = new Set(readDownloadedClients(fsSync, microbotDir));
+    let downloadedChanged = false;
 
     for (const [version, lastUsed] of Object.entries(ttlData)) {
         if (version === latestVersion) {
             continue;
         }
         if (now - lastUsed > threeDays) {
+            if (!downloaded.has(version) || !isSafeClientVersion(version)) {
+                continue;
+            }
             const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
             try {
                 await fs.unlink(jarPath);
                 delete ttlData[version];
-                deletedAny = true;
+                downloaded.delete(version);
+                downloadedChanged = true;
                 updated = true;
             } catch (err) {
                 if (err.code === 'ENOENT') {
                     // File already gone: drop TTL entry and continue.
                     delete ttlData[version];
+                    downloaded.delete(version);
+                    downloadedChanged = true;
                     updated = true;
                     continue;
                 }
                 return { success: false, error: err.message };
             }
+        }
+    }
+
+    if (downloadedChanged) {
+        try {
+            writeDownloadedClients(fsSync, microbotDir, [...downloaded]);
+        } catch (err) {
+            return { success: false, error: err.message };
         }
     }
 
@@ -194,7 +209,7 @@ async function updateClientJarTTL(version) {
         return { success: false, error: 'Version not provided' };
     }
 
-    if (!/^[a-zA-Z0-9._-]+$/.test(version)) {
+    if (!isSafeClientVersion(version)) {
         return { success: false, error: 'Invalid version format' };
     }
 

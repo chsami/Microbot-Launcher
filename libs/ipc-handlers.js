@@ -25,6 +25,11 @@ module.exports = async function (deps) {
         'libs',
         'browser-util.js'
     ));
+    const { listClientJars, markClientDownloaded } = require(path.join(
+        projectDir,
+        'libs',
+        'client-jars.js'
+    ));
 
     ipcMain.handle('start-auth-flow', async () => {
         try {
@@ -166,6 +171,11 @@ module.exports = async function (deps) {
             });
             const filePath = path.join(microbotDir, `microbot-${version}.jar`);
             fs.writeFileSync(filePath, response.data);
+            try {
+                markClientDownloaded(fs, microbotDir, version);
+            } catch (markError) {
+                log.error(`Failed to record downloaded client ${version}: ${markError.message}`);
+            }
             event.sender.send('progress', {
                 percent: 100,
                 status: 'Completed!'
@@ -212,18 +222,21 @@ module.exports = async function (deps) {
     });
 
     ipcMain.handle('list-jars', async () => {
-        const files = fs.readdirSync(microbotDir, (err) => {
-            if (err) {
-                return log.error(`Unable to scan directory: ${err}`);
-            }
-        });
-        const regex = /\d/;
-        return files.filter(
-            (file) =>
-                file.startsWith('microbot-') &&
-                file.endsWith('.jar') &&
-                regex.test(file)
-        );
+        try {
+            return listClientJars(fs, microbotDir).map((entry) => entry.file);
+        } catch (error) {
+            log.error(`Unable to scan directory: ${error}`);
+            return [];
+        }
+    });
+
+    ipcMain.handle('list-client-jars', async (event, latestVersion) => {
+        try {
+            return listClientJars(fs, microbotDir, latestVersion);
+        } catch (error) {
+            log.error(`Unable to scan directory: ${error}`);
+            return [];
+        }
     });
 
     /*

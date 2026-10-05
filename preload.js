@@ -46,6 +46,8 @@ contextBridge.exposeInMainWorld('electron', {
             ramPreference
         ),
     listJars: () => ipcRenderer.invoke('list-jars'),
+    listClientJars: (latestVersion) =>
+        ipcRenderer.invoke('list-client-jars', latestVersion),
     listProfiles: () => ipcRenderer.invoke('list-profiles'),
     launcherVersion: () => ipcRenderer.invoke('launcher-version'),
     logError: (message) => ipcRenderer.invoke('log-error', message),
