@@ -190,7 +190,6 @@ async function getToken(code) {
             }
         );
         log.info('Token exchange successful.');
-        log.info(`ID Token: ${response.data.id_token}`);
         // Return the ID token
         return response.data.id_token;
     } catch (error) {
@@ -226,6 +225,46 @@ async function getSessionId(idToken) {
     }
 }
 
+function hasDisplayName(account) {
+    return (
+        typeof account?.displayName === 'string' &&
+        account.displayName.trim().length > 0
+    );
+}
+
+function mergeAccounts(existingAccounts, fetchedAccounts, sessionId, now) {
+    const accounts = existingAccounts.map((acc) => ({ ...acc }));
+    const indexById = new Map(
+        accounts.map((acc, index) => [acc.accountId, index])
+    );
+    let added = 0;
+    let updated = 0;
+
+    for (const fetched of Array.isArray(fetchedAccounts) ? fetchedAccounts : []) {
+        if (!fetched || !fetched.accountId) {
+            continue;
+        }
+        const index = indexById.get(fetched.accountId);
+        if (index === undefined) {
+            indexById.set(fetched.accountId, accounts.length);
+            accounts.push({ ...fetched, sessionId, createdOn: now });
+            added++;
+            continue;
+        }
+        const current = accounts[index];
+        const next = { ...current, ...fetched, sessionId };
+        if (!hasDisplayName(fetched)) {
+            next.displayName = current.displayName;
+        }
+        if (JSON.stringify(next) !== JSON.stringify(current)) {
+            accounts[index] = next;
+            updated++;
+        }
+    }
+
+    return { accounts, added, updated };
+}
+
 /**
  * Fetches account details and writes them to a JSON file.
  * @param {string} sessionId The game session ID.
@@ -240,12 +279,6 @@ async function writeAccountsToFile(sessionId) {
             }
         );
 
-        const newAccounts = response.data.map((acc) => ({
-            ...acc,
-            sessionId,
-            createdOn: new Date().toISOString()
-        }));
-
         await fs.mkdir(ACCOUNTS_DIR, { recursive: true });
 
         let existingAccounts = [];
@@ -254,34 +287,45 @@ async function writeAccountsToFile(sessionId) {
             existingAccounts = JSON.parse(fileContent);
         } catch (e) {
             if (e.code !== 'ENOENT') {
-                log.error(`Error reading existing accounts file: ${e}`);
+                log.error(`Error reading existing accounts file: ${e.message}`);
+                return { ok: false, error: 'Accounts file is unreadable' };
             }
         }
+        if (!Array.isArray(existingAccounts)) {
+            log.error('Existing accounts file is not a list, not overwriting it');
+            return { ok: false, error: 'Accounts file is unreadable' };
+        }
 
-        const existingAccountIds = new Set(
-            existingAccounts.map((acc) => acc.accountId)
-        );
-        const nonDuplicateNewAccounts = newAccounts.filter(
-            (acc) => !existingAccountIds.has(acc.accountId)
+        const { accounts, added, updated } = mergeAccounts(
+            existingAccounts,
+            response.data,
+            sessionId,
+            new Date().toISOString()
         );
 
-        if (nonDuplicateNewAccounts.length > 0) {
-            const allAccounts = [
-                ...existingAccounts,
-                ...nonDuplicateNewAccounts
-            ];
-            await fs.writeFile(
-                ACCOUNTS_FILE_PATH,
-                JSON.stringify(allAccounts, null, 2)
-            );
+        if (added > 0 || updated > 0) {
+            const tempPath = `${ACCOUNTS_FILE_PATH}.${process.pid}.tmp`;
+            try {
+                await fs.writeFile(tempPath, JSON.stringify(accounts, null, 2));
+                await fs.rename(tempPath, ACCOUNTS_FILE_PATH);
+            } catch (writeError) {
+                await fs.unlink(tempPath).catch(() => {});
+                throw writeError;
+            }
             log.info(
-                `Successfully wrote ${nonDuplicateNewAccounts.length} new account(s) to ${ACCOUNTS_FILE_PATH}`
+                `Accounts file updated: ${added} new, ${updated} updated account(s) in ${ACCOUNTS_FILE_PATH}`
             );
         } else {
-            log.info('No new accounts to add.');
+            log.info('No account changes.');
         }
+        return { ok: true, added, updated };
     } catch (error) {
         log.error(`Error writing accounts to file: ${error.message}`);
+        return {
+            ok: false,
+            status: error.response ? error.response.status : undefined,
+            error: error.message
+        };
     }
 }
 
@@ -416,4 +460,4 @@ async function startAuthFlow() {
     });
 }
 
-module.exports = { startAuthFlow, writeAccountsToFile };
+module.exports = { startAuthFlow, writeAccountsToFile, mergeAccounts };

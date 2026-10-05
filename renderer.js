@@ -1208,6 +1208,9 @@ function setupRefreshAccountsButton() {
                     await restoreSelectedAccountIfAny();
                 }
             }
+            if (result?.warning) {
+                window.electron.errorAlert(result.warning);
+            }
         } catch (err) {
             window.electron.errorAlert(err?.message || String(err));
         } finally {

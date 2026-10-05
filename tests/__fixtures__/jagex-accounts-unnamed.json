@@ -1,0 +1,24 @@
+[
+  {
+    "accountId": "fake-char-1",
+    "displayName": null,
+    "userHash": "fake-hash-a",
+    "sessionId": "fake-session-old",
+    "createdOn": "2026-09-01T10:00:00.000Z",
+    "profile": "fake-profile-1"
+  },
+  {
+    "accountId": "fake-char-2",
+    "displayName": null,
+    "userHash": "fake-hash-a",
+    "sessionId": "fake-session-old",
+    "createdOn": "2026-09-01T10:00:00.000Z"
+  },
+  {
+    "accountId": "fake-char-3",
+    "displayName": "FakeNamed",
+    "userHash": "fake-hash-b",
+    "sessionId": "fake-session-other",
+    "createdOn": "2026-09-02T10:00:00.000Z"
+  }
+]
