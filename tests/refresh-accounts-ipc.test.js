@@ -95,6 +95,39 @@ describe('refresh-accounts IPC handler', () => {
         expect(ids).toEqual(['acc1', 'acc2']);
     });
 
+    test('refresh-accounts refreshes every stored Jagex session', async () => {
+        const accountsFile = path.join(testTempDir, 'accounts.json');
+        fs.writeFileSync(
+            accountsFile,
+            JSON.stringify([
+                { accountId: 'acc1', displayName: null, sessionId: 'SESSION_A' },
+                { accountId: 'acc2', displayName: null, sessionId: 'SESSION_A' },
+                { accountId: 'acc3', displayName: null, sessionId: 'SESSION_B' }
+            ])
+        );
+        writeAccountsToFile.mockImplementation(async (sessionId) => {
+            const arr = JSON.parse(fs.readFileSync(accountsFile, 'utf8'));
+            for (const account of arr) {
+                if (account.sessionId === sessionId) {
+                    account.displayName = `Name-${account.accountId}`;
+                }
+            }
+            fs.writeFileSync(accountsFile, JSON.stringify(arr, null, 2));
+        });
+
+        const result = await registeredHandlers['refresh-accounts']();
+
+        expect(writeAccountsToFile.mock.calls).toEqual([
+            ['SESSION_A'],
+            ['SESSION_B']
+        ]);
+        expect(result.accounts.map((a) => a.displayName)).toEqual([
+            'Name-acc1',
+            'Name-acc2',
+            'Name-acc3'
+        ]);
+    });
+
     test('refresh-accounts errors when accounts.json missing', async () => {
         fs.unlinkSync(path.join(testTempDir, 'accounts.json'));
         const handler = registeredHandlers['refresh-accounts'];

@@ -96,14 +96,20 @@ module.exports = async function (deps) {
                 return { error: 'No accounts found to refresh' };
             }
 
-            // Use first account's sessionId (assuming all accounts share the same session scope)
-            const firstAccount = accountsData[0];
-            const sessionId = firstAccount && firstAccount.sessionId;
-            if (!sessionId) {
+            const sessionIds = [
+                ...new Set(
+                    accountsData
+                        .map((account) => account && account.sessionId)
+                        .filter(Boolean)
+                )
+            ];
+            if (sessionIds.length === 0) {
                 return { error: 'No sessionId found in accounts.json' };
             }
 
-            await writeAccountsToFile(sessionId);
+            for (const sessionId of sessionIds) {
+                await writeAccountsToFile(sessionId);
+            }
 
             // Re-read accounts after refresh
             try {
