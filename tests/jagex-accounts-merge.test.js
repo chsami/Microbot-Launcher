@@ -54,6 +54,18 @@ describe('mergeAccounts', () => {
         expect(accounts[2].sessionId).toBe('fake-session-other');
     });
 
+    test('replaces a stored name when the character was renamed', () => {
+        const { accounts, updated } = mergeAccounts(
+            [{ accountId: 'fake-char-9', displayName: 'Old', sessionId: 'fake-session-old' }],
+            [{ accountId: 'fake-char-9', displayName: 'New' }],
+            'fake-session-old',
+            '2026-10-01T00:00:00.000Z'
+        );
+
+        expect(updated).toBe(1);
+        expect(accounts[0].displayName).toBe('New');
+    });
+
     test('keeps a known display name when the response has none', () => {
         const { accounts, updated } = mergeAccounts(
             loadFixture(),
@@ -143,7 +155,9 @@ describe('writeAccountsToFile', () => {
             ]
         });
 
-        await writeAccountsToFile('fake-session-new');
+        const status = await writeAccountsToFile('fake-session-new');
+
+        expect(status).toEqual({ ok: true, added: 0, updated: 2 });
 
         expect(axiosGet).toHaveBeenCalledWith(
             'https://auth.jagex.com/game-session/v1/accounts',
@@ -163,5 +177,36 @@ describe('writeAccountsToFile', () => {
             ['fake-char-2', 'FakeTwo', 'fake-session-new'],
             ['fake-char-3', 'FakeNamed', 'fake-session-other']
         ]);
+    });
+
+    test('reports a failed session and leaves the file untouched', async () => {
+        const accountsFile = path.join(tempHome, '.microbot', 'accounts.json');
+        const before = fs.readFileSync(accountsFile, 'utf8');
+        const error = new Error('Request failed with status code 401');
+        error.response = { status: 401, data: {} };
+        axiosGet.mockRejectedValue(error);
+
+        const status = await writeAccountsToFile('fake-session-expired');
+
+        expect(status).toMatchObject({ ok: false, status: 401 });
+        expect(fs.readFileSync(accountsFile, 'utf8')).toBe(before);
+    });
+
+    test('does not overwrite an unreadable accounts file', async () => {
+        const accountsFile = path.join(tempHome, '.microbot', 'accounts.json');
+        fs.writeFileSync(accountsFile, '{ not json');
+        axiosGet.mockResolvedValue({
+            data: [{ accountId: 'fake-char-1', displayName: 'FakeOne' }]
+        });
+
+        const status = await writeAccountsToFile('fake-session-new');
+
+        expect(status.ok).toBe(false);
+        expect(fs.readFileSync(accountsFile, 'utf8')).toBe('{ not json');
+        expect(
+            fs.readdirSync(path.join(tempHome, '.microbot')).filter((f) =>
+                f.endsWith('.tmp')
+            )
+        ).toEqual([]);
     });
 });

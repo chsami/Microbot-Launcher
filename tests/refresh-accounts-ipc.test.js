@@ -52,6 +52,7 @@ describe('refresh-accounts IPC handler', () => {
                 profile: 'default'
             });
             fs.writeFileSync(accountsFile, JSON.stringify(arr, null, 2));
+            return { ok: true };
         });
 
         // Load ipc handlers AFTER mock is in place
@@ -113,6 +114,7 @@ describe('refresh-accounts IPC handler', () => {
                 }
             }
             fs.writeFileSync(accountsFile, JSON.stringify(arr, null, 2));
+            return { ok: true };
         });
 
         const result = await registeredHandlers['refresh-accounts']();
@@ -126,6 +128,52 @@ describe('refresh-accounts IPC handler', () => {
             'Name-acc2',
             'Name-acc3'
         ]);
+    });
+
+    test('refresh-accounts updates live sessions and reports an expired one', async () => {
+        const accountsFile = path.join(testTempDir, 'accounts.json');
+        fs.writeFileSync(
+            accountsFile,
+            JSON.stringify([
+                { accountId: 'acc1', displayName: null, sessionId: 'SESSION_A' },
+                { accountId: 'acc2', displayName: null, sessionId: 'SESSION_EXPIRED' },
+                { accountId: 'acc3', displayName: null, sessionId: 'SESSION_C' }
+            ])
+        );
+        writeAccountsToFile.mockImplementation(async (sessionId) => {
+            if (sessionId === 'SESSION_EXPIRED') {
+                return { ok: false, status: 401, error: 'Request failed with status code 401' };
+            }
+            const arr = JSON.parse(fs.readFileSync(accountsFile, 'utf8'));
+            for (const account of arr) {
+                if (account.sessionId === sessionId) {
+                    account.displayName = `Name-${account.accountId}`;
+                }
+            }
+            fs.writeFileSync(accountsFile, JSON.stringify(arr, null, 2));
+            return { ok: true };
+        });
+
+        const result = await registeredHandlers['refresh-accounts']();
+
+        expect(result.success).toBe(true);
+        expect(result.failedSessions).toBe(1);
+        expect(result.warning).toMatch(/1 of 3 Jagex session/);
+        expect(result.accounts.map((a) => a.displayName)).toEqual([
+            'Name-acc1',
+            null,
+            'Name-acc3'
+        ]);
+    });
+
+    test('refresh-accounts returns an error when every session fails', async () => {
+        writeAccountsToFile.mockResolvedValue({ ok: false, status: 401 });
+
+        const result = await registeredHandlers['refresh-accounts']();
+
+        expect(result.success).toBeUndefined();
+        expect(result.failedSessions).toBe(1);
+        expect(result.error).toMatch(/log in again/);
     });
 
     test('refresh-accounts errors when accounts.json missing', async () => {

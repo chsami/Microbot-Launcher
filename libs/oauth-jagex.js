@@ -190,7 +190,6 @@ async function getToken(code) {
             }
         );
         log.info('Token exchange successful.');
-        log.info(`ID Token: ${response.data.id_token}`);
         // Return the ID token
         return response.data.id_token;
     } catch (error) {
@@ -288,30 +287,45 @@ async function writeAccountsToFile(sessionId) {
             existingAccounts = JSON.parse(fileContent);
         } catch (e) {
             if (e.code !== 'ENOENT') {
-                log.error(`Error reading existing accounts file: ${e}`);
+                log.error(`Error reading existing accounts file: ${e.message}`);
+                return { ok: false, error: 'Accounts file is unreadable' };
             }
+        }
+        if (!Array.isArray(existingAccounts)) {
+            log.error('Existing accounts file is not a list, not overwriting it');
+            return { ok: false, error: 'Accounts file is unreadable' };
         }
 
         const { accounts, added, updated } = mergeAccounts(
-            Array.isArray(existingAccounts) ? existingAccounts : [],
+            existingAccounts,
             response.data,
             sessionId,
             new Date().toISOString()
         );
 
         if (added > 0 || updated > 0) {
-            await fs.writeFile(
-                ACCOUNTS_FILE_PATH,
-                JSON.stringify(accounts, null, 2)
-            );
+            const tempPath = `${ACCOUNTS_FILE_PATH}.${process.pid}.tmp`;
+            try {
+                await fs.writeFile(tempPath, JSON.stringify(accounts, null, 2));
+                await fs.rename(tempPath, ACCOUNTS_FILE_PATH);
+            } catch (writeError) {
+                await fs.unlink(tempPath).catch(() => {});
+                throw writeError;
+            }
             log.info(
                 `Accounts file updated: ${added} new, ${updated} updated account(s) in ${ACCOUNTS_FILE_PATH}`
             );
         } else {
             log.info('No account changes.');
         }
+        return { ok: true, added, updated };
     } catch (error) {
         log.error(`Error writing accounts to file: ${error.message}`);
+        return {
+            ok: false,
+            status: error.response ? error.response.status : undefined,
+            error: error.message
+        };
     }
 }
 

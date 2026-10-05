@@ -107,18 +107,29 @@ module.exports = async function (deps) {
                 return { error: 'No sessionId found in accounts.json' };
             }
 
+            let failedSessions = 0;
             for (const sessionId of sessionIds) {
-                await writeAccountsToFile(sessionId);
+                const status = await writeAccountsToFile(sessionId);
+                if (!status || !status.ok) {
+                    failedSessions++;
+                }
+            }
+            const warning =
+                failedSessions > 0
+                    ? `${failedSessions} of ${sessionIds.length} Jagex session(s) could not be refreshed (expired?). Please log in again with those accounts.`
+                    : undefined;
+            if (failedSessions === sessionIds.length) {
+                return { error: warning, failedSessions };
             }
 
             // Re-read accounts after refresh
             try {
                 const updatedRaw = fs.readFileSync(accountsPath, 'utf8');
                 const updatedAccounts = JSON.parse(updatedRaw);
-                return { success: true, accounts: updatedAccounts };
+                return { success: true, accounts: updatedAccounts, failedSessions, warning };
             } catch (err) {
                 log.error('Failed to read updated accounts.json after refresh:', err.message);
-                return { success: true };
+                return { success: true, failedSessions, warning };
             }
         } catch (error) {
             log.error('Error refreshing accounts:', error.message);
