@@ -1831,9 +1831,8 @@ async function shouldPromptForClientDownload(
  * @async
  */
 async function checkForOutdatedLaunch() {
-    const selectedVersion = extractVersion(
-        document.getElementById('client').value
-    );
+    const selectedFile = document.getElementById('client').value;
+    const selectedVersion = extractVersion(selectedFile);
     const latestVersion = extractVersion(
         rememberLatestClientVersion(
             await window.electron.fetchClientVersion()
@@ -1843,6 +1842,15 @@ async function checkForOutdatedLaunch() {
     window.electron.logError(
         `Selected version: ${selectedVersion}, Latest version: ${latestVersion}`
     );
+    const selectedJar = (await orderClientJarsByVersion()).find(
+        (jar) => jar.file === selectedFile
+    );
+    if (selectedJar?.kind === 'custom') {
+        window.electron.logError(
+            `Launching custom client ${selectedVersion}; latest official is ${latestVersion}`
+        );
+        return;
+    }
     if (
         selectedVersion !== latestVersion &&
         latestVersion !== sessionStorage.getItem('skippedVersion')

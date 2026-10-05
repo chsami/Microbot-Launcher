@@ -36,6 +36,7 @@ describe('renderer client version select', () => {
     let properties;
     let context;
     let select;
+    let dialog;
 
     beforeEach(async () => {
         microbotDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mb-renderer-'));
@@ -80,16 +81,22 @@ describe('renderer client version select', () => {
             writeProperties: async (p) => {
                 properties = { ...p };
             },
-            logError: noop
+            logError: noop,
+            showConfirmationDialog: jest.fn().mockResolvedValue(true),
+            clientExists: (version) => handlers['client-exists']({}, version),
+            downloadClient: jest.fn().mockResolvedValue({ error: 'offline' }),
+            errorAlert: noop
         };
+        dialog = electron.showConfirmationDialog;
         context = vm.createContext({
             window: { electron, addEventListener: noop },
             document,
-            console
+            console,
+            sessionStorage: { getItem: () => null, setItem: noop }
         });
         const source = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
         vm.runInContext(
-            `${source}\nglobalThis.__renderer = { populateAndSelectClientVersion, selectClientVersion, shouldPromptForClientDownload, orderClientJarsByVersion, rememberLatestClientVersion };`,
+            `${source}\nglobalThis.__renderer = { checkForOutdatedLaunch, populateAndSelectClientVersion, selectClientVersion, shouldPromptForClientDownload, orderClientJarsByVersion, rememberLatestClientVersion };`,
             context
         );
         context.__renderer.rememberLatestClientVersion('2.6.28');
@@ -128,5 +135,23 @@ describe('renderer client version select', () => {
 
         expect(prompt).toBe(true);
         expect(properties.client).toBe('2.6.2');
+    });
+
+    test('launching a custom jar keeps the selection and skips the outdated dialog', async () => {
+        await context.__renderer.populateAndSelectClientVersion('2.6.28-dev');
+
+        await context.__renderer.checkForOutdatedLaunch();
+
+        expect(dialog).not.toHaveBeenCalled();
+        expect(select.value).toBe('microbot-2.6.28-dev.jar');
+    });
+
+    test('launching an older official jar still shows the outdated dialog', async () => {
+        await context.__renderer.populateAndSelectClientVersion('2.6.2');
+
+        await context.__renderer.checkForOutdatedLaunch();
+
+        expect(dialog).toHaveBeenCalledTimes(1);
+        expect(select.value).toBe('microbot-2.6.2.jar');
     });
 });

@@ -141,6 +141,21 @@ describe('markClientDownloaded', () => {
         markClientDownloaded(fs, dir, '../evil');
 
         expect(readDownloadedClients(fs, dir)).toEqual(['2.6.27', '2.6.28']);
+        expect(fs.readdirSync(dir)).toEqual([DOWNLOADED_CLIENTS_FILE]);
+    });
+
+    test('leaves the previous record intact when the write fails', () => {
+        markClientDownloaded(fs, dir, '2.6.27');
+        const failingFs = {
+            ...fs,
+            renameSync: () => {
+                throw new Error('disk full');
+            }
+        };
+
+        expect(() => markClientDownloaded(failingFs, dir, '2.6.28')).toThrow('disk full');
+        expect(readDownloadedClients(fs, dir)).toEqual(['2.6.27']);
+        expect(fs.readdirSync(dir)).toEqual([DOWNLOADED_CLIENTS_FILE]);
     });
 
     test('treats a corrupt record as empty', () => {

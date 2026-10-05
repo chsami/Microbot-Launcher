@@ -183,6 +183,27 @@ describe('client jar cleanup and listing with an isolated home', () => {
             expect(readDownloaded()).toEqual(['2.6.28']);
         });
 
+        test('rejects unsafe versions before touching the file system', async () => {
+            const sender = { send: jest.fn() };
+            const unsafe = ['../../escape', 'a/b', 'a\\b', '', null, 42];
+
+            for (const version of unsafe) {
+                expect(await handlers['download-client']({ sender }, version)).toEqual({
+                    error: `Invalid client version: ${JSON.stringify(String(version))}`
+                });
+                expect(await handlers['client-exists']({}, version)).toBe(false);
+                expect((await handlers['open-client']({}, version, {}, {}, '1g')).error).toMatch(/^Invalid client version/);
+                expect((await handlers['play-no-jagex-account']({}, version, {}, '1g')).error).toMatch(/^Invalid client version/);
+            }
+            expect(axios).not.toHaveBeenCalled();
+            expect(fs.existsSync(path.join(homeDir, 'escape.jar'))).toBe(false);
+        });
+
+        test('keeps registering other jar-executor handlers unchanged', () => {
+            expect(typeof handlers['open-client']).toBe('function');
+            expect(typeof handlers['play-no-jagex-account']).toBe('function');
+        });
+
         test('download-client does not claim a jar that already exists', async () => {
             touch('microbot-2.6.22.jar');
             const sender = { send: jest.fn() };

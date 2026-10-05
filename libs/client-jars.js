@@ -126,11 +126,21 @@ function readDownloadedClients(fs, dir) {
 }
 
 function writeDownloadedClients(fs, dir, versions) {
-    fs.writeFileSync(
-        path.join(dir, DOWNLOADED_CLIENTS_FILE),
-        JSON.stringify([...new Set(versions)].sort(), null, 2),
-        'utf8'
-    );
+    const target = path.join(dir, DOWNLOADED_CLIENTS_FILE);
+    const temp = `${target}.${process.pid}.${Date.now()}.tmp`;
+    try {
+        fs.writeFileSync(
+            temp,
+            JSON.stringify([...new Set(versions)].sort(), null, 2),
+            'utf8'
+        );
+        fs.renameSync(temp, target);
+    } catch (err) {
+        try {
+            fs.unlinkSync(temp);
+        } catch (_) {}
+        throw err;
+    }
 }
 
 function markClientDownloaded(fs, dir, version) {

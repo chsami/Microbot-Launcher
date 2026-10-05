@@ -25,11 +25,17 @@ module.exports = async function (deps) {
         'libs',
         'browser-util.js'
     ));
-    const { listClientJars, markClientDownloaded } = require(path.join(
-        projectDir,
-        'libs',
-        'client-jars.js'
-    ));
+    const {
+        listClientJars,
+        markClientDownloaded,
+        isSafeClientVersion
+    } = require(path.join(projectDir, 'libs', 'client-jars.js'));
+
+    function invalidVersionResult(version) {
+        const message = `Invalid client version: ${JSON.stringify(String(version))}`;
+        log.error(message);
+        return { error: message };
+    }
 
     ipcMain.handle('start-auth-flow', async () => {
         try {
@@ -72,7 +78,26 @@ module.exports = async function (deps) {
         'libs',
         'jar-executor.js'
     ));
-    await jarExecutorHandler(deps);
+    const versionCheckedChannels = new Set(['open-client', 'play-no-jagex-account']);
+    const versionCheckedIpcMain = new Proxy(ipcMain, {
+        get(target, prop) {
+            if (prop === 'handle') {
+                return (channel, handler) =>
+                    target.handle(
+                        channel,
+                        versionCheckedChannels.has(channel)
+                            ? (event, version, ...rest) =>
+                                  isSafeClientVersion(version)
+                                      ? handler(event, version, ...rest)
+                                      : invalidVersionResult(version)
+                            : handler
+                    );
+            }
+            const value = Reflect.get(target, prop, target);
+            return typeof value === 'function' ? value.bind(target) : value;
+        }
+    });
+    await jarExecutorHandler({ ...deps, ipcMain: versionCheckedIpcMain });
     const packageVersion = packageJson.version;
 
     ipcMain.handle('refresh-accounts', async () => {
@@ -126,6 +151,9 @@ module.exports = async function (deps) {
     });
 
     ipcMain.handle('download-client', async (event, version) => {
+        if (!isSafeClientVersion(version)) {
+            return invalidVersionResult(version);
+        }
         const url = `${filestorage}/releases/microbot/stable/microbot-${version}.jar`;
         try {
             event.sender.send('progress', {
@@ -211,6 +239,10 @@ module.exports = async function (deps) {
     });
 
     ipcMain.handle('client-exists', async (event, version) => {
+        if (!isSafeClientVersion(version)) {
+            invalidVersionResult(version);
+            return false;
+        }
         try {
             const filePath = path.join(microbotDir, `microbot-${version}.jar`);
             log.info(filePath);
