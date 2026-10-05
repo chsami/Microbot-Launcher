@@ -1,5 +1,9 @@
 module.exports = async function (deps) {
-    const { spawn, path, dialog, shell, log, fs, microbotDir, ipcMain } = deps;
+    const { spawn, path, dialog, shell, log, fs, microbotDir, ipcMain, clipboard, packageJson } = deps;
+    const os = require('os');
+    const javaRuntime = require(path.join(__dirname, 'java-runtime.js'));
+    const STARTUP_WINDOW_MS = deps.startupWindowMs || 20000;
+    const MAX_CAPTURED_STDERR = 64 * 1024;
 
     const cliRamValue = extractRamValue(process.argv);
     const cliMemory = buildMemoryArgsFromRam(cliRamValue, log, '--ram');
@@ -71,7 +75,7 @@ module.exports = async function (deps) {
                     );
                 }
 
-                checkJavaAndRunJar(commandArgs, dialog, shell);
+                checkJavaAndRunJar(commandArgs, accountSecrets(account));
                 return { success: true };
             } catch (error) {
                 log.error(error.message);
@@ -137,51 +141,62 @@ module.exports = async function (deps) {
                 );
             }
 
-            checkJavaAndRunJar(commandArgs, dialog, shell);
+            checkJavaAndRunJar(commandArgs);
             return { success: true };
         }
     );
 
-    function isJavaInstalled(callback) {
+    function probeJava(callback) {
+        let called = false;
+        let timeoutHandle = null;
+        const finish = (result) => {
+            if (called) return;
+            called = true;
+            clearTimeout(timeoutHandle);
+            callback(result);
+        };
+
         try {
-            const javaProcess = spawn('java', ['-version']);
-            let stderrData = '';
-            let called = false;
+            const javaProcess = spawn('java', javaRuntime.PROBE_ARGS);
+            let output = '';
             const TIMEOUT_MS = 5000;
 
-            const finish = (success, message) => {
-                if (called) return;
-                called = true;
-                clearTimeout(timeoutHandle);
-                callback(success, message);
-            };
-
-            const timeoutHandle = setTimeout(() => {
+            timeoutHandle = setTimeout(() => {
                 log.info(
                     `Java version check timed out after ${TIMEOUT_MS}ms – killing process`
                 );
                 try {
-                    // attempt to kill the process; signal ignored on Windows
                     javaProcess.kill();
                 } catch (_) {
                     /* ignore */
                 }
-                finish(false, `Java check timed out after ${TIMEOUT_MS}ms`);
+                finish({ problem: javaRuntime.classifyProbeFailure({ timedOut: true }) });
             }, TIMEOUT_MS);
 
-            javaProcess.stderr.on('data', (data) => {
-                stderrData += data.toString();
-            });
+            const collect = (data) => {
+                if (output.length < MAX_CAPTURED_STDERR) output += data.toString();
+            };
+            for (const stream of [javaProcess.stdout, javaProcess.stderr]) {
+                if (!stream) continue;
+                if (stream.setEncoding) stream.setEncoding('utf8');
+                stream.on('data', collect);
+            }
 
             javaProcess.on('error', (err) => {
-                finish(false, err.message);
+                finish({ problem: javaRuntime.classifyProbeFailure({ error: err }) });
             });
 
             javaProcess.on('close', (code) => {
-                finish(code === 0, stderrData);
+                if (code === 0) {
+                    finish({ runtime: javaRuntime.parseJavaSettings(output) });
+                } else {
+                    finish({
+                        problem: javaRuntime.classifyProbeFailure({ code, stderr: output })
+                    });
+                }
             });
         } catch (error) {
-            callback(false, error.message);
+            finish({ problem: javaRuntime.classifyProbeFailure({ error }) });
         }
     }
 
@@ -264,48 +279,125 @@ module.exports = async function (deps) {
         });
     }
 
-    function executeJar(commandArgs, dialog) {
-        log.info(`java ${redactCommandArgs(commandArgs).join(' ')}`);
+    function homeDirectories() {
+        const homes = [os.homedir()];
+        try {
+            homes.push(os.userInfo().homedir);
+        } catch (_) {}
+        return homes;
+    }
+
+    function accountSecrets(account) {
+        if (!account) return [];
+        return [account.displayName, account.accountId, account.profile].filter(
+            (value) => typeof value === 'string' && value !== 'Not set' && value !== 'default'
+        );
+    }
+
+    function showLaunchProblem(problem, { runtime, executable, stderr, secrets } = {}) {
+        const details = javaRuntime.formatProblemDetails({
+            problem,
+            runtime,
+            executable,
+            stderr,
+            launcherVersion: packageJson && packageJson.version,
+            platform: process.platform,
+            arch: process.arch,
+            homeDir: homeDirectories(),
+            secrets
+        });
+        log.error(`[launch problem]\n${details}`);
+        if (!dialog) return;
+
+        const buttons = [];
+        if (problem.offerDownload) buttons.push('Yes, Download JDK');
+        if (clipboard) buttons.push('Copy details');
+        buttons.push('Cancel');
+
+        dialog
+            .showMessageBox({
+                type: 'error',
+                title: problem.title,
+                message: problem.message,
+                detail: details,
+                buttons,
+                defaultId: 0,
+                cancelId: buttons.length - 1
+            })
+            .then((result) => {
+                const choice = buttons[result.response];
+                if (choice === 'Yes, Download JDK') {
+                    shell.openExternal(
+                        javaRuntime.javaDownloadUrl(process.platform, process.arch)
+                    );
+                } else if (choice === 'Copy details') {
+                    clipboard.writeText(details);
+                } else {
+                    log.info('User dismissed the launch problem dialog.');
+                }
+            })
+            .catch((err) => log.error(`Failed to show launch problem: ${err.message}`));
+    }
+
+    function executeJar(executable, commandArgs, runtime, secrets) {
+        log.info(`${executable} ${redactCommandArgs(commandArgs).join(' ')}`);
 
         /**
          * Additional arguments for spawn library.
          * With those arguments, we detach clients from the launcher,
          * guaranteeing that they will continue to run when the launcher is closed.
          * If not in debug mode, we use windowsHide to attempt suppressing the console window,
-         * and we ignore the output streams as backup.
+         * ignore stdout, and only read stderr during startup to explain launch failures.
          */
         let extraArgs = {};
         if (!process.env.DEBUG)
-            extraArgs = { stdio: 'ignore', windowsHide: true };
+            extraArgs = { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true };
 
-        // use javaw on windows to avoid console window popping up
-        const javaCommand = process.platform === 'win32' ? 'javaw' : 'java';
-
+        const startedAt = Date.now();
+        let stderrData = '';
+        let reported = false;
         let jarProcess = null;
 
+        const report = (problem) => {
+            if (reported) return;
+            reported = true;
+            showLaunchProblem(problem, { runtime, executable, stderr: stderrData, secrets });
+        };
+
         try {
-            jarProcess = spawn(javaCommand, commandArgs, {
+            jarProcess = spawn(executable, commandArgs, {
                 detached: true,
                 ...extraArgs
             });
 
             /**
-             * We only pipe the output when debugging, to avoid flooding the
+             * We only pipe stdout when debugging, to avoid flooding the
              * launcher log with client output as the client manages its own
              * logging.
              */
-            if (process.env.DEBUG) {
-                if (jarProcess.stdout) {
-                    jarProcess.stdout.on('data', (data) => {
-                        log.info(`[stdout] ${data}`);
-                    });
-                }
-                if (jarProcess.stderr) {
-                    jarProcess.stderr.on('data', (data) => {
-                        log.info(`[stderr] ${data}`);
-                    });
-                }
+            if (process.env.DEBUG && jarProcess.stdout) {
+                jarProcess.stdout.on('data', (data) => {
+                    log.info(`[stdout] ${data}`);
+                });
             }
+            if (jarProcess.stderr) {
+                if (jarProcess.stderr.setEncoding) jarProcess.stderr.setEncoding('utf8');
+                jarProcess.stderr.on('data', (data) => {
+                    if (process.env.DEBUG) log.info(`[stderr] ${data}`);
+                    stderrData += data.toString();
+                    if (stderrData.length > MAX_CAPTURED_STDERR) {
+                        stderrData = stderrData.slice(-MAX_CAPTURED_STDERR);
+                    }
+                });
+                jarProcess.stderr.on('error', () => {});
+            }
+
+            const startupTimer = setTimeout(() => {
+                if (!process.env.DEBUG && jarProcess.stderr) {
+                    jarProcess.stderr.destroy();
+                }
+            }, STARTUP_WINDOW_MS);
+            if (startupTimer.unref) startupTimer.unref();
 
             /**
              * Allow the parent (launcher) to exit independently of the spawned client.
@@ -319,59 +411,61 @@ module.exports = async function (deps) {
 
             jarProcess.on('error', (err) => {
                 log.error(`[error] ${err.message}`);
-                if (dialog) {
-                    dialog.showErrorBox('Error running jar!', err.message);
-                }
+                clearTimeout(startupTimer);
+                report(javaRuntime.classifyLaunchFailure({ error: err }));
             });
 
-            jarProcess.on('close', (code) => {
-                log.info(`JAR exited with code ${code}`);
+            jarProcess.on('close', (code, signal) => {
+                clearTimeout(startupTimer);
+                const elapsed = Date.now() - startedAt;
+                log.info(`JAR exited with code ${code} after ${elapsed}ms`);
+                if (elapsed <= STARTUP_WINDOW_MS && code !== 0) {
+                    report(javaRuntime.classifyLaunchFailure({ code, signal, stderr: stderrData }));
+                }
             });
         } catch (error) {
             log.error(`[error] ${error.message}`);
-            if (dialog) {
-                dialog.showErrorBox('Error running jar!', error.message);
-            }
+            report(javaRuntime.classifyLaunchFailure({ error }));
         }
     }
 
-    function checkJavaAndRunJar(commandArgs, dialog, shell) {
-        log.info(`java ${redactCommandArgs(commandArgs).join(' ')}`);
-
-        isJavaInstalled((isInstalled, error) => {
-            if (isInstalled) {
-                log.info('Java is installed, running the JAR...');
-                executeJar(commandArgs, dialog);
-            } else {
-                dialog
-                    .showMessageBox({
-                        type: 'error',
-                        title: 'Java Not Found',
-                        message:
-                            'Java Development Kit (JDK) is required to run this application. Would you like to download it now?',
-                        buttons: ['Yes, Download JDK', 'Cancel']
-                    })
-                    .then((result) => {
-                        if (result.response === 0) {
-                            const arch =
-                                process.arch === 'arm64' ? 'aarch64' : 'x64';
-                            const platform = process.platform;
-                            const urls = {
-                                win32: `https://adoptium.net/temurin/releases/?os=windows&arch=${arch}&package=jdk&version=17&mode=filter`,
-                                darwin: `https://adoptium.net/temurin/releases/?os=mac&arch=${arch}&package=jdk&version=17&mode=filter`,
-                                linux: `https://adoptium.net/temurin/releases/?os=linux&arch=${arch}&package=jdk&version=17&mode=filter`
-                            };
-                            shell.openExternal(
-                                urls[platform] ||
-                                    'https://adoptium.net/temurin/'
-                            );
-                        } else {
-                            log.info('User chose not to download Java.');
-                        }
-                    });
+    function checkJavaAndRunJar(commandArgs, secrets = []) {
+        probeJava(({ runtime, problem }) => {
+            if (problem) {
+                showLaunchProblem(problem, { stderr: problem.stderr, secrets });
+                return;
             }
+
+            log.info(`Selected Java runtime: ${javaRuntime.describeRuntime(runtime)} at ${runtime.home || 'unknown home'}`);
+            const evaluation = javaRuntime.evaluateRuntime(runtime, {
+                heapMb: javaRuntime.heapMbFromArgs(commandArgs)
+            });
+            evaluation.warnings.forEach((warning) => log.warn(warning.message));
+            if (!evaluation.compatible) {
+                showLaunchProblem(
+                    {
+                        kind: 'incompatible-java',
+                        title: 'Incompatible Java',
+                        message: evaluation.problems.map((p) => p.message).join(' '),
+                        recovery: evaluation.problems.map((p) => p.recovery).join(' '),
+                        offerDownload: true
+                    },
+                    { runtime, secrets }
+                );
+                return;
+            }
+
+            const launchArgs = javaRuntime.supportedVmArgs(runtime, commandArgs);
+            if (!javaRuntime.supportsZgc(runtime)) {
+                log.info(`${javaRuntime.describeRuntime(runtime)} cannot use ZGC; launching without ZGC flags.`);
+            }
+            const executable = javaRuntime.launcherExecutable(runtime, process.platform, fs.existsSync);
+            log.info('Java runtime is compatible, running the JAR...');
+            executeJar(executable, launchArgs, runtime, secrets);
         });
     }
+
+    return { probeJava, checkJavaAndRunJar, showLaunchProblem };
 };
 
 const DEFAULT_XMS_VALUE = '512m';

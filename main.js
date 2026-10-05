@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, dialog, shell, nativeImage, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
@@ -45,6 +45,7 @@ async function loadLibraries() {
             spawn: spawn,
             dialog: dialog,
             shell: shell,
+            clipboard: clipboard,
             projectDir: __dirname,
             fs: fs,
             app: app,

@@ -1,0 +1,10 @@
+    java.home = C:\Program Files (x86)\Eclipse Adoptium\jdk-17.0.12.7-hotspot
+    java.runtime.name = OpenJDK Runtime Environment
+    java.vendor = Eclipse Adoptium
+    java.version = 17.0.12
+    java.vm.name = OpenJDK Server VM
+    os.arch = x86
+    sun.arch.data.model = 32
+openjdk version "17.0.12" 2024-07-16
+OpenJDK Runtime Environment Temurin-17.0.12+7 (build 17.0.12+7)
+OpenJDK Server VM Temurin-17.0.12+7 (build 17.0.12+7, mixed mode)

@@ -1,0 +1,10 @@
+    java.home = /usr/lib/jvm/java-25-openjdk-amd64
+    java.runtime.name = OpenJDK Runtime Environment
+    java.vendor = Ubuntu
+    java.version = 25.0.4.1
+    java.vm.name = OpenJDK 64-Bit Server VM
+    os.arch = amd64
+    sun.arch.data.model = 64
+openjdk version "25.0.4.1" 2026-08-18
+OpenJDK Runtime Environment (build 25.0.4.1+1-1-26.04.4-Ubuntu)
+OpenJDK 64-Bit Server VM (build 25.0.4.1+1-1-26.04.4-Ubuntu, mixed mode, sharing)
