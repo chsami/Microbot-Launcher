@@ -2,6 +2,7 @@ let accounts = [];
 let restoringSelectedAccount = false;
 let iii = null;
 let lastAccountsReadError = null;
+let latestClientVersion = null;
 let cleanupAccountsDropdownListeners = null;
 
 const DEFAULT_CLIENT_RAM = '1g';
@@ -554,7 +555,9 @@ window.addEventListener('unhandledrejection', (e) => {
 async function initializeLauncher() {
     const properties = await window.electron.readProperties();
 
-    const clientVersion = await window.electron.fetchClientVersion();
+    const clientVersion = rememberLatestClientVersion(
+        await window.electron.fetchClientVersion()
+    );
 
     const microbotLauncherVersion = await window.electron.launcherVersion();
 
@@ -679,8 +682,14 @@ function addSelectElement(selectId, option) {
     const newOption = document.createElement('option');
 
     // Set the value and text of the new option
-    newOption.value = option;
-    newOption.text = option;
+    if (option && typeof option === 'object') {
+        newOption.value = option.file;
+        newOption.text = option.label || option.file;
+        newOption.title = option.file;
+    } else {
+        newOption.value = option;
+        newOption.text = option;
+    }
 
     // Add the new option to the select element
     selectElement.appendChild(newOption);
@@ -1306,7 +1315,9 @@ function updateNowBtn() {
             if (iii) clearInterval(iii);
             document.querySelector('#update-available').style = 'display:none';
             document.getElementById('loader-container').style.display = 'block';
-            const clientVersion = await window.electron.fetchClientVersion();
+            const clientVersion = rememberLatestClientVersion(
+                await window.electron.fetchClientVersion()
+            );
             const result = await window.electron.downloadClient(clientVersion);
             if (result?.error) {
                 window.electron.errorAlert(result.error);
@@ -1353,7 +1364,7 @@ async function populateAndSelectClientVersion(version) {
 async function selectClientVersion(version) {
     const clientSelect = document.getElementById('client');
     for (let i = 0; i < clientSelect.options.length; i++) {
-        if (clientSelect.options[i].value.includes(version)) {
+        if (extractVersion(clientSelect.options[i].value) === version) {
             clientSelect.selectedIndex = i;
             clientSelect.value = clientSelect.options[i].value;
             break;
@@ -1645,7 +1656,9 @@ function setupHamburgerMenu() {
  * @param {MicrobotProperties} properties - The properties object containing client information.
  */
 async function checkForClientUpdate(properties) {
-    const clientVersion = await window.electron.fetchClientVersion();
+    const clientVersion = rememberLatestClientVersion(
+        await window.electron.fetchClientVersion()
+    );
     window.electron.logError(
         `Current client version: ${clientVersion}, properties client version: ${properties['client']}`
     );
@@ -1739,29 +1752,20 @@ function loadLandingPageWebview() {
  * Order the client jars by version from latest to oldest.
  *
  * @async
- * @returns {Promise<string[]>} A promise that resolves to the ordered list of client jar file names.
+ * @returns {Promise<Array<{file: string, version: string, kind: string, label: string}>>} Ordered client jars: official versions newest first, then custom jars.
  */
 async function orderClientJarsByVersion() {
-    const clientJars = await window.electron.listJars();
-    clientJars.sort((a, b) => {
-        const versionA_match = a.match(/-([\d.]+)\.jar$/);
-        const versionB_match = b.match(/-([\d.]+)\.jar$/);
+    const clientJars = await window.electron.listClientJars(
+        latestClientVersion
+    );
+    return Array.isArray(clientJars) ? clientJars : [];
+}
 
-        if (versionA_match && versionB_match) {
-            const partsA = versionA_match[1].split('.').map(Number);
-            const partsB = versionB_match[1].split('.').map(Number);
-
-            for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-                const partA = partsA[i] || 0;
-                const partB = partsB[i] || 0;
-                if (partA !== partB) {
-                    return partB - partA; // Sort descending
-                }
-            }
-        }
-        return 0;
-    });
-    return clientJars;
+function rememberLatestClientVersion(version) {
+    if (typeof version === 'string' && version) {
+        latestClientVersion = version;
+    }
+    return version;
 }
 
 /**
@@ -1780,8 +1784,8 @@ async function shouldPromptForClientDownload(
     installedClientVersions,
     properties
 ) {
-    const isLatestInstalled = installedClientVersions.some((file) =>
-        file.includes(latestClientVersion)
+    const isLatestInstalled = installedClientVersions.some(
+        (file) => extractVersion(file) === latestClientVersion
     );
     const isClientVersionOnPropertiesLatest =
         properties['client'] === latestClientVersion;
@@ -1803,7 +1807,10 @@ async function shouldPromptForClientDownload(
     if (isClientVersionOnPropertiesLatest) {
         const orderedClientJars = await orderClientJarsByVersion();
         if (orderedClientJars.length > 0) {
-            properties['client'] = extractVersion(orderedClientJars[0]);
+            const newestOfficial =
+                orderedClientJars.find((jar) => jar.kind === 'official') ||
+                orderedClientJars[0];
+            properties['client'] = newestOfficial.version;
         } else {
             properties['client'] = '0.0.0';
         }
@@ -1824,16 +1831,26 @@ async function shouldPromptForClientDownload(
  * @async
  */
 async function checkForOutdatedLaunch() {
-    const selectedVersion = extractVersion(
-        document.getElementById('client').value
-    );
+    const selectedFile = document.getElementById('client').value;
+    const selectedVersion = extractVersion(selectedFile);
     const latestVersion = extractVersion(
-        await window.electron.fetchClientVersion()
+        rememberLatestClientVersion(
+            await window.electron.fetchClientVersion()
+        )
     );
 
     window.electron.logError(
         `Selected version: ${selectedVersion}, Latest version: ${latestVersion}`
     );
+    const selectedJar = (await orderClientJarsByVersion()).find(
+        (jar) => jar.file === selectedFile
+    );
+    if (selectedJar?.kind === 'custom') {
+        window.electron.logError(
+            `Launching custom client ${selectedVersion}; latest official is ${latestVersion}`
+        );
+        return;
+    }
     if (
         selectedVersion !== latestVersion &&
         latestVersion !== sessionStorage.getItem('skippedVersion')
