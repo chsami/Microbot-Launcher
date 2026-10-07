@@ -39,6 +39,7 @@ jobs:
                   # Upload Linux AppImage with error handling
                   if ls ./artifacts/microbot-launcher-linux-latest/*.AppImage 1> /dev/null 2>&1; then
                     scp -r ./artifacts/microbot-launcher-linux-latest/*.AppImage root@138.201.81.246:/var/www/files/releases/microbot-launcher/
+                    scp ./artifacts/microbot-launcher-linux-latest/latest-linux.yml root@138.201.81.246:/var/www/files/releases/microbot-launcher/
                     echo "✅ Linux AppImage uploaded successfully"
                   else
                     echo "⚠️  Warning: Linux AppImage not found"

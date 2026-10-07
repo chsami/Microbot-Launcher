@@ -38,6 +38,7 @@ jobs:
                       ./artifacts/microbot-launcher-exe-latest/latest.yml
                       ./artifacts/microbot-launcher-exe-latest/*.blockmap
                       ./artifacts/microbot-launcher-linux-latest/*.AppImage
+                      ./artifacts/microbot-launcher-linux-latest/latest-linux.yml
                       ./artifacts/microbot-launcher-mac-latest/*.dmg
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
