@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const axios = require('axios');
 const fs = require('fs').promises;
 const path = require('path');
+const http = require('http');
 const log = require('electron-log');
 const { getAvailableBrowser } = require('./browser-util.js');
 
@@ -126,7 +127,7 @@ function generateRandomState(length) {
         'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let result = '';
     for (let i = 0; i < length; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
+        result += chars.charAt(crypto.randomInt(chars.length));
     }
     return result;
 }
@@ -339,15 +340,21 @@ async function writeAccountsToFile(sessionId) {
  * It uses Playwright's Chromium browser for the UI interaction (Patchwright for bot detection bypass).
  * It also handles the redirect to localhost after successful authentication.
  */
-async function startAuthFlow() {
+async function startPatchrightAuthFlow() {
     return new Promise(async (resolve, reject) => {
         let finished = false;
+        let browser = null;
 
         function fail(err) {
             if (finished) return;
             finished = true;
             reject(err);
         }
+
+        cancelCurrentAuth = () => {
+            fail(cancelledError());
+            browser?.close();
+        };
 
         const availableBrowser = await getAvailableBrowser();
 
@@ -359,10 +366,14 @@ async function startAuthFlow() {
             );
         }
 
-        const browser = await chromium.launch({
+        browser = await chromium.launch({
             headless: false,
             executablePath: availableBrowser.executable
         });
+        if (finished) {
+            await browser.close();
+            return;
+        }
         const context = await browser.newContext();
         const page = await context.newPage();
 
@@ -460,4 +471,139 @@ async function startAuthFlow() {
     });
 }
 
-module.exports = { startAuthFlow, writeAccountsToFile, mergeAccounts };
+async function listenOnLoopback(handler) {
+    const listen = (host) =>
+        new Promise((resolve, reject) => {
+            const server = http.createServer(handler);
+            server.once('error', reject);
+            server.listen(80, host, () => resolve(server));
+        });
+    const ipv4 = await listen('127.0.0.1');
+    const ipv6 = await listen('::1').catch((err) => {
+        log.warn(`Could not listen on [::1]:80: ${err.message}`);
+        return null;
+    });
+    return [ipv4, ipv6].filter(Boolean);
+}
+
+let pendingSystemBrowserAuth = null;
+let cancelCurrentAuth = null;
+
+function cancelledError() {
+    const error = new Error('Login cancelled.');
+    error.code = 'CANCELLED';
+    return error;
+}
+
+function cancelAuthFlow() {
+    if (!cancelCurrentAuth) return false;
+    log.info('Jagex login cancelled by the user.');
+    cancelCurrentAuth();
+    return true;
+}
+
+function startSystemBrowserAuthFlow() {
+    if (pendingSystemBrowserAuth) {
+        log.info('Jagex login already pending, reopening the system browser.');
+        require('electron').shell.openExternal(pendingSystemBrowserAuth.authUrl);
+        return pendingSystemBrowserAuth.result;
+    }
+
+    const { shell } = require('electron');
+    const flowState = generateRandomState(32);
+    const authUrl =
+        'https://account.jagex.com/oauth2/auth' +
+        `?nonce=${generateRandomState(48)}` +
+        `&prompt=login` +
+        `&redirect_uri=http%3A%2F%2Flocalhost` +
+        `&response_type=id_token+code` +
+        `&state=${flowState}` +
+        `&client_id=1fddee4e-b100-4f4e-b2b0-097f9088f9d2` +
+        `&scope=openid+offline`;
+    let servers = [];
+    let timeout;
+
+    const result = new Promise((resolve, reject) => {
+        const finish = (err, value) => {
+            clearTimeout(timeout);
+            servers.forEach((s) => s.close());
+            pendingSystemBrowserAuth = null;
+            err ? reject(err) : resolve(value);
+        };
+        timeout = setTimeout(
+            () => finish(new Error('Timed out waiting for the Jagex login to complete.')),
+            10 * 60 * 1000
+        );
+        cancelCurrentAuth = () => finish(cancelledError());
+
+        listenOnLoopback(async (req, res) => {
+            if (req.method === 'GET' && req.url.split('?')[0] === '/') {
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                res.end(
+                    AUTH_COMPLETE_HTML.replace(
+                        '</body>',
+                        `<script>fetch('/token',{method:'POST',body:(location.hash||location.search).slice(1)}).then(r=>r.ok||(document.querySelector('h1').textContent='Authentication Failed'))</script></body>`
+                    )
+                );
+                return;
+            }
+            if (req.method !== 'POST' || req.url !== '/token') {
+                res.writeHead(404).end();
+                return;
+            }
+            let body = '';
+            for await (const chunk of req) body += chunk;
+            const params = new URLSearchParams(body);
+            if (params.get('state') !== flowState) {
+                res.writeHead(400).end();
+                return;
+            }
+            const idToken = params.get('id_token');
+            if (!idToken) {
+                res.writeHead(400).end();
+                finish(
+                    new Error(
+                        params.get('error_description') ||
+                            params.get('error') ||
+                            'Jagex did not return an id_token.'
+                    )
+                );
+                return;
+            }
+            try {
+                const sessionId = await getSessionId(idToken);
+                if (!sessionId) throw new Error('Could not create a game session.');
+                const written = await writeAccountsToFile(sessionId);
+                if (!written?.ok) throw new Error(written?.error || 'Could not save the accounts.');
+                res.writeHead(204).end();
+                log.info('Authentication flow complete.');
+                finish(null, 'Authentication successful.');
+            } catch (error) {
+                res.writeHead(500).end();
+                finish(error);
+            }
+        })
+            .then((s) => {
+                servers = s;
+                log.info('Opening Jagex login in the system browser...');
+                return shell.openExternal(authUrl);
+            })
+            .catch((err) => finish(err));
+    });
+    pendingSystemBrowserAuth = { authUrl, result };
+    return result;
+}
+
+async function startAuthFlow() {
+    try {
+        return await startSystemBrowserAuthFlow();
+    } catch (error) {
+        if (error.code !== 'EACCES' && error.code !== 'EADDRINUSE') throw error;
+        log.warn(`Port 80 unavailable (${error.code}), falling back to patchright browser.`);
+        return await startPatchrightAuthFlow();
+    } finally {
+        cancelCurrentAuth = null;
+    }
+}
+
+module.exports = { startAuthFlow, cancelAuthFlow, writeAccountsToFile, mergeAccounts };

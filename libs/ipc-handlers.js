@@ -15,15 +15,10 @@ module.exports = async function (deps) {
     const url = 'https:/microbot.cloud';
     const filestorage = 'https://files.microbot.cloud';
 
-    const { startAuthFlow } = require(path.join(
+    const { startAuthFlow, cancelAuthFlow } = require(path.join(
         projectDir,
         'libs',
         'oauth-jagex.js'
-    ));
-    const { isBrowserDownloaded } = require(path.join(
-        projectDir,
-        'libs',
-        'browser-util.js'
     ));
     const {
         listClientJars,
@@ -37,23 +32,29 @@ module.exports = async function (deps) {
         return { error: message };
     }
 
-    ipcMain.handle('start-auth-flow', async () => {
+    ipcMain.handle('start-auth-flow', async (event) => {
+        const bringLauncherToFront = () => {
+            const win = require('electron').BrowserWindow.fromWebContents(event.sender);
+            if (!win || win.isDestroyed()) return;
+            if (win.isMinimized()) win.restore();
+            win.show();
+            win.focus();
+        };
         try {
-            return await startAuthFlow();
+            const result = await startAuthFlow();
+            bringLauncherToFront();
+            return result;
         } catch (error) {
+            if (error.code === 'CANCELLED') {
+                return { cancelled: true };
+            }
             log.error(`Error during authentication flow: ${error.message}`);
+            bringLauncherToFront();
             return { error: error.message };
         }
     });
 
-    ipcMain.handle('is-browser-downloaded', async () => {
-        try {
-            return await isBrowserDownloaded();
-        } catch (error) {
-            log.error(`Error checking if browser is downloaded: ${error}`);
-            return { error: error.message };
-        }
-    });
+    ipcMain.handle('cancel-auth-flow', () => cancelAuthFlow());
 
     const propertiesHandler = require(path.join(
         projectDir,

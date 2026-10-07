@@ -39,7 +39,6 @@
     "electron-log": "^5.4.1",
     "electron-updater": "^6.1.8",
     "patchright": "^1.52.5",
-    "playwright": "^1.54.1",
     "update-electron-app": "^3.0.0"
   },
   "build": {
