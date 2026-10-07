@@ -26,17 +26,6 @@ async function getAvailableBrowser() {
     return browsers[0];
 }
 
-async function isBrowserDownloaded() {
-    try {
-        const executablePath = await getAvailableBrowser();
-        return executablePath !== null;
-    } catch (error) {
-        console.error('Error checking browser existence:', error);
-        return false;
-    }
-}
-
 module.exports = {
-    getAvailableBrowser,
-    isBrowserDownloaded
+    getAvailableBrowser
 };

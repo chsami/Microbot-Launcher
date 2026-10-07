@@ -20,11 +20,6 @@ module.exports = async function (deps) {
         'libs',
         'oauth-jagex.js'
     ));
-    const { isBrowserDownloaded } = require(path.join(
-        projectDir,
-        'libs',
-        'browser-util.js'
-    ));
     const {
         listClientJars,
         markClientDownloaded,
@@ -42,15 +37,6 @@ module.exports = async function (deps) {
             return await startAuthFlow();
         } catch (error) {
             log.error(`Error during authentication flow: ${error.message}`);
-            return { error: error.message };
-        }
-    });
-
-    ipcMain.handle('is-browser-downloaded', async () => {
-        try {
-            return await isBrowserDownloaded();
-        } catch (error) {
-            log.error(`Error checking if browser is downloaded: ${error}`);
             return { error: error.message };
         }
     });
