@@ -414,30 +414,56 @@ function getSelectedClientVersion() {
     return extractVersion(clientSelect.value);
 }
 
+const CANCEL_LOGIN_TEXT = 'Cancel login';
+let jagexLoginButton = null;
+
+async function runJagexLogin(button) {
+    if (jagexLoginButton) {
+        if (jagexLoginButton === button) {
+            button.classList.add('disabled');
+            await window.electron.cancelAuthFlow();
+        }
+        return;
+    }
+    jagexLoginButton = button;
+    const originalText = button.textContent;
+    button.textContent = CANCEL_LOGIN_TEXT;
+    button.title = 'Finish logging in to Jagex in your browser, or click to cancel.';
+    try {
+        const authResult = await window.electron.startAuthFlow();
+        if (authResult?.error) {
+            window.electron.errorAlert(authResult.error);
+        }
+    } catch (err) {
+        window.electron.errorAlert(err?.message || String(err));
+    } finally {
+        jagexLoginButton = null;
+        if (button.textContent === CANCEL_LOGIN_TEXT) {
+            button.textContent = originalText;
+        }
+        button.removeAttribute('title');
+        button.classList.remove('disabled');
+    }
+}
+
 /**
  * Handles the play button click event of Jagex account
  */
 async function playButtonClickHandler() {
-    await checkForOutdatedLaunch();
     const playBtn = document.getElementById('play');
+    if (jagexLoginButton === playBtn) {
+        await runJagexLogin(playBtn);
+        return;
+    }
+    await checkForOutdatedLaunch();
 
     if (
         playBtn?.innerText.toLowerCase() ===
         'Play With Jagex Account'.toLowerCase()
     ) {
         await openClient();
-    } else {
-        playBtn?.classList.add('disabled');
-        try {
-            const authResult = await window.electron.startAuthFlow();
-            if (authResult?.error) {
-                window.electron.errorAlert(authResult.error);
-            }
-        } catch (err) {
-            window.electron.errorAlert(err?.message || String(err));
-        } finally {
-            playBtn?.classList.remove('disabled');
-        }
+    } else if (playBtn) {
+        await runJagexLogin(playBtn);
     }
 }
 
@@ -1154,18 +1180,7 @@ async function setupSidebarLayout(amountOfAccounts) {
 }
 
 async function addAccountsHandler() {
-    const addAccountsButton = document.getElementById('add-accounts');
-    addAccountsButton.classList.add('disabled');
-    try {
-        const authResult = await window.electron.startAuthFlow();
-        if (authResult?.error) {
-            window.electron.errorAlert(authResult.error);
-        }
-    } catch (err) {
-        window.electron.errorAlert(err?.message || String(err));
-    } finally {
-        document.getElementById('add-accounts').classList.remove('disabled');
-    }
+    await runJagexLogin(document.getElementById('add-accounts'));
 }
 
 function setupAddAccountsButton() {

@@ -343,12 +343,18 @@ async function writeAccountsToFile(sessionId) {
 async function startPatchrightAuthFlow() {
     return new Promise(async (resolve, reject) => {
         let finished = false;
+        let browser = null;
 
         function fail(err) {
             if (finished) return;
             finished = true;
             reject(err);
         }
+
+        cancelCurrentAuth = () => {
+            fail(cancelledError());
+            browser?.close();
+        };
 
         const availableBrowser = await getAvailableBrowser();
 
@@ -360,10 +366,14 @@ async function startPatchrightAuthFlow() {
             );
         }
 
-        const browser = await chromium.launch({
+        browser = await chromium.launch({
             headless: false,
             executablePath: availableBrowser.executable
         });
+        if (finished) {
+            await browser.close();
+            return;
+        }
         const context = await browser.newContext();
         const page = await context.newPage();
 
@@ -477,6 +487,20 @@ async function listenOnLoopback(handler) {
 }
 
 let pendingSystemBrowserAuth = null;
+let cancelCurrentAuth = null;
+
+function cancelledError() {
+    const error = new Error('Login cancelled.');
+    error.code = 'CANCELLED';
+    return error;
+}
+
+function cancelAuthFlow() {
+    if (!cancelCurrentAuth) return false;
+    log.info('Jagex login cancelled by the user.');
+    cancelCurrentAuth();
+    return true;
+}
 
 function startSystemBrowserAuthFlow() {
     if (pendingSystemBrowserAuth) {
@@ -510,6 +534,7 @@ function startSystemBrowserAuthFlow() {
             () => finish(new Error('Timed out waiting for the Jagex login to complete.')),
             10 * 60 * 1000
         );
+        cancelCurrentAuth = () => finish(cancelledError());
 
         listenOnLoopback(async (req, res) => {
             if (req.method === 'GET' && req.url.split('?')[0] === '/') {
@@ -575,8 +600,10 @@ async function startAuthFlow() {
     } catch (error) {
         if (error.code !== 'EACCES' && error.code !== 'EADDRINUSE') throw error;
         log.warn(`Port 80 unavailable (${error.code}), falling back to patchright browser.`);
-        return startPatchrightAuthFlow();
+        return await startPatchrightAuthFlow();
+    } finally {
+        cancelCurrentAuth = null;
     }
 }
 
-module.exports = { startAuthFlow, writeAccountsToFile, mergeAccounts };
+module.exports = { startAuthFlow, cancelAuthFlow, writeAccountsToFile, mergeAccounts };
