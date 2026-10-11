@@ -18,6 +18,32 @@ function createButton(text) {
     };
 }
 
+function createSelect(value = '') {
+    const listeners = {};
+    const select = {
+        options: [],
+        title: '',
+        _value: value,
+        get value() {
+            return this._value;
+        },
+        set value(next) {
+            this._value = this.options.some((option) => option.value === next) ? next : '';
+        },
+        set innerHTML(_) {
+            this.options = [];
+        },
+        appendChild(option) {
+            this.options.push(option);
+        },
+        addEventListener: (type, fn) => {
+            listeners[type] = fn;
+        },
+        dispatch: (type) => listeners[type]?.({ target: select })
+    };
+    return select;
+}
+
 describe('renderer Jagex login button', () => {
     let electron;
     let buttons;
@@ -169,7 +195,7 @@ describe('renderer proxy login info popup', () => {
         modal.classList.add('auth-hidden');
         elements = {
             play: createButton('Login Jagex Account'),
-            'proxy-ip': createElement({ value: '1.2.3.4:1080:bob:hunter2' }),
+            'proxy-ip': createSelect('1.2.3.4:1080:bob:hunter2'),
             'proxy-login-info-modal': modal,
             'proxy-login-info-ok': createElement(),
             'proxy-login-info-hide': { checked: false }
@@ -248,7 +274,7 @@ describe('renderer proxy login info popup', () => {
     });
 
     test('does not show the popup when no proxy is set', async () => {
-        elements['proxy-ip'].value = '  ';
+        elements['proxy-ip']._value = '';
         const login = renderer.runJagexLogin(elements.play);
 
         expect(modalOpen()).toBe(false);
@@ -258,17 +284,17 @@ describe('renderer proxy login info popup', () => {
     });
 });
 
-describe('renderer account proxy', () => {
-    let proxyInput;
+describe('renderer proxy list', () => {
+    let proxySelect;
     let properties;
     let electron;
     let renderer;
 
     beforeEach(() => {
-        proxyInput = { value: '9.9.9.9:1080' };
+        proxySelect = createSelect();
         properties = { proxyip: '9.9.9.9:1080', client_ram: '2g' };
         electron = {
-            readProperties: jest.fn(async () => ({ ...properties })),
+            readProperties: jest.fn(async () => JSON.parse(JSON.stringify(properties))),
             writeProperties: jest.fn(async (data) => {
                 properties = data;
             }),
@@ -279,7 +305,7 @@ describe('renderer account proxy', () => {
         const context = vm.createContext({
             window: { electron, addEventListener: noop },
             document: {
-                getElementById: (id) => (id === 'proxy-ip' ? proxyInput : null),
+                getElementById: (id) => (id === 'proxy-ip' ? proxySelect : null),
                 createElement: () => ({}),
                 querySelector: () => null,
                 querySelectorAll: () => [],
@@ -289,25 +315,110 @@ describe('renderer account proxy', () => {
             sessionStorage: { getItem: () => null, setItem: noop }
         });
         const source = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
-        vm.runInContext(`${source}\nglobalThis.__renderer = { applyAccountProxy };`, context);
+        vm.runInContext(
+            `${source}\nglobalThis.__renderer = { applyAccountProxy, setupProxyInput, addProxiesFromText, parseProxyLine, proxyLabel };`,
+            context
+        );
         renderer = context.__renderer;
     });
 
-    test('switches the proxy field to the proxy the account was logged in with and saves it', async () => {
+    const optionLabels = () => proxySelect.options.map((option) => option.textContent);
+
+    test('moves a proxy saved by an older launcher into the list and keeps it selected', async () => {
+        await renderer.setupProxyInput();
+
+        expect(properties.proxies).toEqual([{ name: '', address: '9.9.9.9:1080' }]);
+        expect(optionLabels()).toEqual(['No proxy', '9.9.9.9:1080']);
+        expect(proxySelect.value).toBe('9.9.9.9:1080');
+    });
+
+    test('saves the proxy picked from the list', async () => {
+        properties.proxies = [
+            { name: '', address: '9.9.9.9:1080' },
+            { name: 'Main', address: '1.2.3.4:1080:bob:pw' }
+        ];
+        await renderer.setupProxyInput();
+
+        proxySelect._value = '1.2.3.4:1080:bob:pw';
+        await proxySelect.dispatch('change');
+
+        expect(properties.proxyip).toBe('1.2.3.4:1080:bob:pw');
+        expect(optionLabels()).toEqual(['No proxy', '9.9.9.9:1080', 'Main (1.2.3.4:1080)']);
+    });
+
+    test('adds every valid pasted line, skips duplicates and returns the invalid ones', async () => {
+        properties = { proxyip: '', proxies: [{ name: '', address: '9.9.9.9:1080' }] };
+
+        const result = await renderer.addProxiesFromText(
+            ' 1.1.1.1:1080 \n\nHome | 2.2.2.2:1080:u:p:with:colons\nsocks5://u:p@3.3.3.3:1081\n9.9.9.9:1080\nnot-a-proxy\n4.4.4.4:99999'
+        );
+
+        expect(result).toEqual({ added: 3, duplicates: 1, invalid: ['not-a-proxy', '4.4.4.4:99999'] });
+        expect(properties.proxies).toEqual([
+            { name: '', address: '9.9.9.9:1080' },
+            { name: '', address: '1.1.1.1:1080' },
+            { name: 'Home', address: '2.2.2.2:1080:u:p:with:colons' },
+            { name: '', address: 'socks5://u:p@3.3.3.3:1081' }
+        ]);
+        expect(properties.proxyip).toBe('');
+    });
+
+    test('selects the first proxy a user ever adds', async () => {
+        properties = { proxyip: '' };
+
+        await renderer.addProxiesFromText('1.1.1.1:1080\n2.2.2.2:1080');
+
+        expect(properties.proxyip).toBe('1.1.1.1:1080');
+        expect(proxySelect.value).toBe('1.1.1.1:1080');
+    });
+
+    test.each([
+        ['1.2.3.4:1080', { name: '', address: '1.2.3.4:1080' }],
+        ['http://1.2.3.4:8080', { name: '', address: 'http://1.2.3.4:8080' }],
+        ['1.2.3.4:1080:user', null],
+        ['ftp://1.2.3.4:21', null],
+        ['1.2.3.4:abc', null]
+    ])('parses %s', (line, expected) => {
+        const parsed = renderer.parseProxyLine(line);
+        expect(parsed ? { ...parsed } : parsed).toEqual(expected);
+    });
+
+    test('never shows proxy passwords in labels', () => {
+        expect(renderer.proxyLabel({ name: '', address: '1.2.3.4:1080:bob:secret' })).toBe('1.2.3.4:1080');
+        expect(renderer.proxyLabel({ name: 'Alt', address: 'socks5://bob:secret@1.2.3.4:1080' })).toBe(
+            'Alt (1.2.3.4:1080)'
+        );
+    });
+
+    test('switches to the proxy the account was logged in with, adding it to the list', async () => {
+        properties.proxies = [{ name: '', address: '9.9.9.9:1080' }];
+        await renderer.setupProxyInput();
+
         await renderer.applyAccountProxy({ accountId: 'a1', proxyIp: '1.2.3.4:1080:bob:pw' });
 
-        expect(proxyInput.value).toBe('1.2.3.4:1080:bob:pw');
-        expect(properties).toEqual({ proxyip: '1.2.3.4:1080:bob:pw', client_ram: '2g' });
+        expect(proxySelect.value).toBe('1.2.3.4:1080:bob:pw');
+        expect(properties).toEqual({
+            proxyip: '1.2.3.4:1080:bob:pw',
+            client_ram: '2g',
+            proxies: [
+                { name: '', address: '9.9.9.9:1080' },
+                { name: '', address: '1.2.3.4:1080:bob:pw' }
+            ]
+        });
     });
 
     test.each([
         ['logged in without a proxy', { accountId: 'a1', proxyIp: '' }],
         ['saved before proxies were remembered', { accountId: 'a1' }],
-        ['already matching the field', { accountId: 'a1', proxyIp: '9.9.9.9:1080' }]
-    ])('leaves the proxy field alone for an account %s', async (_, account) => {
+        ['already matching the selection', { accountId: 'a1', proxyIp: '9.9.9.9:1080' }]
+    ])('leaves the selection alone for an account %s', async (_, account) => {
+        properties.proxies = [{ name: '', address: '9.9.9.9:1080' }];
+        await renderer.setupProxyInput();
+        electron.writeProperties.mockClear();
+
         await renderer.applyAccountProxy(account);
 
-        expect(proxyInput.value).toBe('9.9.9.9:1080');
+        expect(proxySelect.value).toBe('9.9.9.9:1080');
         expect(electron.writeProperties).not.toHaveBeenCalled();
     });
 });
