@@ -112,6 +112,39 @@ describe('startLoginProxy', () => {
         expect(socks.seen.auths).toEqual(['bob:wrong']);
     });
 
+    test('resolves plain HTTP target hostnames at the SOCKS5 proxy instead of locally', async () => {
+        loginProxy = await startLoginProxy(toProxyUri(`127.0.0.1:${socksPort}:bob:pa:ss@w`));
+        const proxyUrl = new URL(loginProxy.url);
+
+        const body = await new Promise((resolve, reject) => {
+            http.get(
+                {
+                    host: proxyUrl.hostname,
+                    port: proxyUrl.port,
+                    path: `http://localhost:${targetPort}/plain`,
+                    headers: { Host: `localhost:${targetPort}` }
+                },
+                (res) => {
+                    let data = '';
+                    res.on('data', (chunk) => (data += chunk));
+                    res.on('end', () => resolve(data));
+                }
+            ).on('error', reject);
+        });
+
+        expect(body).toBe('hello /plain');
+        expect(socks.seen.targets).toEqual([`localhost:${targetPort}`]);
+    });
+
+    test.each([
+        ['file:///etc/passwd', 'Unsupported proxy type "file".'],
+        ['ftp://bob:hunter2@proxy:21', 'Unsupported proxy type "ftp".'],
+        [toProxyUri('1.2.3.4:1080:bob'), 'The proxy address is not valid.']
+    ])('refuses to start for %p without echoing it', async (proxyUri, message) => {
+        await expect(startLoginProxy(proxyUri)).rejects.toThrow(message);
+        await expect(startLoginProxy(proxyUri)).rejects.not.toThrow(/hunter2|bob/);
+    });
+
     test('stops accepting connections after close', async () => {
         loginProxy = await startLoginProxy(toProxyUri(`127.0.0.1:${socksPort}`));
         const port = Number(new URL(loginProxy.url).port);

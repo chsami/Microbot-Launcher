@@ -2,6 +2,8 @@ const { Server } = require('proxy-chain');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const DEFAULT_SCHEME = 'socks5';
+const SUPPORTED_PROTOCOLS = ['http:', 'https:', 'socks:', 'socks4:', 'socks4a:', 'socks5:', 'socks5h:'];
+const REMOTE_DNS_PROTOCOLS = { 'socks4:': 'socks4a:', 'socks5:': 'socks5h:' };
 
 function toProxyUri(raw) {
     if (typeof raw !== 'string' || raw.trim() === '') return null;
@@ -21,11 +23,26 @@ function toProxyUri(raw) {
     return `${DEFAULT_SCHEME}://${raw}`;
 }
 
+function toUpstreamProxyUrl(proxyUri) {
+    let url;
+    try {
+        url = new URL(proxyUri);
+    } catch {
+        throw new Error('The proxy address is not valid.');
+    }
+    if (!SUPPORTED_PROTOCOLS.includes(url.protocol)) {
+        throw new Error(`Unsupported proxy type "${url.protocol.slice(0, -1)}".`);
+    }
+    if (REMOTE_DNS_PROTOCOLS[url.protocol]) url.protocol = REMOTE_DNS_PROTOCOLS[url.protocol];
+    return url.href;
+}
+
 async function startLoginProxy(proxyUri) {
+    const upstreamProxyUrl = toUpstreamProxyUrl(proxyUri);
     const server = new Server({
         host: '127.0.0.1',
         port: 0,
-        prepareRequestFunction: () => ({ upstreamProxyUrl: proxyUri })
+        prepareRequestFunction: () => ({ upstreamProxyUrl })
     });
     await server.listen();
     const url = `http://127.0.0.1:${server.port}`;
