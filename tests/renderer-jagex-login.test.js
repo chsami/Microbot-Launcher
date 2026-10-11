@@ -112,3 +112,148 @@ describe('renderer Jagex login button', () => {
         expect(button.textContent).toBe('Play With Jagex Account');
     });
 });
+
+describe('renderer proxy login info popup', () => {
+    let electron;
+    let elements;
+    let renderer;
+    let finishLogin;
+    let properties;
+
+    function createElement(extra = {}) {
+        const classes = new Set();
+        const listeners = {};
+        return {
+            ...createButton(''),
+            classList: {
+                add: (c) => classes.add(c),
+                remove: (c) => classes.delete(c),
+                contains: (c) => classes.has(c)
+            },
+            focus: jest.fn(),
+            addEventListener: (type, fn) => {
+                listeners[type] = fn;
+            },
+            click: () => listeners.click?.(),
+            ...extra
+        };
+    }
+
+    function loadRenderer() {
+        const noop = () => {};
+        const context = vm.createContext({
+            window: { electron, addEventListener: noop },
+            document: {
+                getElementById: (id) => elements[id] || null,
+                createElement: () => ({}),
+                querySelector: () => null,
+                querySelectorAll: () => [],
+                addEventListener: noop
+            },
+            console,
+            sessionStorage: { getItem: () => null, setItem: noop }
+        });
+        const source = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
+        vm.runInContext(
+            `${source}\nglobalThis.__renderer = { runJagexLogin, setupProxyInput };`,
+            context
+        );
+        return context.__renderer;
+    }
+
+    const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+    beforeEach(() => {
+        properties = { proxyip: '1.2.3.4:1080:bob:hunter2' };
+        const modal = createElement();
+        modal.classList.add('auth-hidden');
+        elements = {
+            play: createButton('Login Jagex Account'),
+            'proxy-ip': createElement({ value: '1.2.3.4:1080:bob:hunter2' }),
+            'proxy-login-info-modal': modal,
+            'proxy-login-info-ok': createElement(),
+            'proxy-login-info-hide': { checked: false }
+        };
+        electron = {
+            startAuthFlow: jest.fn(() => new Promise((resolve) => (finishLogin = resolve))),
+            cancelAuthFlow: jest.fn(),
+            readProperties: jest.fn(async () => ({ ...properties })),
+            writeProperties: jest.fn(async (data) => {
+                properties = data;
+            }),
+            errorAlert: jest.fn(),
+            logError: () => {},
+            ipcRenderer: { receive: () => {} }
+        };
+        renderer = loadRenderer();
+    });
+
+    const modalOpen = () => !elements['proxy-login-info-modal'].classList.contains('auth-hidden');
+
+    test('explains the proxied login before the first login and waits for the user', async () => {
+        const login = renderer.runJagexLogin(elements.play);
+        await flush();
+
+        expect(modalOpen()).toBe(true);
+        expect(elements['proxy-login-info-ok'].focus).toHaveBeenCalled();
+        expect(electron.startAuthFlow).not.toHaveBeenCalled();
+
+        elements['proxy-login-info-ok'].click();
+        await flush();
+
+        expect(modalOpen()).toBe(false);
+        expect(electron.startAuthFlow).toHaveBeenCalledWith({ proxyIp: '1.2.3.4:1080:bob:hunter2' });
+        expect(electron.writeProperties).not.toHaveBeenCalled();
+        finishLogin('Authentication successful.');
+        await login;
+    });
+
+    test('shows the popup only once per session', async () => {
+        const first = renderer.runJagexLogin(elements.play);
+        await flush();
+        elements['proxy-login-info-ok'].click();
+        await flush();
+        finishLogin('Authentication successful.');
+        await first;
+
+        const second = renderer.runJagexLogin(elements.play);
+
+        expect(modalOpen()).toBe(false);
+        expect(electron.startAuthFlow).toHaveBeenCalledTimes(2);
+        finishLogin('Authentication successful.');
+        await second;
+    });
+
+    test('remembers "don\'t show this again" across launcher restarts', async () => {
+        const login = renderer.runJagexLogin(elements.play);
+        await flush();
+        elements['proxy-login-info-hide'].checked = true;
+        elements['proxy-login-info-ok'].click();
+        await flush();
+        finishLogin('Authentication successful.');
+        await login;
+
+        expect(properties.hide_proxy_login_info).toBe(true);
+        expect(properties.proxyip).toBe('1.2.3.4:1080:bob:hunter2');
+
+        elements['proxy-login-info-modal'].classList.add('auth-hidden');
+        renderer = loadRenderer();
+        await renderer.setupProxyInput();
+        const next = renderer.runJagexLogin(elements.play);
+
+        expect(modalOpen()).toBe(false);
+        expect(electron.startAuthFlow).toHaveBeenCalledTimes(2);
+        finishLogin('Authentication successful.');
+        await next;
+    });
+
+    test('does not show the popup when no proxy is set', async () => {
+        elements['proxy-ip'].value = '  ';
+        const login = renderer.runJagexLogin(elements.play);
+
+        expect(modalOpen()).toBe(false);
+        expect(electron.startAuthFlow).toHaveBeenCalledTimes(1);
+        finishLogin('Authentication successful.');
+        await login;
+    });
+});
