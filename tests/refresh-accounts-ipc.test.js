@@ -8,6 +8,11 @@ jest.mock('../libs/oauth-jagex.js', () => ({
     writeAccountsToFile: jest.fn()
 }));
 
+jest.mock('../libs/login-proxy.js', () => ({
+    ...jest.requireActual('../libs/login-proxy.js'),
+    startLoginProxy: jest.fn()
+}));
+
 let testTempDir; // set in beforeEach
 let writeAccountsToFile; // reference to mocked function
 
@@ -181,5 +186,37 @@ describe('refresh-accounts IPC handler', () => {
         const handler = registeredHandlers['refresh-accounts'];
         const result = await handler();
         expect(result.error).toMatch(/does not exist/);
+    });
+
+    test('refresh-accounts contacts Jagex through the proxy when one is set', async () => {
+        const { startLoginProxy } = require('../libs/login-proxy.js');
+        const loginProxy = { httpOptions: { proxy: false }, close: jest.fn(async () => {}) };
+        startLoginProxy.mockResolvedValue(loginProxy);
+
+        const result = await registeredHandlers['refresh-accounts']({}, { proxyIp: '1.2.3.4:1080:bob:hunter2' });
+
+        expect(result.success).toBe(true);
+        expect(startLoginProxy).toHaveBeenCalledWith('socks5://bob:hunter2@1.2.3.4:1080');
+        expect(writeAccountsToFile).toHaveBeenCalledWith('SESSION123', loginProxy.httpOptions);
+        expect(loginProxy.close).toHaveBeenCalled();
+    });
+
+    test('refresh-accounts does not fall back to a direct connection when the proxy cannot start', async () => {
+        const { startLoginProxy } = require('../libs/login-proxy.js');
+        startLoginProxy.mockRejectedValue(new Error('Unsupported proxy type "file".'));
+
+        const result = await registeredHandlers['refresh-accounts']({}, { proxyIp: 'file:///etc/passwd' });
+
+        expect(result.error).toBe('Unsupported proxy type "file".');
+        expect(writeAccountsToFile).not.toHaveBeenCalled();
+    });
+
+    test('refresh-accounts connects directly when no proxy is set', async () => {
+        const { startLoginProxy } = require('../libs/login-proxy.js');
+
+        const result = await registeredHandlers['refresh-accounts']({}, { proxyIp: '' });
+
+        expect(result.success).toBe(true);
+        expect(startLoginProxy).not.toHaveBeenCalled();
     });
 });

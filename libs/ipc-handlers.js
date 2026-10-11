@@ -20,6 +20,11 @@ module.exports = async function (deps) {
         'libs',
         'oauth-jagex.js'
     ));
+    const { toProxyUri, startLoginProxy } = require(path.join(
+        projectDir,
+        'libs',
+        'login-proxy.js'
+    ));
     const {
         listClientJars,
         markClientDownloaded,
@@ -101,7 +106,8 @@ module.exports = async function (deps) {
     await jarExecutorHandler({ ...deps, ipcMain: versionCheckedIpcMain });
     const packageVersion = packageJson.version;
 
-    ipcMain.handle('refresh-accounts', async () => {
+    ipcMain.handle('refresh-accounts', async (event, proxy) => {
+        let loginProxy = null;
         try {
             const { writeAccountsToFile } = require(path.join(
                 projectDir,
@@ -138,9 +144,11 @@ module.exports = async function (deps) {
                 return { error: 'No sessionId found in accounts.json' };
             }
 
+            const proxyUri = toProxyUri(proxy?.proxyIp);
+            if (proxyUri) loginProxy = await startLoginProxy(proxyUri);
             let failedSessions = 0;
             for (const sessionId of sessionIds) {
-                const status = await writeAccountsToFile(sessionId);
+                const status = await writeAccountsToFile(sessionId, loginProxy?.httpOptions);
                 if (!status || !status.ok) {
                     failedSessions++;
                 }
@@ -165,6 +173,8 @@ module.exports = async function (deps) {
         } catch (error) {
             log.error('Error refreshing accounts:', error.message);
             return { error: error.message };
+        } finally {
+            await loginProxy?.close();
         }
     });
 

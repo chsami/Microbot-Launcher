@@ -1195,7 +1195,7 @@ function setupRefreshAccountsButton() {
     refreshBtn.addEventListener('click', async () => {
         refreshBtn.disabled = true;
         try {
-            const result = await window.electron.refreshAccounts();
+            const result = await window.electron.refreshAccounts(getProxyValues());
             if (result?.error) {
                 window.electron.errorAlert(result.error);
                 return;
