@@ -698,6 +698,7 @@ async function initializeLauncher() {
                 if (account) {
                     const profile = account.profile || 'default';
                     document.getElementById('profile').value = profile;
+                    await applyAccountProxy(account);
                 }
             } else {
                 // If no account is selected, set the profile to the preferred non-Jagex account profile
@@ -1558,6 +1559,17 @@ async function updateProfileBasedOnCharacter() {
             profileSelect.value = 'default';
         }
     }
+}
+
+async function applyAccountProxy(account) {
+    const proxyInput = document.getElementById('proxy-ip');
+    if (!proxyInput || typeof account?.proxyIp !== 'string') return;
+    const proxyIp = account.proxyIp.trim();
+    if (proxyIp === '' || proxyInput.value === proxyIp) return;
+    proxyInput.value = proxyIp;
+    const properties = await window.electron.readProperties();
+    properties['proxyip'] = proxyIp;
+    await window.electron.writeProperties(properties);
 }
 
 async function persistSelectedAccount(accountId) {

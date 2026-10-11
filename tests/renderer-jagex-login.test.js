@@ -257,3 +257,57 @@ describe('renderer proxy login info popup', () => {
         await login;
     });
 });
+
+describe('renderer account proxy', () => {
+    let proxyInput;
+    let properties;
+    let electron;
+    let renderer;
+
+    beforeEach(() => {
+        proxyInput = { value: '9.9.9.9:1080' };
+        properties = { proxyip: '9.9.9.9:1080', client_ram: '2g' };
+        electron = {
+            readProperties: jest.fn(async () => ({ ...properties })),
+            writeProperties: jest.fn(async (data) => {
+                properties = data;
+            }),
+            logError: () => {},
+            ipcRenderer: { receive: () => {} }
+        };
+        const noop = () => {};
+        const context = vm.createContext({
+            window: { electron, addEventListener: noop },
+            document: {
+                getElementById: (id) => (id === 'proxy-ip' ? proxyInput : null),
+                createElement: () => ({}),
+                querySelector: () => null,
+                querySelectorAll: () => [],
+                addEventListener: noop
+            },
+            console,
+            sessionStorage: { getItem: () => null, setItem: noop }
+        });
+        const source = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
+        vm.runInContext(`${source}\nglobalThis.__renderer = { applyAccountProxy };`, context);
+        renderer = context.__renderer;
+    });
+
+    test('switches the proxy field to the proxy the account was logged in with and saves it', async () => {
+        await renderer.applyAccountProxy({ accountId: 'a1', proxyIp: '1.2.3.4:1080:bob:pw' });
+
+        expect(proxyInput.value).toBe('1.2.3.4:1080:bob:pw');
+        expect(properties).toEqual({ proxyip: '1.2.3.4:1080:bob:pw', client_ram: '2g' });
+    });
+
+    test.each([
+        ['logged in without a proxy', { accountId: 'a1', proxyIp: '' }],
+        ['saved before proxies were remembered', { accountId: 'a1' }],
+        ['already matching the field', { accountId: 'a1', proxyIp: '9.9.9.9:1080' }]
+    ])('leaves the proxy field alone for an account %s', async (_, account) => {
+        await renderer.applyAccountProxy(account);
+
+        expect(proxyInput.value).toBe('9.9.9.9:1080');
+        expect(electron.writeProperties).not.toHaveBeenCalled();
+    });
+});
