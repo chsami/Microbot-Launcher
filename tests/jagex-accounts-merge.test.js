@@ -66,6 +66,28 @@ describe('mergeAccounts', () => {
         expect(accounts[0].displayName).toBe('New');
     });
 
+    test('records the login proxy on new and existing characters and keeps it on refresh', () => {
+        const login = mergeAccounts(
+            [{ accountId: 'fake-char-9', displayName: 'Old', sessionId: 'fake-session-old', proxyIp: '' }],
+            [
+                { accountId: 'fake-char-9', displayName: 'Old' },
+                { accountId: 'fake-char-10', displayName: 'Ten' }
+            ],
+            'fake-session-new',
+            '2026-10-01T00:00:00.000Z',
+            { proxyIp: '1.2.3.4:1080' }
+        );
+        expect(login.accounts.map((a) => a.proxyIp)).toEqual(['1.2.3.4:1080', '1.2.3.4:1080']);
+
+        const refresh = mergeAccounts(
+            login.accounts,
+            [{ accountId: 'fake-char-9', displayName: 'Renamed' }],
+            'fake-session-new',
+            '2026-10-02T00:00:00.000Z'
+        );
+        expect(refresh.accounts[0]).toMatchObject({ displayName: 'Renamed', proxyIp: '1.2.3.4:1080' });
+    });
+
     test('keeps a known display name when the response has none', () => {
         const { accounts, updated } = mergeAccounts(
             loadFixture(),

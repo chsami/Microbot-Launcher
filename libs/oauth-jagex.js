@@ -220,7 +220,7 @@ function hasDisplayName(account) {
     );
 }
 
-function mergeAccounts(existingAccounts, fetchedAccounts, sessionId, now) {
+function mergeAccounts(existingAccounts, fetchedAccounts, sessionId, now, accountFields = {}) {
     const accounts = existingAccounts.map((acc) => ({ ...acc }));
     const indexById = new Map(
         accounts.map((acc, index) => [acc.accountId, index])
@@ -235,12 +235,12 @@ function mergeAccounts(existingAccounts, fetchedAccounts, sessionId, now) {
         const index = indexById.get(fetched.accountId);
         if (index === undefined) {
             indexById.set(fetched.accountId, accounts.length);
-            accounts.push({ ...fetched, sessionId, createdOn: now });
+            accounts.push({ ...fetched, ...accountFields, sessionId, createdOn: now });
             added++;
             continue;
         }
         const current = accounts[index];
-        const next = { ...current, ...fetched, sessionId };
+        const next = { ...current, ...fetched, ...accountFields, sessionId };
         if (!hasDisplayName(fetched)) {
             next.displayName = current.displayName;
         }
@@ -257,7 +257,7 @@ function mergeAccounts(existingAccounts, fetchedAccounts, sessionId, now) {
  * Fetches account details and writes them to a JSON file.
  * @param {string} sessionId The game session ID.
  */
-async function writeAccountsToFile(sessionId, httpOptions = {}) {
+async function writeAccountsToFile(sessionId, httpOptions = {}, accountFields = {}) {
     log.info('Fetching account information...');
     try {
         const response = await axios.get(
@@ -289,7 +289,8 @@ async function writeAccountsToFile(sessionId, httpOptions = {}) {
             existingAccounts,
             response.data,
             sessionId,
-            new Date().toISOString()
+            new Date().toISOString(),
+            accountFields
         );
 
         if (added > 0 || updated > 0) {
@@ -318,10 +319,10 @@ async function writeAccountsToFile(sessionId, httpOptions = {}) {
     }
 }
 
-async function createSessionAndSaveAccounts(idToken, httpOptions) {
+async function createSessionAndSaveAccounts(idToken, httpOptions, accountFields) {
     const sessionId = await getSessionId(idToken, httpOptions);
     if (!sessionId) throw new Error('Could not create a game session.');
-    const written = await writeAccountsToFile(sessionId, httpOptions);
+    const written = await writeAccountsToFile(sessionId, httpOptions, accountFields);
     if (!written?.ok) throw new Error(written?.error || 'Could not save the accounts.');
 }
 
@@ -335,7 +336,7 @@ async function createSessionAndSaveAccounts(idToken, httpOptions) {
  * It uses Playwright's Chromium browser for the UI interaction (Patchwright for bot detection bypass).
  * It also handles the redirect to localhost after successful authentication.
  */
-async function startPatchrightAuthFlow(loginProxy = null) {
+async function startPatchrightAuthFlow(loginProxy = null, accountFields = { proxyIp: '' }) {
     return new Promise(async (resolve, reject) => {
         let finished = false;
         let browser = null;
@@ -425,7 +426,8 @@ async function startPatchrightAuthFlow(loginProxy = null) {
                             finished = true;
                             const error = await createSessionAndSaveAccounts(
                                 idToken,
-                                loginProxy?.httpOptions
+                                loginProxy?.httpOptions,
+                                accountFields
                             ).then(() => null, (err) => err);
                             await closeBrowser();
                             if (error) return reject(error);
@@ -604,7 +606,7 @@ function startSystemBrowserAuthFlow() {
             try {
                 const sessionId = await getSessionId(idToken);
                 if (!sessionId) throw new Error('Could not create a game session.');
-                const written = await writeAccountsToFile(sessionId);
+                const written = await writeAccountsToFile(sessionId, {}, { proxyIp: '' });
                 if (!written?.ok) throw new Error(written?.error || 'Could not save the accounts.');
                 res.writeHead(204).end();
                 log.info('Authentication flow complete.');
@@ -625,11 +627,11 @@ function startSystemBrowserAuthFlow() {
     return result;
 }
 
-async function startProxiedAuthFlow(proxyUri) {
+async function startProxiedAuthFlow(proxyUri, proxyIp) {
     log.info('Proxy set, logging in to Jagex in an isolated browser through the proxy.');
     const loginProxy = await startLoginProxy(proxyUri);
     try {
-        return await startPatchrightAuthFlow(loginProxy);
+        return await startPatchrightAuthFlow(loginProxy, { proxyIp });
     } finally {
         await loginProxy.close();
     }
@@ -649,7 +651,7 @@ async function startAuthFlow({ proxy } = {}) {
     const proxyUri = toProxyUri(proxy?.proxyIp);
     try {
         return proxyUri
-            ? await startProxiedAuthFlow(proxyUri)
+            ? await startProxiedAuthFlow(proxyUri, proxy.proxyIp.trim())
             : await startUnproxiedAuthFlow();
     } finally {
         cancelCurrentAuth = null;

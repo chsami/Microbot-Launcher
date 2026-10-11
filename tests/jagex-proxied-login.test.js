@@ -152,7 +152,7 @@ describe('startAuthFlow proxy routing', () => {
         axios.post.mockResolvedValue({ data: { sessionId: 'session-1' } });
         axios.get.mockResolvedValue({ data: [{ accountId: 'acc-1', displayName: 'Bob' }] });
 
-        const flow = startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } });
+        const flow = startAuthFlow({ proxy: { proxyIp: ' 1.2.3.4:1080 ' } });
         await new Promise((resolve) => setImmediate(resolve));
         await page.handlers.framenavigated(redirectWithIdToken(page));
 
@@ -167,7 +167,9 @@ describe('startAuthFlow proxy routing', () => {
             expect.objectContaining({ proxy: false })
         );
         const saved = JSON.parse(fs.readFileSync(path.join(homeDir, '.microbot', 'accounts.json'), 'utf8'));
-        expect(saved).toEqual([expect.objectContaining({ accountId: 'acc-1', sessionId: 'session-1' })]);
+        expect(saved).toEqual([
+            expect.objectContaining({ accountId: 'acc-1', sessionId: 'session-1', proxyIp: '1.2.3.4:1080' })
+        ]);
         expect(browser.close).toHaveBeenCalled();
         expect(loginProxy.close).toHaveBeenCalled();
     });

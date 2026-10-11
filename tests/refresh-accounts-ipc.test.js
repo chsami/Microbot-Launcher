@@ -207,8 +207,62 @@ describe('refresh-accounts IPC handler', () => {
 
         const result = await registeredHandlers['refresh-accounts']({}, { proxyIp: 'file:///etc/passwd' });
 
-        expect(result.error).toBe('Unsupported proxy type "file".');
+        expect(result.error).toMatch(/could not be refreshed/);
         expect(writeAccountsToFile).not.toHaveBeenCalled();
+    });
+
+    test('refresh-accounts refreshes each session through the proxy it was logged in with', async () => {
+        const { startLoginProxy } = require('../libs/login-proxy.js');
+        const bridges = [];
+        startLoginProxy.mockImplementation(async (uri) => {
+            const bridge = { uri, httpOptions: { via: uri }, close: jest.fn(async () => {}) };
+            bridges.push(bridge);
+            return bridge;
+        });
+        fs.writeFileSync(
+            path.join(testTempDir, 'accounts.json'),
+            JSON.stringify([
+                { accountId: 'a1', sessionId: 'SESSION_A', proxyIp: '1.1.1.1:1080:alice:pw' },
+                { accountId: 'a2', sessionId: 'SESSION_A', proxyIp: '1.1.1.1:1080:alice:pw' },
+                { accountId: 'b1', sessionId: 'SESSION_B', proxyIp: '2.2.2.2:1080' },
+                { accountId: 'c1', sessionId: 'SESSION_C', proxyIp: '' },
+                { accountId: 'd1', sessionId: 'SESSION_D' }
+            ])
+        );
+        writeAccountsToFile.mockResolvedValue({ ok: true });
+
+        const result = await registeredHandlers['refresh-accounts']({}, { proxyIp: '3.3.3.3:1080' });
+
+        expect(result.success).toBe(true);
+        expect(writeAccountsToFile.mock.calls).toEqual([
+            ['SESSION_A', { via: 'socks5://alice:pw@1.1.1.1:1080' }],
+            ['SESSION_B', { via: 'socks5://2.2.2.2:1080' }],
+            ['SESSION_C'],
+            ['SESSION_D', { via: 'socks5://3.3.3.3:1080' }]
+        ]);
+        expect(bridges.every((bridge) => bridge.close.mock.calls.length === 1)).toBe(true);
+    });
+
+    test('refresh-accounts keeps refreshing other sessions when one stored proxy cannot start', async () => {
+        const { startLoginProxy } = require('../libs/login-proxy.js');
+        startLoginProxy.mockImplementation(async (uri) => {
+            if (uri.startsWith('file:')) throw new Error('Unsupported proxy type "file".');
+            return { httpOptions: { via: uri }, close: jest.fn(async () => {}) };
+        });
+        fs.writeFileSync(
+            path.join(testTempDir, 'accounts.json'),
+            JSON.stringify([
+                { accountId: 'a1', sessionId: 'SESSION_A', proxyIp: 'file:///etc/passwd' },
+                { accountId: 'b1', sessionId: 'SESSION_B', proxyIp: '2.2.2.2:1080' }
+            ])
+        );
+        writeAccountsToFile.mockResolvedValue({ ok: true });
+
+        const result = await registeredHandlers['refresh-accounts']({}, { proxyIp: '' });
+
+        expect(result.success).toBe(true);
+        expect(result.failedSessions).toBe(1);
+        expect(writeAccountsToFile.mock.calls).toEqual([['SESSION_B', { via: 'socks5://2.2.2.2:1080' }]]);
     });
 
     test('refresh-accounts connects directly when no proxy is set', async () => {
