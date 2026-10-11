@@ -64,6 +64,7 @@ describe('toProxyUri', () => {
         ['1.2.3.4:1080:bob:hunter2', 'socks5://bob:hunter2@1.2.3.4:1080'],
         ['1.2.3.4:1080:bob:pa:ss@w', 'socks5://bob:pa%3Ass%40w@1.2.3.4:1080'],
         [' http://bob:pw@proxy:8080 ', 'http://bob:pw@proxy:8080'],
+        ['1.2.3.4:1080:bob', 'socks5://1.2.3.4:1080:bob'],
         ['proxyhost', 'socks5://proxyhost']
     ])('%p -> %p', (input, expected) => {
         expect(toProxyUri(input)).toBe(expected);

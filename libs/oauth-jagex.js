@@ -333,6 +333,13 @@ async function writeAccountsToFile(sessionId, httpOptions = {}) {
     }
 }
 
+async function createSessionAndSaveAccounts(idToken, httpOptions) {
+    const sessionId = await getSessionId(idToken, httpOptions);
+    if (!sessionId) throw new Error('Could not create a game session.');
+    const written = await writeAccountsToFile(sessionId, httpOptions);
+    if (!written?.ok) throw new Error(written?.error || 'Could not save the accounts.');
+}
+
 /**
  * Starts the authentication flow using Playwright.
  * @returns {Promise<string>} A promise that resolves when the authentication is complete.
@@ -354,142 +361,152 @@ async function startPatchrightAuthFlow(loginProxy = null) {
             reject(err);
         }
 
+        function closeBrowser() {
+            return browser
+                ?.close()
+                .catch((error) => log.warn(`Could not close the login browser: ${error.message}`));
+        }
+
         cancelCurrentAuth = () => {
             fail(cancelledError());
-            browser?.close();
+            closeBrowser();
         };
 
-        const availableBrowser = await getAvailableBrowser();
-
-        if (!availableBrowser) {
-            return fail(
-                new Error(
-                    'No supported browser found on the system, please have a Chromium-based browser installed.'
-                )
-            );
-        }
-
         try {
-            browser = await chromium.launch({
-                headless: false,
-                executablePath: availableBrowser.executable,
-                ...(loginProxy && {
-                    proxy: { server: loginProxy.url },
-                    args: ['--force-webrtc-ip-handling-policy=disable_non_proxied_udp']
-                })
-            });
-        } catch (error) {
-            return fail(new Error(`Could not start the login browser: ${error.message}`));
-        }
-        if (finished) {
-            await browser.close();
-            return;
-        }
-        const context = await browser.newContext();
-        const page = await context.newPage();
-
-        const initialUrl = `https://account.jagex.com/oauth2/auth?auth_method=&login_type=&flow=launcher&response_type=code&client_id=com_jagex_auth_desktop_launcher&redirect_uri=https%3A%2F%2Fsecure.runescape.com%2Fm%3Dweblogin%2Flauncher-redirect&code_challenge=${codeChallenge}&code_challenge_method=S256&prompt=login&scope=openid+offline+gamesso.token.create+user.profile.read&state=${state}`;
-
-        log.info('Starting authentication flow...');
-
-        /**
-         * Handles the unexpected closure of the authentication flow.
-         */
-        page.once('close', () => {
+            const availableBrowser = await getAvailableBrowser();
             if (finished) return;
-            fail(
-                new Error(
-                    'Browser was closed before authentication flow completed.'
-                )
-            );
-            browser.close();
-        });
 
-        page.on('framenavigated', async (frame) => {
-            if (finished) return;
-            const url = frame.url();
+            if (!availableBrowser) {
+                return fail(
+                    new Error(
+                        'No supported browser found on the system, please have a Chromium-based browser installed.'
+                    )
+                );
+            }
 
             try {
-                if (url.includes('id_token=')) {
-                    log.info(
-                        'Found the URL with the id_token query parameter.'
-                    );
-                    const idToken = extractIdTokenFromUrl(url);
-                    if (idToken) {
-                        const sessionId = await getSessionId(idToken, loginProxy?.httpOptions);
-                        if (sessionId) {
-                            await writeAccountsToFile(sessionId, loginProxy?.httpOptions);
-                        }
-
-                        log.info(
-                            'Authentication flow complete. Closing browser.'
-                        );
-                        finished = true;
-                        await browser.close();
-                        resolve('Authentication successful.');
-                    }
-                } else if (url.includes('code=') && !url.includes('locale?')) {
-                    log.info('Found the URL with the code query parameter.');
-                    const code = extractCodeFromUrl(url);
-                    if (code) {
-                        log.info(
-                            'The URL contains the specified code query parameter.'
-                        );
-                        const idTokenFromCode = await getToken(code, loginProxy?.httpOptions);
-                        if (idTokenFromCode) {
-                            const nonce = generateRandomState(48);
-                            const nextAuthUrl =
-                                `https://account.jagex.com/oauth2/auth?id_token_hint=${idTokenFromCode}` +
-                                `&nonce=${nonce}` +
-                                `&prompt=consent` +
-                                `&redirect_uri=http%3A%2F%2Flocalhost` +
-                                `&response_type=id_token+code` +
-                                `&state=${state}` +
-                                `&client_id=1fddee4e-b100-4f4e-b2b0-097f9088f9d2` +
-                                `&scope=openid+offline`;
-
-                            log.info(
-                                'Navigating to the next authentication URL.'
-                            );
-                            await page.goto(nextAuthUrl);
-                        }
-                    }
-                }
+                browser = await chromium.launch({
+                    headless: false,
+                    executablePath: availableBrowser.executable,
+                    ...(loginProxy && {
+                        proxy: { server: loginProxy.url },
+                        args: ['--force-webrtc-ip-handling-policy=disable_non_proxied_udp']
+                    })
+                });
             } catch (error) {
-                error.message =
-                    'An error occurred during the authentication flow.';
-                fail(error);
-                await browser.close();
+                return fail(new Error(`Could not start the login browser: ${error.message}`));
             }
-        });
+            if (finished) {
+                await closeBrowser();
+                return;
+            }
+            const context = await browser.newContext();
+            const page = await context.newPage();
 
-        await page.route('http://localhost/', async (route) => {
-            if (finished) return;
-            log.info('Intercepted navigation to localhost.');
+            const initialUrl = `https://account.jagex.com/oauth2/auth?auth_method=&login_type=&flow=launcher&response_type=code&client_id=com_jagex_auth_desktop_launcher&redirect_uri=https%3A%2F%2Fsecure.runescape.com%2Fm%3Dweblogin%2Flauncher-redirect&code_challenge=${codeChallenge}&code_challenge_method=S256&prompt=login&scope=openid+offline+gamesso.token.create+user.profile.read&state=${state}`;
 
-            await page.waitForTimeout(50); // Small delay to ensure the URL is updated
-            finalUrl = page.url();
+            log.info('Starting authentication flow...');
 
-            // Fulfill with the auth complete HTML which indicates the auth process is complete
-            await route.fulfill({
-                status: 200,
-                contentType: 'text/html',
-                body: AUTH_COMPLETE_HTML
+            /**
+             * Handles the unexpected closure of the authentication flow.
+             */
+            page.once('close', () => {
+                if (finished) return;
+                fail(
+                    new Error(
+                        'Browser was closed before authentication flow completed.'
+                    )
+                );
+                closeBrowser();
             });
-        });
 
-        try {
-            await page.goto(initialUrl);
+            page.on('framenavigated', async (frame) => {
+                if (finished) return;
+                const url = frame.url();
+
+                try {
+                    if (url.includes('id_token=')) {
+                        log.info(
+                            'Found the URL with the id_token query parameter.'
+                        );
+                        const idToken = extractIdTokenFromUrl(url);
+                        if (idToken) {
+                            finished = true;
+                            const error = await createSessionAndSaveAccounts(
+                                idToken,
+                                loginProxy?.httpOptions
+                            ).then(() => null, (err) => err);
+                            await closeBrowser();
+                            if (error) return reject(error);
+                            log.info('Authentication flow complete.');
+                            resolve('Authentication successful.');
+                        }
+                    } else if (url.includes('code=') && !url.includes('locale?')) {
+                        log.info('Found the URL with the code query parameter.');
+                        const code = extractCodeFromUrl(url);
+                        if (code) {
+                            log.info(
+                                'The URL contains the specified code query parameter.'
+                            );
+                            const idTokenFromCode = await getToken(code, loginProxy?.httpOptions);
+                            if (idTokenFromCode && !finished) {
+                                const nonce = generateRandomState(48);
+                                const nextAuthUrl =
+                                    `https://account.jagex.com/oauth2/auth?id_token_hint=${idTokenFromCode}` +
+                                    `&nonce=${nonce}` +
+                                    `&prompt=consent` +
+                                    `&redirect_uri=http%3A%2F%2Flocalhost` +
+                                    `&response_type=id_token+code` +
+                                    `&state=${state}` +
+                                    `&client_id=1fddee4e-b100-4f4e-b2b0-097f9088f9d2` +
+                                    `&scope=openid+offline`;
+
+                                log.info(
+                                    'Navigating to the next authentication URL.'
+                                );
+                                await page.goto(nextAuthUrl);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    error.message =
+                        'An error occurred during the authentication flow.';
+                    fail(error);
+                    await closeBrowser();
+                }
+            });
+
+            await page.route('http://localhost/', async (route) => {
+                if (finished) return;
+                log.info('Intercepted navigation to localhost.');
+
+                await page.waitForTimeout(50); // Small delay to ensure the URL is updated
+                finalUrl = page.url();
+
+                // Fulfill with the auth complete HTML which indicates the auth process is complete
+                await route.fulfill({
+                    status: 200,
+                    contentType: 'text/html',
+                    body: AUTH_COMPLETE_HTML
+                });
+            });
+
+            try {
+                await page.goto(initialUrl);
+            } catch (error) {
+                if (finished) return;
+                fail(
+                    new Error(
+                        loginProxy
+                            ? `Could not reach Jagex through the proxy: ${error.message}`
+                            : `Could not open the Jagex login page: ${error.message}`
+                    )
+                );
+                await closeBrowser();
+            }
         } catch (error) {
-            if (finished) return;
-            fail(
-                new Error(
-                    loginProxy
-                        ? `Could not reach Jagex through the proxy: ${error.message}`
-                        : `Could not open the Jagex login page: ${error.message}`
-                )
-            );
-            await browser.close();
+            fail(error);
+            await closeBrowser();
         }
     });
 }

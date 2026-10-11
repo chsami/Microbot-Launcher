@@ -22,19 +22,31 @@ jest.mock('../libs/login-proxy.js', () => ({
     startLoginProxy: jest.fn()
 }));
 jest.mock('patchright', () => ({ chromium: { launch: jest.fn() } }));
+jest.mock('axios', () => ({ get: jest.fn(), post: jest.fn() }));
 
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jagex-proxied-login-'));
+process.env.HOME = homeDir;
+
+const axios = require('axios');
 const { chromium } = require('patchright');
 const { shell } = require('electron');
 const { startLoginProxy } = require('../libs/login-proxy.js');
-const { startAuthFlow } = require('../libs/oauth-jagex.js');
+const { startAuthFlow, cancelAuthFlow } = require('../libs/oauth-jagex.js');
+
+afterAll(() => fs.rmSync(homeDir, { recursive: true, force: true }));
 
 function fakeBrowser(gotoError) {
+    const handlers = {};
     const page = {
-        once: jest.fn(),
-        on: jest.fn(),
+        handlers,
+        once: jest.fn((event, fn) => (handlers[event] = fn)),
+        on: jest.fn((event, fn) => (handlers[event] = fn)),
         route: jest.fn(async () => {}),
         goto: jest.fn(async () => {
-            throw gotoError;
+            if (gotoError) throw gotoError;
         })
     };
     const browser = {
@@ -96,5 +108,95 @@ describe('startAuthFlow proxy routing', () => {
             headless: false,
             executablePath: '/usr/bin/google-chrome'
         });
+    });
+
+    test('fails and closes the local proxy when the browser context cannot be created', async () => {
+        const { browser } = fakeBrowser();
+        browser.newContext.mockRejectedValue(new Error('Target page, context or browser has been closed'));
+        chromium.launch.mockResolvedValue(browser);
+
+        await expect(startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } })).rejects.toThrow(
+            'Target page, context or browser has been closed'
+        );
+        expect(browser.close).toHaveBeenCalled();
+        expect(loginProxy.close).toHaveBeenCalled();
+    });
+
+    test('cancelling while the browser is starting closes it and the local proxy', async () => {
+        const { browser } = fakeBrowser();
+        let finishLaunch;
+        chromium.launch.mockReturnValue(new Promise((resolve) => (finishLaunch = resolve)));
+
+        const flow = startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } });
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(cancelAuthFlow()).toBe(true);
+        finishLaunch(browser);
+
+        await expect(flow).rejects.toMatchObject({ code: 'CANCELLED' });
+        expect(browser.close).toHaveBeenCalled();
+        expect(browser.newContext).not.toHaveBeenCalled();
+        expect(loginProxy.close).toHaveBeenCalled();
+    });
+
+    test('creates the game session and fetches accounts through the local proxy', async () => {
+        const { browser, page } = fakeBrowser();
+        chromium.launch.mockResolvedValue(browser);
+        axios.post.mockResolvedValue({ data: { sessionId: 'session-1' } });
+        axios.get.mockResolvedValue({ data: [{ accountId: 'acc-1', displayName: 'Bob' }] });
+
+        const flow = startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } });
+        await new Promise((resolve) => setImmediate(resolve));
+        await page.handlers.framenavigated({ url: () => 'http://localhost/#id_token=token-1&state=x' });
+
+        await expect(flow).resolves.toBe('Authentication successful.');
+        expect(axios.post).toHaveBeenCalledWith(
+            'https://auth.jagex.com/game-session/v1/sessions',
+            { idToken: 'token-1' },
+            expect.objectContaining({ proxy: false })
+        );
+        expect(axios.get).toHaveBeenCalledWith(
+            'https://auth.jagex.com/game-session/v1/accounts',
+            expect.objectContaining({ proxy: false })
+        );
+        const saved = JSON.parse(fs.readFileSync(path.join(homeDir, '.microbot', 'accounts.json'), 'utf8'));
+        expect(saved).toEqual([expect.objectContaining({ accountId: 'acc-1', sessionId: 'session-1' })]);
+        expect(browser.close).toHaveBeenCalled();
+        expect(loginProxy.close).toHaveBeenCalled();
+    });
+
+    test('fails the login when the game session cannot be created through the proxy', async () => {
+        const { browser, page } = fakeBrowser();
+        chromium.launch.mockResolvedValue(browser);
+        axios.post.mockRejectedValue(new Error('socket hang up'));
+
+        const flow = startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } });
+        await new Promise((resolve) => setImmediate(resolve));
+        await page.handlers.framenavigated({ url: () => 'http://localhost/#id_token=token-1&state=x' });
+
+        await expect(flow).rejects.toThrow('Could not create a game session.');
+        expect(axios.get).not.toHaveBeenCalled();
+        expect(browser.close).toHaveBeenCalled();
+        expect(loginProxy.close).toHaveBeenCalled();
+    });
+
+    test('keeps the local proxy open until the accounts are saved even if the page closes', async () => {
+        const { browser, page } = fakeBrowser();
+        chromium.launch.mockResolvedValue(browser);
+        let finishSession;
+        axios.post.mockReturnValue(new Promise((resolve) => (finishSession = resolve)));
+        axios.get.mockResolvedValue({ data: [] });
+
+        const flow = startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } });
+        await new Promise((resolve) => setImmediate(resolve));
+        const navigated = page.handlers.framenavigated({ url: () => 'http://localhost/#id_token=token-1&state=x' });
+        page.handlers.close();
+        expect(cancelAuthFlow()).toBe(true);
+        expect(loginProxy.close).not.toHaveBeenCalled();
+        finishSession({ data: { sessionId: 'session-1' } });
+        await navigated;
+
+        await expect(flow).resolves.toBe('Authentication successful.');
+        expect(axios.get).toHaveBeenCalled();
+        expect(loginProxy.close).toHaveBeenCalled();
     });
 });
