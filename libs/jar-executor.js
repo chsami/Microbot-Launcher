@@ -2,6 +2,7 @@ module.exports = async function (deps) {
     const { spawn, path, dialog, shell, log, fs, microbotDir, ipcMain, clipboard, packageJson } = deps;
     const os = require('os');
     const javaRuntime = require(path.join(__dirname, 'java-runtime.js'));
+    const { toProxyUri } = require(path.join(__dirname, 'login-proxy.js'));
     const STARTUP_WINDOW_MS = deps.startupWindowMs || 20000;
     const MAX_CAPTURED_STDERR = 64 * 1024;
 
@@ -219,34 +220,7 @@ module.exports = async function (deps) {
         if (proxy.proxyIp.trim() === '') return null;
 
         try {
-            let raw = proxy.proxyIp.trim();
-            // if user already supplied in URI format, just use it.
-            if (raw.includes('://')) {
-                commandArgs.push(`-proxy=${raw}`);
-                return null;
-            }
-
-            const DEFAULT_SCHEME = 'socks5';
-            const parts = raw.split(':');
-
-            if (parts.length === 2) {
-                const [host, port] = parts;
-                commandArgs.push(`-proxy=${DEFAULT_SCHEME}://${host}:${port}`);
-            } else if (parts.length >= 4) {
-                const host = parts[0];
-                const port = parts[1];
-                const user = parts[2];
-                const pass = parts.slice(3).join(':'); // allow colons in password
-                // encode user and pass (without encoding things may break)
-                const encUser = encodeURIComponent(user);
-                const encPass = encodeURIComponent(pass);
-                commandArgs.push(
-                    `-proxy=${DEFAULT_SCHEME}://${encUser}:${encPass}@${host}:${port}`
-                );
-            } else {
-                // fallback: just attach whatever (may be just host)
-                commandArgs.push(`-proxy=${DEFAULT_SCHEME}://${raw}`);
-            }
+            commandArgs.push(`-proxy=${toProxyUri(proxy.proxyIp)}`);
         } catch (err) {
             return new Error(
                 'Failed to construct new proxy URI: ' + err.message

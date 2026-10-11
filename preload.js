@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld('electron', {
     closeLauncher: () => ipcRenderer.invoke('close-launcher'),
     minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
     maximizeWindow: () => ipcRenderer.invoke('maximize-window'),
-    startAuthFlow: () => ipcRenderer.invoke('start-auth-flow'),
+    startAuthFlow: (proxy) => ipcRenderer.invoke('start-auth-flow', proxy),
     cancelAuthFlow: () => ipcRenderer.invoke('cancel-auth-flow'),
     downloadMicrobotLauncher: () =>
         ipcRenderer.invoke('download-microbot-launcher'),
@@ -73,7 +73,7 @@ contextBridge.exposeInMainWorld('electron', {
         ipcRenderer.invoke('cleanup-unused-clients-jar', latestVersion),
     updateClientJarTTL: (version) =>
         ipcRenderer.invoke('update-client-jar-ttl', version),
-    refreshAccounts: () => ipcRenderer.invoke('refresh-accounts'),
+    refreshAccounts: (proxy) => ipcRenderer.invoke('refresh-accounts', proxy),
     auth: {
         signup: (credentials) => ipcRenderer.invoke('auth:signup', credentials),
         signin: (credentials) => ipcRenderer.invoke('auth:signin', credentials),

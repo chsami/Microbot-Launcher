@@ -417,6 +417,47 @@ function getSelectedClientVersion() {
 const CANCEL_LOGIN_TEXT = 'Cancel login';
 let jagexLoginButton = null;
 
+const HIDE_PROXY_LOGIN_INFO = 'hide_proxy_login_info';
+let hideProxyLoginInfo = false;
+let proxyLoginInfoShown = false;
+let proxyLoginInfoOpen = null;
+
+function showProxyLoginInfo() {
+    const modal = document.getElementById('proxy-login-info-modal');
+    const okButton = document.getElementById('proxy-login-info-ok');
+    if (!modal || !okButton) return Promise.resolve();
+    modal.classList.remove('auth-hidden');
+    okButton.focus();
+    return new Promise((resolve) => {
+        okButton.addEventListener(
+            'click',
+            async () => {
+                modal.classList.add('auth-hidden');
+                if (document.getElementById('proxy-login-info-hide')?.checked) {
+                    hideProxyLoginInfo = true;
+                    const properties = await window.electron.readProperties();
+                    properties[HIDE_PROXY_LOGIN_INFO] = true;
+                    await window.electron.writeProperties(properties);
+                }
+                resolve();
+            },
+            { once: true }
+        );
+    });
+}
+
+function maybeShowProxyLoginInfo() {
+    if (proxyLoginInfoOpen) return proxyLoginInfoOpen;
+    if (proxyLoginInfoShown || hideProxyLoginInfo || getProxyValues().proxyIp.trim() === '') {
+        return null;
+    }
+    proxyLoginInfoShown = true;
+    proxyLoginInfoOpen = showProxyLoginInfo().finally(() => {
+        proxyLoginInfoOpen = null;
+    });
+    return proxyLoginInfoOpen;
+}
+
 async function runJagexLogin(button) {
     if (jagexLoginButton) {
         if (jagexLoginButton === button) {
@@ -425,12 +466,17 @@ async function runJagexLogin(button) {
         }
         return;
     }
+    const proxyLoginInfo = maybeShowProxyLoginInfo();
+    if (proxyLoginInfo) {
+        await proxyLoginInfo;
+        if (jagexLoginButton) return;
+    }
     jagexLoginButton = button;
     const originalText = button.textContent;
     button.textContent = CANCEL_LOGIN_TEXT;
     button.title = 'Finish logging in to Jagex in your browser, or click to cancel.';
     try {
-        const authResult = await window.electron.startAuthFlow();
+        const authResult = await window.electron.startAuthFlow(getProxyValues());
         if (authResult?.error) {
             window.electron.errorAlert(authResult.error);
         }
@@ -652,6 +698,7 @@ async function initializeLauncher() {
                 if (account) {
                     const profile = account.profile || 'default';
                     document.getElementById('profile').value = profile;
+                    await applyAccountProxy(account);
                 }
             } else {
                 // If no account is selected, set the profile to the preferred non-Jagex account profile
@@ -1195,7 +1242,7 @@ function setupRefreshAccountsButton() {
     refreshBtn.addEventListener('click', async () => {
         refreshBtn.disabled = true;
         try {
-            const result = await window.electron.refreshAccounts();
+            const result = await window.electron.refreshAccounts(getProxyValues());
             if (result?.error) {
                 window.electron.errorAlert(result.error);
                 return;
@@ -1512,6 +1559,17 @@ async function updateProfileBasedOnCharacter() {
             profileSelect.value = 'default';
         }
     }
+}
+
+async function applyAccountProxy(account) {
+    const proxyInput = document.getElementById('proxy-ip');
+    if (!proxyInput || typeof account?.proxyIp !== 'string') return;
+    const proxyIp = account.proxyIp.trim();
+    if (proxyIp === '' || proxyInput.value === proxyIp) return;
+    proxyInput.value = proxyIp;
+    const properties = await window.electron.readProperties();
+    properties['proxyip'] = proxyIp;
+    await window.electron.writeProperties(properties);
 }
 
 async function persistSelectedAccount(accountId) {
@@ -1942,6 +2000,7 @@ async function setupProxyInput() {
     }
 
     const properties = await window.electron.readProperties();
+    hideProxyLoginInfo = properties[HIDE_PROXY_LOGIN_INFO] === true;
     const savedProxy = properties['proxyip'];
     if (savedProxy && savedProxy !== '') {
         proxyInput.value = savedProxy;
@@ -1959,6 +2018,7 @@ async function setupProxyInput() {
         const properties = await window.electron.readProperties();
         properties['proxyip'] = value;
         await window.electron.writeProperties(properties);
+        await maybeShowProxyLoginInfo();
     });
 }
 

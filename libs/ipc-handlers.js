@@ -20,6 +20,11 @@ module.exports = async function (deps) {
         'libs',
         'oauth-jagex.js'
     ));
+    const { toProxyUri, startLoginProxy } = require(path.join(
+        projectDir,
+        'libs',
+        'login-proxy.js'
+    ));
     const {
         listClientJars,
         markClientDownloaded,
@@ -32,7 +37,7 @@ module.exports = async function (deps) {
         return { error: message };
     }
 
-    ipcMain.handle('start-auth-flow', async (event) => {
+    ipcMain.handle('start-auth-flow', async (event, proxy) => {
         const bringLauncherToFront = () => {
             const win = require('electron').BrowserWindow.fromWebContents(event.sender);
             if (!win || win.isDestroyed()) return;
@@ -41,7 +46,7 @@ module.exports = async function (deps) {
             win.focus();
         };
         try {
-            const result = await startAuthFlow();
+            const result = await startAuthFlow({ proxy });
             bringLauncherToFront();
             return result;
         } catch (error) {
@@ -101,7 +106,24 @@ module.exports = async function (deps) {
     await jarExecutorHandler({ ...deps, ipcMain: versionCheckedIpcMain });
     const packageVersion = packageJson.version;
 
-    ipcMain.handle('refresh-accounts', async () => {
+    async function refreshSession(writeAccountsToFile, sessionId, proxyIp) {
+        const proxyUri = toProxyUri(proxyIp);
+        if (!proxyUri) return writeAccountsToFile(sessionId);
+        let loginProxy;
+        try {
+            loginProxy = await startLoginProxy(proxyUri);
+        } catch (error) {
+            log.error(`Could not start the proxy for a Jagex session: ${error.message}`);
+            return { ok: false, error: error.message };
+        }
+        try {
+            return await writeAccountsToFile(sessionId, loginProxy.httpOptions);
+        } finally {
+            await loginProxy.close();
+        }
+    }
+
+    ipcMain.handle('refresh-accounts', async (event, proxy) => {
         try {
             const { writeAccountsToFile } = require(path.join(
                 projectDir,
@@ -127,29 +149,30 @@ module.exports = async function (deps) {
                 return { error: 'No accounts found to refresh' };
             }
 
-            const sessionIds = [
-                ...new Set(
-                    accountsData
-                        .map((account) => account && account.sessionId)
-                        .filter(Boolean)
-                )
-            ];
-            if (sessionIds.length === 0) {
+            const proxyBySession = new Map();
+            for (const account of accountsData) {
+                if (!account?.sessionId || proxyBySession.has(account.sessionId)) continue;
+                proxyBySession.set(
+                    account.sessionId,
+                    typeof account.proxyIp === 'string' ? account.proxyIp : proxy?.proxyIp
+                );
+            }
+            if (proxyBySession.size === 0) {
                 return { error: 'No sessionId found in accounts.json' };
             }
 
             let failedSessions = 0;
-            for (const sessionId of sessionIds) {
-                const status = await writeAccountsToFile(sessionId);
+            for (const [sessionId, proxyIp] of proxyBySession) {
+                const status = await refreshSession(writeAccountsToFile, sessionId, proxyIp);
                 if (!status || !status.ok) {
                     failedSessions++;
                 }
             }
             const warning =
                 failedSessions > 0
-                    ? `${failedSessions} of ${sessionIds.length} Jagex session(s) could not be refreshed (expired?). Please log in again with those accounts.`
+                    ? `${failedSessions} of ${proxyBySession.size} Jagex session(s) could not be refreshed (expired or proxy unreachable?). Please log in again with those accounts.`
                     : undefined;
-            if (failedSessions === sessionIds.length) {
+            if (failedSessions === proxyBySession.size) {
                 return { error: warning, failedSessions };
             }
 
