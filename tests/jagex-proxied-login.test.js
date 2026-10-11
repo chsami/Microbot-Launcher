@@ -56,6 +56,14 @@ function fakeBrowser(gotoError) {
     return { browser, page };
 }
 
+function loginUrlParam(page, name) {
+    return new URL(page.goto.mock.calls[0][0]).searchParams.get(name);
+}
+
+function redirectWithIdToken(page, idToken = 'token-1') {
+    return { url: () => `http://localhost/#id_token=${idToken}&state=${loginUrlParam(page, 'state')}` };
+}
+
 describe('startAuthFlow proxy routing', () => {
     let loginProxy;
 
@@ -146,7 +154,7 @@ describe('startAuthFlow proxy routing', () => {
 
         const flow = startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } });
         await new Promise((resolve) => setImmediate(resolve));
-        await page.handlers.framenavigated({ url: () => 'http://localhost/#id_token=token-1&state=x' });
+        await page.handlers.framenavigated(redirectWithIdToken(page));
 
         await expect(flow).resolves.toBe('Authentication successful.');
         expect(axios.post).toHaveBeenCalledWith(
@@ -171,7 +179,7 @@ describe('startAuthFlow proxy routing', () => {
 
         const flow = startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } });
         await new Promise((resolve) => setImmediate(resolve));
-        await page.handlers.framenavigated({ url: () => 'http://localhost/#id_token=token-1&state=x' });
+        await page.handlers.framenavigated(redirectWithIdToken(page));
 
         await expect(flow).rejects.toThrow('Could not create a game session.');
         expect(axios.get).not.toHaveBeenCalled();
@@ -188,7 +196,7 @@ describe('startAuthFlow proxy routing', () => {
 
         const flow = startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } });
         await new Promise((resolve) => setImmediate(resolve));
-        const navigated = page.handlers.framenavigated({ url: () => 'http://localhost/#id_token=token-1&state=x' });
+        const navigated = page.handlers.framenavigated(redirectWithIdToken(page));
         page.handlers.close();
         expect(cancelAuthFlow()).toBe(true);
         expect(loginProxy.close).not.toHaveBeenCalled();
@@ -198,5 +206,59 @@ describe('startAuthFlow proxy routing', () => {
         await expect(flow).resolves.toBe('Authentication successful.');
         expect(axios.get).toHaveBeenCalled();
         expect(loginProxy.close).toHaveBeenCalled();
+    });
+
+    test('ignores an id_token whose state does not belong to this login', async () => {
+        const { browser, page } = fakeBrowser();
+        chromium.launch.mockResolvedValue(browser);
+
+        const flow = startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } });
+        await new Promise((resolve) => setImmediate(resolve));
+        await page.handlers.framenavigated({ url: () => 'http://localhost/#id_token=injected&state=wrong' });
+        await page.handlers.framenavigated({ url: () => 'http://localhost/#id_token=injected' });
+
+        expect(axios.post).not.toHaveBeenCalled();
+        expect(cancelAuthFlow()).toBe(true);
+        await expect(flow).rejects.toMatchObject({ code: 'CANCELLED' });
+        expect(loginProxy.close).toHaveBeenCalled();
+    });
+
+    test('uses a fresh state and PKCE challenge for every login', async () => {
+        const logins = [];
+        for (let i = 0; i < 2; i++) {
+            const { browser, page } = fakeBrowser();
+            chromium.launch.mockResolvedValue(browser);
+            const flow = startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } });
+            await new Promise((resolve) => setImmediate(resolve));
+            logins.push({ state: loginUrlParam(page, 'state'), challenge: loginUrlParam(page, 'code_challenge') });
+            cancelAuthFlow();
+            await expect(flow).rejects.toMatchObject({ code: 'CANCELLED' });
+        }
+
+        expect(logins[0].state).toBeTruthy();
+        expect(logins[0].challenge).toBeTruthy();
+        expect(logins[1].state).not.toBe(logins[0].state);
+        expect(logins[1].challenge).not.toBe(logins[0].challenge);
+    });
+
+    test('exchanges the code with the verifier that matches this login\'s challenge', async () => {
+        const { browser, page } = fakeBrowser();
+        chromium.launch.mockResolvedValue(browser);
+        axios.post.mockResolvedValue({ data: {} });
+
+        const flow = startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } });
+        await new Promise((resolve) => setImmediate(resolve));
+        await page.handlers.framenavigated({
+            url: () => 'https://secure.runescape.com/m=weblogin/launcher-redirect?code=abc'
+        });
+
+        const [tokenUrl, body, options] = axios.post.mock.calls[0];
+        expect(tokenUrl).toBe('https://account.jagex.com/oauth2/token');
+        expect(body.get('code')).toBe('abc');
+        const challenge = require('crypto').createHash('sha256').update(body.get('code_verifier')).digest('base64url');
+        expect(challenge).toBe(loginUrlParam(page, 'code_challenge'));
+        expect(options).toMatchObject({ proxy: false });
+        cancelAuthFlow();
+        await expect(flow).rejects.toMatchObject({ code: 'CANCELLED' });
     });
 });

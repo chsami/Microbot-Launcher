@@ -12,10 +12,6 @@ const userHome = process.env.HOME || process.env.USERPROFILE;
 const ACCOUNTS_DIR = path.join(userHome, '.microbot');
 const ACCOUNTS_FILE_PATH = path.join(ACCOUNTS_DIR, 'accounts.json');
 
-const state = generateRandomState(8);
-const codeVerifier = generateCodeVerifier(45);
-const codeChallenge = getCodeChallenge(codeVerifier);
-
 /**
  * Auth complete HTML to better show the user that the auth process is complete
  * and soon gonna be redirected to the launcher.
@@ -133,23 +129,12 @@ function generateRandomState(length) {
     return result;
 }
 
-/**
- * Extracts the id_token from a URL fragment, mirroring Java's extractIdTokenFromUrl.
- * @param {string} url The URL containing the fragment.
- * @returns {string|null} The id_token or null if not found.
- */
-function extractIdTokenFromUrl(url) {
+function extractFragmentParams(url) {
     try {
-        const urlObject = new URL(url);
-        const fragment = urlObject.hash.substring(1); // Get the fragment part of the URL (after #)
-        if (fragment) {
-            const params = new URLSearchParams(fragment);
-            return params.get('id_token');
-        }
-        return null;
+        return new URLSearchParams(new URL(url).hash.substring(1));
     } catch (error) {
-        log.error(`Error parsing URL fragment for id_token: ${error.message}`);
-        return null;
+        log.error(`Error parsing URL fragment: ${error.message}`);
+        return new URLSearchParams();
     }
 }
 
@@ -174,7 +159,7 @@ function extractCodeFromUrl(url) {
  * @param {string} code The authorization code from the redirect.
  * @returns {Promise<string|null>} The ID token or null on failure.
  */
-async function getToken(code, httpOptions = {}) {
+async function getToken(code, codeVerifier, httpOptions = {}) {
     log.info('Exchanging authorization code for token...');
     try {
         const response = await axios.post(
@@ -354,6 +339,9 @@ async function startPatchrightAuthFlow(loginProxy = null) {
     return new Promise(async (resolve, reject) => {
         let finished = false;
         let browser = null;
+        const state = generateRandomState(8);
+        const codeVerifier = generateCodeVerifier(45);
+        const codeChallenge = getCodeChallenge(codeVerifier);
 
         function fail(err) {
             if (finished) return;
@@ -429,8 +417,11 @@ async function startPatchrightAuthFlow(loginProxy = null) {
                         log.info(
                             'Found the URL with the id_token query parameter.'
                         );
-                        const idToken = extractIdTokenFromUrl(url);
-                        if (idToken) {
+                        const params = extractFragmentParams(url);
+                        const idToken = params.get('id_token');
+                        if (idToken && params.get('state') !== state) {
+                            log.warn('Ignoring an id_token with a mismatched state.');
+                        } else if (idToken) {
                             finished = true;
                             const error = await createSessionAndSaveAccounts(
                                 idToken,
@@ -448,7 +439,7 @@ async function startPatchrightAuthFlow(loginProxy = null) {
                             log.info(
                                 'The URL contains the specified code query parameter.'
                             );
-                            const idTokenFromCode = await getToken(code, loginProxy?.httpOptions);
+                            const idTokenFromCode = await getToken(code, codeVerifier, loginProxy?.httpOptions);
                             if (idTokenFromCode && !finished) {
                                 const nonce = generateRandomState(48);
                                 const nextAuthUrl =
