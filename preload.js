@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld('electron', {
     closeLauncher: () => ipcRenderer.invoke('close-launcher'),
     minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
     maximizeWindow: () => ipcRenderer.invoke('maximize-window'),
-    startAuthFlow: () => ipcRenderer.invoke('start-auth-flow'),
+    startAuthFlow: (proxy) => ipcRenderer.invoke('start-auth-flow', proxy),
     cancelAuthFlow: () => ipcRenderer.invoke('cancel-auth-flow'),
     downloadMicrobotLauncher: () =>
         ipcRenderer.invoke('download-microbot-launcher'),

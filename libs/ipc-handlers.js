@@ -32,7 +32,7 @@ module.exports = async function (deps) {
         return { error: message };
     }
 
-    ipcMain.handle('start-auth-flow', async (event) => {
+    ipcMain.handle('start-auth-flow', async (event, proxy) => {
         const bringLauncherToFront = () => {
             const win = require('electron').BrowserWindow.fromWebContents(event.sender);
             if (!win || win.isDestroyed()) return;
@@ -41,7 +41,7 @@ module.exports = async function (deps) {
             win.focus();
         };
         try {
-            const result = await startAuthFlow();
+            const result = await startAuthFlow({ proxy });
             bringLauncherToFront();
             return result;
         } catch (error) {

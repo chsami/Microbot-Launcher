@@ -6,6 +6,7 @@ const path = require('path');
 const http = require('http');
 const log = require('electron-log');
 const { getAvailableBrowser } = require('./browser-util.js');
+const { toProxyUri, startLoginProxy } = require('./login-proxy.js');
 
 const userHome = process.env.HOME || process.env.USERPROFILE;
 const ACCOUNTS_DIR = path.join(userHome, '.microbot');
@@ -173,7 +174,7 @@ function extractCodeFromUrl(url) {
  * @param {string} code The authorization code from the redirect.
  * @returns {Promise<string|null>} The ID token or null on failure.
  */
-async function getToken(code) {
+async function getToken(code, httpOptions = {}) {
     log.info('Exchanging authorization code for token...');
     try {
         const response = await axios.post(
@@ -187,6 +188,7 @@ async function getToken(code) {
                     'https://secure.runescape.com/m=weblogin/launcher-redirect'
             }),
             {
+                ...httpOptions,
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
             }
         );
@@ -207,13 +209,13 @@ async function getToken(code) {
  * @param {string} idToken The ID token.
  * @returns {Promise<string|null>} The session ID or null on failure.
  */
-async function getSessionId(idToken) {
+async function getSessionId(idToken, httpOptions = {}) {
     log.info('Fetching game session ID...');
     try {
         const response = await axios.post(
             'https://auth.jagex.com/game-session/v1/sessions',
             { idToken },
-            { headers: { 'Content-Type': 'application/json' } }
+            { ...httpOptions, headers: { 'Content-Type': 'application/json' } }
         );
         log.info('Session ID fetched successfully.');
         return response.data.sessionId;
@@ -270,12 +272,13 @@ function mergeAccounts(existingAccounts, fetchedAccounts, sessionId, now) {
  * Fetches account details and writes them to a JSON file.
  * @param {string} sessionId The game session ID.
  */
-async function writeAccountsToFile(sessionId) {
+async function writeAccountsToFile(sessionId, httpOptions = {}) {
     log.info('Fetching account information...');
     try {
         const response = await axios.get(
             'https://auth.jagex.com/game-session/v1/accounts',
             {
+                ...httpOptions,
                 headers: { Authorization: `Bearer ${sessionId}` }
             }
         );
@@ -340,7 +343,7 @@ async function writeAccountsToFile(sessionId) {
  * It uses Playwright's Chromium browser for the UI interaction (Patchwright for bot detection bypass).
  * It also handles the redirect to localhost after successful authentication.
  */
-async function startPatchrightAuthFlow() {
+async function startPatchrightAuthFlow(loginProxy = null) {
     return new Promise(async (resolve, reject) => {
         let finished = false;
         let browser = null;
@@ -366,10 +369,18 @@ async function startPatchrightAuthFlow() {
             );
         }
 
-        browser = await chromium.launch({
-            headless: false,
-            executablePath: availableBrowser.executable
-        });
+        try {
+            browser = await chromium.launch({
+                headless: false,
+                executablePath: availableBrowser.executable,
+                ...(loginProxy && {
+                    proxy: { server: loginProxy.url },
+                    args: ['--force-webrtc-ip-handling-policy=disable_non_proxied_udp']
+                })
+            });
+        } catch (error) {
+            return fail(new Error(`Could not start the login browser: ${error.message}`));
+        }
         if (finished) {
             await browser.close();
             return;
@@ -405,9 +416,9 @@ async function startPatchrightAuthFlow() {
                     );
                     const idToken = extractIdTokenFromUrl(url);
                     if (idToken) {
-                        const sessionId = await getSessionId(idToken);
+                        const sessionId = await getSessionId(idToken, loginProxy?.httpOptions);
                         if (sessionId) {
-                            await writeAccountsToFile(sessionId);
+                            await writeAccountsToFile(sessionId, loginProxy?.httpOptions);
                         }
 
                         log.info(
@@ -424,7 +435,7 @@ async function startPatchrightAuthFlow() {
                         log.info(
                             'The URL contains the specified code query parameter.'
                         );
-                        const idTokenFromCode = await getToken(code);
+                        const idTokenFromCode = await getToken(code, loginProxy?.httpOptions);
                         if (idTokenFromCode) {
                             const nonce = generateRandomState(48);
                             const nextAuthUrl =
@@ -467,7 +478,19 @@ async function startPatchrightAuthFlow() {
             });
         });
 
-        await page.goto(initialUrl);
+        try {
+            await page.goto(initialUrl);
+        } catch (error) {
+            if (finished) return;
+            fail(
+                new Error(
+                    loginProxy
+                        ? `Could not reach Jagex through the proxy: ${error.message}`
+                        : `Could not open the Jagex login page: ${error.message}`
+                )
+            );
+            await browser.close();
+        }
     });
 }
 
@@ -594,13 +617,32 @@ function startSystemBrowserAuthFlow() {
     return result;
 }
 
-async function startAuthFlow() {
+async function startProxiedAuthFlow(proxyUri) {
+    log.info('Proxy set, logging in to Jagex in an isolated browser through the proxy.');
+    const loginProxy = await startLoginProxy(proxyUri);
+    try {
+        return await startPatchrightAuthFlow(loginProxy);
+    } finally {
+        await loginProxy.close();
+    }
+}
+
+async function startUnproxiedAuthFlow() {
     try {
         return await startSystemBrowserAuthFlow();
     } catch (error) {
         if (error.code !== 'EACCES' && error.code !== 'EADDRINUSE') throw error;
         log.warn(`Port 80 unavailable (${error.code}), falling back to patchright browser.`);
         return await startPatchrightAuthFlow();
+    }
+}
+
+async function startAuthFlow({ proxy } = {}) {
+    const proxyUri = toProxyUri(proxy?.proxyIp);
+    try {
+        return proxyUri
+            ? await startProxiedAuthFlow(proxyUri)
+            : await startUnproxiedAuthFlow();
     } finally {
         cancelCurrentAuth = null;
     }

@@ -430,7 +430,7 @@ async function runJagexLogin(button) {
     button.textContent = CANCEL_LOGIN_TEXT;
     button.title = 'Finish logging in to Jagex in your browser, or click to cancel.';
     try {
-        const authResult = await window.electron.startAuthFlow();
+        const authResult = await window.electron.startAuthFlow(getProxyValues());
         if (authResult?.error) {
             window.electron.errorAlert(authResult.error);
         }
