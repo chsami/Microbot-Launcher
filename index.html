@@ -93,7 +93,7 @@
                 <label for="proxy-add-input">Add proxies (one per line)</label>
                 <textarea id="proxy-add-input" class="proxy-add-input" rows="3" spellcheck="false"
                     placeholder="1.2.3.4:1080&#10;1.2.3.4:1080:user:password&#10;socks5://user:password@1.2.3.4:1080"></textarea>
-                <p class="proxy-add-hint">SOCKS5 is used when no type is given. Optional: put a name in front,
+                <p class="proxy-add-hint">Only SOCKS5 proxies are supported. Optional: put a name in front,
                     like <code>Main | 1.2.3.4:1080</code>.</p>
                 <button id="proxy-add-submit" type="submit" class="auth-submit">Add</button>
             </form>
@@ -239,7 +239,7 @@
                     </select>
                 </div>
                 <div class="proxy-section">
-                    <label for="proxy-ip">Proxy</label>
+                    <label for="proxy-ip">Proxy (optional, SOCKS5 only)</label>
                     <div class="proxy-select-row">
                         <select id="proxy-ip">
                             <option value="">No proxy</option>

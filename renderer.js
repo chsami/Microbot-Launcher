@@ -1562,19 +1562,21 @@ async function updateProfileBasedOnCharacter() {
 }
 
 async function applyAccountProxy(account) {
-    const proxySelect = document.getElementById('proxy-ip');
-    if (!proxySelect || typeof account?.proxyIp !== 'string') return;
+    if (!document.getElementById('proxy-ip') || typeof account?.proxyIp !== 'string') return;
     const proxyIp = account.proxyIp.trim();
-    if (proxyIp === '' || proxySelect.value === proxyIp) return;
-    const properties = await window.electron.readProperties();
-    const proxies = readSavedProxies(properties);
-    if (!proxies.some((proxy) => proxy.address === proxyIp)) {
-        proxies.push({ name: '', address: proxyIp });
-    }
-    properties[PROXIES_KEY] = proxies;
-    properties['proxyip'] = proxyIp;
-    await window.electron.writeProperties(properties);
-    renderProxySelect(proxies, proxyIp);
+    if (proxyIp === '') return;
+    await withProperties(async (properties) => {
+        if (properties['proxyip'] === proxyIp) return;
+        const proxies = readSavedProxies(properties);
+        if (!proxies.some((proxy) => proxy.address === proxyIp)) {
+            proxies.push({ name: '', address: proxyIp });
+        }
+        properties[PROXIES_KEY] = proxies;
+        properties['proxyip'] = proxyIp;
+        await window.electron.writeProperties(properties);
+        renderProxySelect(proxies, proxyIp);
+        renderProxyList(proxies, proxyIp);
+    });
 }
 
 async function persistSelectedAccount(accountId) {
@@ -1999,46 +2001,59 @@ async function setupRamInput() {
 }
 
 const PROXIES_KEY = 'proxies';
-const PROXY_URI_PATTERN = /^([a-z][a-z0-9+.-]*):\/\/(?:([^@/]*)@)?([^:/@\s]+):(\d+)\/?$/i;
-const SUPPORTED_PROXY_SCHEMES = ['http', 'https', 'socks', 'socks4', 'socks4a', 'socks5', 'socks5h'];
+const PROXY_URI_PATTERN = /^([a-z][a-z0-9+.-]*):\/\/(?:(.*)@)?([^@/]+)\/?$/i;
+const SUPPORTED_PROXY_SCHEMES = ['socks', 'socks5'];
+const INVALID_PROXY_HELP = 'Only SOCKS5 proxies work. Use ip:port, ip:port:user:password or socks5://user:password@ip:port.';
+let propertiesQueue = Promise.resolve();
+
+function withProperties(task) {
+    const run = propertiesQueue.then(async () => task(await window.electron.readProperties()));
+    propertiesQueue = run.catch(() => {});
+    return run;
+}
+
+function parseHostPort(value) {
+    const match = value.match(/^(\[[0-9a-f:.]+\]|[a-z0-9.-]+):(\d+)$/i);
+    if (!match) return null;
+    const port = Number(match[2]);
+    if (port < 1 || port > 65535) return null;
+    return { host: match[1], port };
+}
 
 function parseProxyEndpoint(address) {
     if (typeof address !== 'string') return null;
     const value = address.trim();
-    if (value === '' || /\s/.test(value)) return null;
-    let host;
-    let port;
-    let hasLogin;
+    if (value === '') return null;
     if (value.includes('://')) {
         const match = value.match(PROXY_URI_PATTERN);
         if (!match || !SUPPORTED_PROXY_SCHEMES.includes(match[1].toLowerCase())) return null;
-        [, , , host, port] = match;
-        hasLogin = Boolean(match[2]);
-    } else {
-        const parts = value.split(':');
-        if (parts.length !== 2 && parts.length < 4) return null;
-        [host, port] = parts;
-        hasLogin = parts.length >= 4;
+        const endpoint = parseHostPort(match[3]);
+        return endpoint && { ...endpoint, hasLogin: Boolean(match[2]) };
     }
-    const portNumber = Number(port);
-    if (!host || !/^\d+$/.test(port) || portNumber < 1 || portNumber > 65535) return null;
-    return { host, port: portNumber, hasLogin };
+    if (value.includes('@')) {
+        if (value.split(':').length !== 3) return null;
+        const endpoint = parseHostPort(value.slice(value.lastIndexOf('@') + 1));
+        return endpoint && { ...endpoint, hasLogin: true };
+    }
+    const parts = value.split(':');
+    if (parts.length !== 2 && parts.length < 4) return null;
+    const endpoint = parseHostPort(`${parts[0]}:${parts[1]}`);
+    return endpoint && { ...endpoint, hasLogin: parts.length >= 4 };
 }
 
 function parseProxyLine(line) {
-    let name = '';
-    let address = line.trim();
-    const separator = address.indexOf('|');
-    if (separator !== -1) {
-        name = address.slice(0, separator).trim();
-        address = address.slice(separator + 1).trim();
-    }
+    const value = line.trim();
+    if (parseProxyEndpoint(value)) return { name: '', address: value };
+    const separator = value.indexOf('|');
+    if (separator === -1) return null;
+    const name = value.slice(0, separator).trim();
+    const address = value.slice(separator + 1).trim();
     return parseProxyEndpoint(address) ? { name, address } : null;
 }
 
 function proxyLocation(proxy) {
     const endpoint = parseProxyEndpoint(proxy.address);
-    return endpoint ? `${endpoint.host}:${endpoint.port}` : 'Invalid address';
+    return endpoint ? `${endpoint.host}:${endpoint.port}` : 'Unsupported proxy';
 }
 
 function proxyLabel(proxy) {
@@ -2057,17 +2072,18 @@ function readSavedProxies(properties) {
     return proxies;
 }
 
-async function saveProxies(update) {
-    const properties = await window.electron.readProperties();
-    const proxies = readSavedProxies(properties);
-    const selected = typeof properties['proxyip'] === 'string' ? properties['proxyip'].trim() : '';
-    const next = update({ proxies, selected });
-    properties[PROXIES_KEY] = next.proxies;
-    properties['proxyip'] = next.selected;
-    await window.electron.writeProperties(properties);
-    renderProxySelect(next.proxies, next.selected);
-    renderProxyList(next.proxies, next.selected);
-    return next;
+function saveProxies(update, { renderList = true } = {}) {
+    return withProperties(async (properties) => {
+        const proxies = readSavedProxies(properties);
+        const selected = typeof properties['proxyip'] === 'string' ? properties['proxyip'].trim() : '';
+        const next = update({ proxies, selected });
+        properties[PROXIES_KEY] = next.proxies;
+        properties['proxyip'] = next.selected;
+        await window.electron.writeProperties(properties);
+        renderProxySelect(next.proxies, next.selected);
+        if (renderList) renderProxyList(next.proxies, next.selected);
+        return next;
+    });
 }
 
 function renderProxySelect(proxies, selected) {
@@ -2089,13 +2105,20 @@ function renderProxySelect(proxies, selected) {
     proxySelect.title = selectedProxy ? proxyLabel(selectedProxy) : 'Connect without a proxy';
 }
 
+function focusProxyRow(index, selector) {
+    const rows = document.querySelectorAll('#proxy-list .proxy-row');
+    const row = rows[Math.min(index, rows.length - 1)];
+    const target = row?.querySelector(selector) || document.getElementById('proxy-add-input');
+    target?.focus();
+}
+
 function renderProxyList(proxies, selected) {
     const list = document.getElementById('proxy-list');
     const empty = document.getElementById('proxy-list-empty');
     if (!list) return;
     list.innerHTML = '';
     if (empty) empty.style.display = proxies.length === 0 ? 'block' : 'none';
-    for (const proxy of proxies) {
+    proxies.forEach((proxy, index) => {
         const endpoint = parseProxyEndpoint(proxy.address);
         const inUse = proxy.address === selected;
         const row = document.createElement('li');
@@ -2109,16 +2132,6 @@ function renderProxyList(proxies, selected) {
         nameInput.value = proxy.name;
         nameInput.placeholder = 'Add a name';
         nameInput.setAttribute('aria-label', `Name for ${proxyLocation(proxy)}`);
-        nameInput.addEventListener('change', async () => {
-            const name = nameInput.value.trim();
-            await saveProxies(({ proxies: current, selected: currentSelected }) => ({
-                proxies: current.map((entry) => (entry.address === proxy.address ? { ...entry, name } : entry)),
-                selected: currentSelected
-            }));
-        });
-        nameInput.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter') nameInput.blur();
-        });
         const location = document.createElement('span');
         location.className = endpoint ? 'proxy-row-location' : 'proxy-row-location invalid';
         location.textContent = endpoint?.hasLogin ? `${proxyLocation(proxy)} · with login` : proxyLocation(proxy);
@@ -2131,6 +2144,7 @@ function renderProxyList(proxies, selected) {
         useButton.disabled = inUse;
         useButton.addEventListener('click', async () => {
             await saveProxies(({ proxies: current }) => ({ proxies: current, selected: proxy.address }));
+            focusProxyRow(index, '.proxy-row-name');
         });
 
         const removeButton = document.createElement('button');
@@ -2144,11 +2158,28 @@ function renderProxyList(proxies, selected) {
                 proxies: current.filter((entry) => entry.address !== proxy.address),
                 selected: currentSelected === proxy.address ? '' : currentSelected
             }));
+            focusProxyRow(index, '.proxy-row-remove');
+        });
+
+        nameInput.addEventListener('change', async () => {
+            const name = nameInput.value.trim();
+            nameInput.value = name;
+            removeButton.setAttribute('aria-label', `Remove ${proxyLabel({ ...proxy, name })}`);
+            await saveProxies(
+                ({ proxies: current, selected: currentSelected }) => ({
+                    proxies: current.map((entry) => (entry.address === proxy.address ? { ...entry, name } : entry)),
+                    selected: currentSelected
+                }),
+                { renderList: false }
+            );
+        });
+        nameInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') nameInput.dispatchEvent(new Event('change'));
         });
 
         row.append(details, useButton, removeButton);
         list.appendChild(row);
-    }
+    });
 }
 
 async function addProxiesFromText(text) {
@@ -2181,12 +2212,11 @@ function describeAddResult({ added, duplicates, invalid }) {
     if (duplicates > 0) parts.push(`${duplicates} already saved.`);
     if (invalid.length > 0) {
         parts.push(
-            `${invalid.length} ${invalid.length === 1 ? 'line is' : 'lines are'} not a valid proxy and ${invalid.length === 1 ? 'was' : 'were'} left in the box. Use ip:port or ip:port:user:password.`
+            `${invalid.length} ${invalid.length === 1 ? 'line was' : 'lines were'} not added and left in the box. ${INVALID_PROXY_HELP}`
         );
     }
     return parts.join(' ');
 }
-
 function setupProxyManager() {
     const modal = document.getElementById('proxy-manager-modal');
     const openButton = document.getElementById('manage-proxies');
@@ -2206,9 +2236,9 @@ function setupProxyManager() {
     };
 
     openButton.addEventListener('click', async () => {
-        const properties = await window.electron.readProperties();
-        const proxies = readSavedProxies(properties);
-        renderProxyList(proxies, document.getElementById('proxy-ip')?.value || '');
+        await withProperties((properties) =>
+            renderProxyList(readSavedProxies(properties), document.getElementById('proxy-ip')?.value || '')
+        );
         if (message) {
             message.textContent = '';
             message.classList.remove('success');
@@ -2250,23 +2280,21 @@ async function setupProxyInput() {
         return;
     }
 
-    const properties = await window.electron.readProperties();
-    hideProxyLoginInfo = properties[HIDE_PROXY_LOGIN_INFO] === true;
-    const proxies = readSavedProxies(properties);
-    const savedProxy = typeof properties['proxyip'] === 'string' ? properties['proxyip'].trim() : '';
-    if (savedProxy !== '' && !proxies.some((proxy) => proxy.address === savedProxy)) {
-        proxies.push({ name: '', address: savedProxy });
-        properties[PROXIES_KEY] = proxies;
-        await window.electron.writeProperties(properties);
-    }
-    renderProxySelect(proxies, savedProxy);
+    await withProperties(async (properties) => {
+        hideProxyLoginInfo = properties[HIDE_PROXY_LOGIN_INFO] === true;
+        const proxies = readSavedProxies(properties);
+        const savedProxy = typeof properties['proxyip'] === 'string' ? properties['proxyip'].trim() : '';
+        if (savedProxy !== '' && !proxies.some((proxy) => proxy.address === savedProxy)) {
+            proxies.push({ name: '', address: savedProxy });
+            properties[PROXIES_KEY] = proxies;
+            await window.electron.writeProperties(properties);
+        }
+        renderProxySelect(proxies, savedProxy);
+    });
 
     proxySelect.addEventListener('change', async (event) => {
         const value = event.target.value;
-        const latest = await window.electron.readProperties();
-        latest['proxyip'] = value;
-        await window.electron.writeProperties(latest);
-        renderProxySelect(readSavedProxies(latest), value);
+        await saveProxies(({ proxies }) => ({ proxies, selected: value }));
         await maybeShowProxyLoginInfo();
     });
 

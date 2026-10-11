@@ -374,13 +374,42 @@ describe('renderer proxy list', () => {
 
     test.each([
         ['1.2.3.4:1080', { name: '', address: '1.2.3.4:1080' }],
-        ['http://1.2.3.4:8080', { name: '', address: 'http://1.2.3.4:8080' }],
+        ['proxy.example.com:1080', { name: '', address: 'proxy.example.com:1080' }],
+        ['user:pass@1.2.3.4:1080', { name: '', address: 'user:pass@1.2.3.4:1080' }],
+        ['socks5://u:p@[::1]:1080', { name: '', address: 'socks5://u:p@[::1]:1080' }],
+        ['socks5://u:p w@1.2.3.4:1080', { name: '', address: 'socks5://u:p w@1.2.3.4:1080' }],
+        ['1.2.3.4:1080:user:pa|ss', { name: '', address: '1.2.3.4:1080:user:pa|ss' }],
+        ['Main|1.2.3.4:1080', { name: 'Main', address: '1.2.3.4:1080' }],
+        ['http://1.2.3.4:8080', null],
+        ['socks5h://u:p@1.2.3.4:1080', null],
+        ['socks4://1.2.3.4:1080', null],
         ['1.2.3.4:1080:user', null],
-        ['ftp://1.2.3.4:21', null],
-        ['1.2.3.4:abc', null]
+        ['1.2.3.4:abc', null],
+        ['1.2.3.4:0', null]
     ])('parses %s', (line, expected) => {
         const parsed = renderer.parseProxyLine(line);
         expect(parsed ? { ...parsed } : parsed).toEqual(expected);
+    });
+
+    test('keeps every change when saves overlap', async () => {
+        properties = { proxyip: '', proxies: [{ name: '', address: '1.1.1.1:1080' }] };
+        electron.readProperties.mockImplementation(async () => {
+            const snapshot = JSON.parse(JSON.stringify(properties));
+            await new Promise((resolve) => setImmediate(resolve));
+            return snapshot;
+        });
+
+        await Promise.all([
+            renderer.addProxiesFromText('Home | 2.2.2.2:1080'),
+            renderer.applyAccountProxy({ accountId: 'a1', proxyIp: '3.3.3.3:1080' })
+        ]);
+
+        expect(properties.proxies).toEqual([
+            { name: '', address: '1.1.1.1:1080' },
+            { name: 'Home', address: '2.2.2.2:1080' },
+            { name: '', address: '3.3.3.3:1080' }
+        ]);
+        expect(properties.proxyip).toBe('3.3.3.3:1080');
     });
 
     test('never shows proxy passwords in labels', () => {
