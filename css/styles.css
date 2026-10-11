@@ -681,14 +681,184 @@ h2 {
     color: #ffffff;
 }
 
-.proxy-section input {
-    width: 95%;
-    padding: 10px;
-    border-radius: 5px;
+.proxy-select-row {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    width: 100%;
+}
+
+.proxy-select-row select {
+    flex: 1;
+    min-width: 0;
+    margin-bottom: 0;
+}
+
+.proxy-manager-card {
+    width: min(520px, 100%);
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+}
+
+.proxy-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 260px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+.proxy-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.proxy-list::-webkit-scrollbar-thumb {
+    background-color: #2f3950;
+    border-radius: 4px;
+}
+
+.proxy-list:empty {
+    display: none;
+}
+
+.proxy-list-empty {
+    margin: 0;
+    padding: 16px;
+    border: 1px dashed #35384d;
+    border-radius: 10px;
+    text-align: center;
+    color: #a5acc5;
+    font-size: 14px;
+}
+
+.proxy-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid #2f3950;
+    border-radius: 10px;
+    background: #171a2b;
+}
+
+.proxy-row.in-use {
+    border-color: #00d4a4;
+}
+
+.proxy-row-details {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.proxy-row-name {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 4px 6px;
+}
+
+.proxy-row-name:hover {
+    border-color: #35384d;
+}
+
+.proxy-row-name:focus {
+    outline: none;
+    border-color: #5865f2;
+    background: #121425;
+}
+
+.proxy-row-name::placeholder {
+    color: #8991a9;
+    font-weight: 400;
+    font-style: italic;
+}
+
+.proxy-row-location {
+    padding: 0 7px;
+    font-size: 12px;
+    color: #a5acc5;
+    font-family: monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.proxy-row-location.invalid {
+    color: #ff8c94;
+}
+
+.proxy-row-use {
+    background: #242a3b;
+    border: 1px solid #2f3950;
+    border-radius: 8px;
+    color: #00d4a4;
+    cursor: pointer;
+    font-size: 13px;
+    padding: 6px 12px;
+}
+
+.proxy-row-use:hover:not(:disabled) {
+    background: #243049;
+}
+
+.proxy-row-use:disabled {
+    background: transparent;
+    border-color: transparent;
+    cursor: default;
+}
+
+.proxy-row-remove {
+    background: transparent;
     border: none;
-    margin-bottom: 10px;
-    background-color: #242a3b;
-    color: #ffffff;
+    border-radius: 8px;
+    color: #a5acc5;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 6px 8px;
+}
+
+.proxy-row-remove:hover {
+    background: rgba(255, 0, 0, 0.2);
+    color: #ff8c94;
+}
+
+.proxy-add-input {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #35384d;
+    background: #121425;
+    color: #fff;
+    font-family: monospace;
+    font-size: 13px;
+    resize: vertical;
+}
+
+.proxy-add-input:focus {
+    outline: 2px solid #5865f2;
+}
+
+.proxy-add-hint {
+    margin: 0;
+    font-size: 12px;
+    color: #a5acc5;
+    line-height: 1.4;
+}
+
+.proxy-add-hint code {
+    background: #2a2d3f;
+    border-radius: 4px;
+    padding: 1px 4px;
+    white-space: nowrap;
 }
 
 .pegi-rating img {

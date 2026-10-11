@@ -1562,14 +1562,21 @@ async function updateProfileBasedOnCharacter() {
 }
 
 async function applyAccountProxy(account) {
-    const proxyInput = document.getElementById('proxy-ip');
-    if (!proxyInput || typeof account?.proxyIp !== 'string') return;
+    if (!document.getElementById('proxy-ip') || typeof account?.proxyIp !== 'string') return;
     const proxyIp = account.proxyIp.trim();
-    if (proxyIp === '' || proxyInput.value === proxyIp) return;
-    proxyInput.value = proxyIp;
-    const properties = await window.electron.readProperties();
-    properties['proxyip'] = proxyIp;
-    await window.electron.writeProperties(properties);
+    if (proxyIp === '') return;
+    await withProperties(async (properties) => {
+        if (properties['proxyip'] === proxyIp) return;
+        const proxies = readSavedProxies(properties);
+        if (!proxies.some((proxy) => proxy.address === proxyIp)) {
+            proxies.push({ name: '', address: proxyIp });
+        }
+        properties[PROXIES_KEY] = proxies;
+        properties['proxyip'] = proxyIp;
+        await window.electron.writeProperties(properties);
+        renderProxySelect(proxies, proxyIp);
+        renderProxyList(proxies, proxyIp);
+    });
 }
 
 async function persistSelectedAccount(accountId) {
@@ -1993,33 +2000,305 @@ async function setupRamInput() {
     });
 }
 
+const PROXIES_KEY = 'proxies';
+const PROXY_URI_PATTERN = /^([a-z][a-z0-9+.-]*):\/\/(?:(.*)@)?([^@/]+)\/?$/i;
+const SUPPORTED_PROXY_SCHEMES = ['socks', 'socks5'];
+const INVALID_PROXY_HELP = 'Only SOCKS5 proxies work. Use ip:port, ip:port:user:password or socks5://user:password@ip:port.';
+let propertiesQueue = Promise.resolve();
+
+function withProperties(task) {
+    const run = propertiesQueue.then(async () => task(await window.electron.readProperties()));
+    propertiesQueue = run.catch(() => {});
+    return run;
+}
+
+function parseHostPort(value) {
+    const match = value.match(/^(\[[0-9a-f:.]+\]|[a-z0-9.-]+):(\d+)$/i);
+    if (!match) return null;
+    const port = Number(match[2]);
+    if (port < 1 || port > 65535) return null;
+    return { host: match[1], port };
+}
+
+function parseProxyEndpoint(address) {
+    if (typeof address !== 'string') return null;
+    const value = address.trim();
+    if (value === '') return null;
+    if (value.includes('://')) {
+        const match = value.match(PROXY_URI_PATTERN);
+        if (!match || !SUPPORTED_PROXY_SCHEMES.includes(match[1].toLowerCase())) return null;
+        const endpoint = parseHostPort(match[3]);
+        return endpoint && { ...endpoint, hasLogin: Boolean(match[2]) };
+    }
+    if (value.includes('@')) {
+        if (value.split(':').length !== 3) return null;
+        const endpoint = parseHostPort(value.slice(value.lastIndexOf('@') + 1));
+        return endpoint && { ...endpoint, hasLogin: true };
+    }
+    const parts = value.split(':');
+    if (parts.length !== 2 && parts.length < 4) return null;
+    const endpoint = parseHostPort(`${parts[0]}:${parts[1]}`);
+    return endpoint && { ...endpoint, hasLogin: parts.length >= 4 };
+}
+
+function parseProxyLine(line) {
+    const value = line.trim();
+    if (parseProxyEndpoint(value)) return { name: '', address: value };
+    const separator = value.indexOf('|');
+    if (separator === -1) return null;
+    const name = value.slice(0, separator).trim();
+    const address = value.slice(separator + 1).trim();
+    return parseProxyEndpoint(address) ? { name, address } : null;
+}
+
+function proxyLocation(proxy) {
+    const endpoint = parseProxyEndpoint(proxy.address);
+    return endpoint ? `${endpoint.host}:${endpoint.port}` : 'Unsupported proxy';
+}
+
+function proxyLabel(proxy) {
+    const location = proxyLocation(proxy);
+    return proxy.name ? `${proxy.name} (${location})` : location;
+}
+
+function readSavedProxies(properties) {
+    const saved = Array.isArray(properties?.[PROXIES_KEY]) ? properties[PROXIES_KEY] : [];
+    const proxies = [];
+    for (const entry of saved) {
+        const address = typeof entry?.address === 'string' ? entry.address.trim() : '';
+        if (address === '' || proxies.some((proxy) => proxy.address === address)) continue;
+        proxies.push({ name: typeof entry.name === 'string' ? entry.name.trim() : '', address });
+    }
+    return proxies;
+}
+
+function saveProxies(update, { renderList = true } = {}) {
+    return withProperties(async (properties) => {
+        const proxies = readSavedProxies(properties);
+        const selected = typeof properties['proxyip'] === 'string' ? properties['proxyip'].trim() : '';
+        const next = update({ proxies, selected });
+        properties[PROXIES_KEY] = next.proxies;
+        properties['proxyip'] = next.selected;
+        await window.electron.writeProperties(properties);
+        renderProxySelect(next.proxies, next.selected);
+        if (renderList) renderProxyList(next.proxies, next.selected);
+        return next;
+    });
+}
+
+function renderProxySelect(proxies, selected) {
+    const proxySelect = document.getElementById('proxy-ip');
+    if (!proxySelect) return;
+    proxySelect.innerHTML = '';
+    const noProxy = document.createElement('option');
+    noProxy.value = '';
+    noProxy.textContent = 'No proxy';
+    proxySelect.appendChild(noProxy);
+    for (const proxy of proxies) {
+        const option = document.createElement('option');
+        option.value = proxy.address;
+        option.textContent = proxyLabel(proxy);
+        proxySelect.appendChild(option);
+    }
+    const selectedProxy = proxies.find((proxy) => proxy.address === selected);
+    proxySelect.value = selectedProxy ? selected : '';
+    proxySelect.title = selectedProxy ? proxyLabel(selectedProxy) : 'Connect without a proxy';
+}
+
+function focusProxyRow(index, selector) {
+    const rows = document.querySelectorAll('#proxy-list .proxy-row');
+    const row = rows[Math.min(index, rows.length - 1)];
+    const target = row?.querySelector(selector) || document.getElementById('proxy-add-input');
+    target?.focus();
+}
+
+function renderProxyList(proxies, selected) {
+    const list = document.getElementById('proxy-list');
+    const empty = document.getElementById('proxy-list-empty');
+    if (!list) return;
+    list.innerHTML = '';
+    if (empty) empty.style.display = proxies.length === 0 ? 'block' : 'none';
+    proxies.forEach((proxy, index) => {
+        const endpoint = parseProxyEndpoint(proxy.address);
+        const inUse = proxy.address === selected;
+        const row = document.createElement('li');
+        row.className = inUse ? 'proxy-row in-use' : 'proxy-row';
+
+        const details = document.createElement('div');
+        details.className = 'proxy-row-details';
+        const nameInput = document.createElement('input');
+        nameInput.className = 'proxy-row-name';
+        nameInput.type = 'text';
+        nameInput.value = proxy.name;
+        nameInput.placeholder = 'Add a name';
+        nameInput.setAttribute('aria-label', `Name for ${proxyLocation(proxy)}`);
+        const location = document.createElement('span');
+        location.className = endpoint ? 'proxy-row-location' : 'proxy-row-location invalid';
+        location.textContent = endpoint?.hasLogin ? `${proxyLocation(proxy)} · with login` : proxyLocation(proxy);
+        details.append(nameInput, location);
+
+        const useButton = document.createElement('button');
+        useButton.type = 'button';
+        useButton.className = 'proxy-row-use';
+        useButton.textContent = inUse ? 'In use' : 'Use';
+        useButton.disabled = inUse;
+        useButton.addEventListener('click', async () => {
+            await saveProxies(({ proxies: current }) => ({ proxies: current, selected: proxy.address }));
+            focusProxyRow(index, '.proxy-row-name');
+        });
+
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.className = 'proxy-row-remove';
+        removeButton.title = 'Remove this proxy';
+        removeButton.setAttribute('aria-label', `Remove ${proxyLabel(proxy)}`);
+        removeButton.textContent = '✕';
+        removeButton.addEventListener('click', async () => {
+            await saveProxies(({ proxies: current, selected: currentSelected }) => ({
+                proxies: current.filter((entry) => entry.address !== proxy.address),
+                selected: currentSelected === proxy.address ? '' : currentSelected
+            }));
+            focusProxyRow(index, '.proxy-row-remove');
+        });
+
+        nameInput.addEventListener('change', async () => {
+            const name = nameInput.value.trim();
+            nameInput.value = name;
+            removeButton.setAttribute('aria-label', `Remove ${proxyLabel({ ...proxy, name })}`);
+            await saveProxies(
+                ({ proxies: current, selected: currentSelected }) => ({
+                    proxies: current.map((entry) => (entry.address === proxy.address ? { ...entry, name } : entry)),
+                    selected: currentSelected
+                }),
+                { renderList: false }
+            );
+        });
+        nameInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') nameInput.dispatchEvent(new Event('change'));
+        });
+
+        row.append(details, useButton, removeButton);
+        list.appendChild(row);
+    });
+}
+
+async function addProxiesFromText(text) {
+    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== '');
+    const invalid = [];
+    let added = 0;
+    let duplicates = 0;
+    await saveProxies(({ proxies, selected }) => {
+        const wasEmpty = proxies.length === 0;
+        for (const line of lines) {
+            const proxy = parseProxyLine(line);
+            if (!proxy) {
+                invalid.push(line);
+            } else if (proxies.some((entry) => entry.address === proxy.address)) {
+                duplicates++;
+            } else {
+                proxies.push(proxy);
+                added++;
+            }
+        }
+        const nextSelected = wasEmpty && selected === '' && proxies.length > 0 ? proxies[0].address : selected;
+        return { proxies, selected: nextSelected };
+    });
+    return { added, duplicates, invalid };
+}
+
+function describeAddResult({ added, duplicates, invalid }) {
+    const parts = [];
+    if (added > 0) parts.push(`Added ${added} ${added === 1 ? 'proxy' : 'proxies'}.`);
+    if (duplicates > 0) parts.push(`${duplicates} already saved.`);
+    if (invalid.length > 0) {
+        parts.push(
+            `${invalid.length} ${invalid.length === 1 ? 'line was' : 'lines were'} not added and left in the box. ${INVALID_PROXY_HELP}`
+        );
+    }
+    return parts.join(' ');
+}
+function setupProxyManager() {
+    const modal = document.getElementById('proxy-manager-modal');
+    const openButton = document.getElementById('manage-proxies');
+    const closeButton = document.getElementById('proxy-manager-close');
+    const form = document.getElementById('proxy-add-form');
+    const input = document.getElementById('proxy-add-input');
+    const message = document.getElementById('proxy-add-error');
+    if (!modal || !openButton || !form || !input) return;
+
+    const close = () => {
+        modal.classList.add('auth-hidden');
+        document.removeEventListener('keydown', closeOnEscape);
+        openButton.focus();
+    };
+    const closeOnEscape = (event) => {
+        if (event.key === 'Escape') close();
+    };
+
+    openButton.addEventListener('click', async () => {
+        await withProperties((properties) =>
+            renderProxyList(readSavedProxies(properties), document.getElementById('proxy-ip')?.value || '')
+        );
+        if (message) {
+            message.textContent = '';
+            message.classList.remove('success');
+        }
+        modal.classList.remove('auth-hidden');
+        document.addEventListener('keydown', closeOnEscape);
+        input.focus();
+    });
+    closeButton?.addEventListener('click', close);
+    modal.addEventListener('click', (event) => {
+        if (event.target === modal) close();
+    });
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) form.requestSubmit();
+    });
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (input.value.trim() === '') {
+            if (message) {
+                message.textContent = 'Paste or type a proxy first.';
+                message.classList.remove('success');
+            }
+            input.focus();
+            return;
+        }
+        const result = await addProxiesFromText(input.value);
+        input.value = result.invalid.join('\n');
+        if (message) {
+            message.textContent = describeAddResult(result);
+            message.classList.toggle('success', result.invalid.length === 0);
+        }
+        input.focus();
+    });
+}
+
 async function setupProxyInput() {
-    const proxyInput = document.getElementById('proxy-ip');
-    if (!proxyInput) {
+    const proxySelect = document.getElementById('proxy-ip');
+    if (!proxySelect) {
         return;
     }
 
-    const properties = await window.electron.readProperties();
-    hideProxyLoginInfo = properties[HIDE_PROXY_LOGIN_INFO] === true;
-    const savedProxy = properties['proxyip'];
-    if (savedProxy && savedProxy !== '') {
-        proxyInput.value = savedProxy;
-    }
-
-    proxyInput.addEventListener('input', async (event) => {
-        const value = event.target.value;
-        const properties = await window.electron.readProperties();
-        properties['proxyip'] = value;
-        await window.electron.writeProperties(properties);
+    await withProperties(async (properties) => {
+        hideProxyLoginInfo = properties[HIDE_PROXY_LOGIN_INFO] === true;
+        const proxies = readSavedProxies(properties);
+        const savedProxy = typeof properties['proxyip'] === 'string' ? properties['proxyip'].trim() : '';
+        if (savedProxy !== '' && !proxies.some((proxy) => proxy.address === savedProxy)) {
+            proxies.push({ name: '', address: savedProxy });
+            properties[PROXIES_KEY] = proxies;
+            await window.electron.writeProperties(properties);
+        }
+        renderProxySelect(proxies, savedProxy);
     });
 
-    proxyInput.addEventListener('blur', async (event) => {
+    proxySelect.addEventListener('change', async (event) => {
         const value = event.target.value;
-        const properties = await window.electron.readProperties();
-        properties['proxyip'] = value;
-        await window.electron.writeProperties(properties);
+        await saveProxies(({ proxies }) => ({ proxies, selected: value }));
         await maybeShowProxyLoginInfo();
     });
+
+    setupProxyManager();
 }
 
 function sanitizeRamPreference(value) {

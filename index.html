@@ -73,13 +73,32 @@
                     proxy's IP instead of yours. You don't need Proxifier or a proxy browser extension.</li>
                 <li>The window starts without your cookies or history and is deleted after you log in.</li>
                 <li>It needs Chrome, Edge, Brave or another Chromium-based browser installed.</li>
-                <li>Leave the proxy empty to log in with your normal browser.</li>
+                <li>Pick "No proxy" to log in with your normal browser.</li>
             </ul>
             <label class="proxy-info-dismiss">
                 <input id="proxy-login-info-hide" type="checkbox" />
                 Don't show this again
             </label>
             <button id="proxy-login-info-ok" class="auth-submit" type="button">Got it</button>
+        </div>
+    </div>
+    <div id="proxy-manager-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
+        aria-labelledby="proxy-manager-title">
+        <div class="auth-card proxy-manager-card">
+            <h1 id="proxy-manager-title" class="auth-title">Proxies</h1>
+            <p class="auth-subtitle">Save your proxies here, then pick one from the Proxy list in the sidebar.</p>
+            <ul id="proxy-list" class="proxy-list" aria-label="Saved proxies"></ul>
+            <p id="proxy-list-empty" class="proxy-list-empty">No proxies saved yet. Add one below.</p>
+            <form id="proxy-add-form" class="auth-form" novalidate>
+                <label for="proxy-add-input">Add proxies (one per line)</label>
+                <textarea id="proxy-add-input" class="proxy-add-input" rows="3" spellcheck="false"
+                    placeholder="1.2.3.4:1080&#10;1.2.3.4:1080:user:password&#10;socks5://user:password@1.2.3.4:1080"></textarea>
+                <p class="proxy-add-hint">Only SOCKS5 proxies are supported. Optional: put a name in front,
+                    like <code>Main | 1.2.3.4:1080</code>.</p>
+                <button id="proxy-add-submit" type="submit" class="auth-submit">Add</button>
+            </form>
+            <p id="proxy-add-error" class="auth-error" role="alert" aria-live="polite"></p>
+            <button id="proxy-manager-close" class="auth-cancel" type="button">Done</button>
         </div>
     </div>
     <div id="loader-container">
@@ -220,8 +239,16 @@
                     </select>
                 </div>
                 <div class="proxy-section">
-                    <label for="proxy-ip">Proxy (optional, only SOCKS supported)</label>
-                    <input id="proxy-ip" type="text" placeholder="ip:port:user:password">
+                    <label for="proxy-ip">Proxy (optional, SOCKS5 only)</label>
+                    <div class="proxy-select-row">
+                        <select id="proxy-ip">
+                            <option value="">No proxy</option>
+                        </select>
+                        <button id="manage-proxies" class="refresh-accounts-btn" type="button"
+                            title="Add, rename or remove proxies" aria-label="Manage proxies">
+                            <span aria-hidden="true">✎</span>
+                        </button>
+                    </div>
                 </div>
             </aside>
         </div>
