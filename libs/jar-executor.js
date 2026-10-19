@@ -229,30 +229,6 @@ module.exports = async function (deps) {
         return null;
     }
 
-    /**
-     * Redacts sensitive information from command line arguments.
-     * @param {string[]} args - The command line arguments.
-     * @returns {string[]} - The redacted command line arguments.
-     */
-    function redactCommandArgs(args) {
-        return args.map((a) => {
-            if (!a.startsWith('-proxy=')) return a;
-            const value = a.slice('-proxy='.length);
-            try {
-                const u = new URL(value);
-                if (u.username || u.password) {
-                    if (u.username) u.username = '***';
-                    if (u.password) u.password = '***';
-                    return `-proxy=${u.toString()}`;
-                }
-            } catch (_) {
-                // fallback: strip credentials if present
-                return `-proxy=${value.replace(/\/\/[^@]*@/, '//***@')}`;
-            }
-            return a;
-        });
-    }
-
     function homeDirectories() {
         const homes = [os.homedir()];
         try {
@@ -314,7 +290,8 @@ module.exports = async function (deps) {
     }
 
     function executeJar(executable, commandArgs, runtime, secrets) {
-        log.info(`${executable} ${redactCommandArgs(commandArgs).join(' ')}`);
+        const loggedArgs = commandArgs.map((arg) => arg.replace(/^(-(?:profile|proxy)=).*/s, '$1***'));
+        log.info(`${executable} ${javaRuntime.redactText(loggedArgs.join(' '), { homeDir: homeDirectories() })}`);
 
         /**
          * Additional arguments for spawn library.
@@ -438,8 +415,6 @@ module.exports = async function (deps) {
             executeJar(executable, launchArgs, runtime, secrets);
         });
     }
-
-    return { probeJava, checkJavaAndRunJar, showLaunchProblem };
 };
 
 const DEFAULT_XMS_VALUE = '512m';

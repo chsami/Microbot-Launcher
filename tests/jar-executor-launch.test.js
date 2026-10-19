@@ -328,6 +328,20 @@ describe('open-client launch diagnostics with real Java runtimes', () => {
         expect(shown.detail).not.toContain('\ufffd');
     });
 
+    withJdk(17)('launch log hides a profile name that contains spaces', async () => {
+        useJava(17);
+        process.env.M07_MODE = 'sleep';
+        const harness = createHarness();
+        await launch(harness, { profile: 'secret name' });
+        const launchLine = () => harness.log.info.mock.calls.map((call) => String(call[0])).find((line) => line.includes('-jar'));
+        for (let i = 0; i < 200 && !launchLine(); i += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        expect(launchLine()).toContain('-profile=***');
+        expect(launchLine()).not.toContain('secret');
+        expect(launchLine()).not.toContain('name');
+    }, 15000);
+
     test('spawn failures of the resolved executable are process-launch problems', async () => {
         const fakeRuntime = [
             '    java.home = /opt/fake-jdk',

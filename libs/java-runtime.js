@@ -16,13 +16,10 @@ const DEFAULT_MAX_CHARS = 2000;
 
 function parseJavaMajor(version) {
     if (typeof version !== 'string') return null;
-    const trimmed = version.trim();
-    const legacy = trimmed.match(/^1\.(\d+)(?:[._+-]|$)/);
-    if (legacy) return Number(legacy[1]);
-    const modern = trimmed.match(/^(\d+)(?:[.+_-]|$)/);
-    if (!modern) return null;
-    const major = Number(modern[1]);
-    return Number.isInteger(major) && major > 0 ? major : null;
+    const match = version.trim().match(/^(?:1\.)?(\d+)(?:[._+-]|$)/);
+    if (!match) return null;
+    const major = Number(match[1]);
+    return major > 0 ? major : null;
 }
 
 function parseJavaSettings(output) {
@@ -47,7 +44,6 @@ function parseJavaSettings(output) {
         version,
         major: parseJavaMajor(version),
         vendor: props['java.vendor'] || null,
-        vmName: props['java.vm.name'] || null,
         home: props['java.home'] || null,
         osArch: props['os.arch'] || null,
         dataModel
@@ -239,10 +235,13 @@ const VM_FAILURE_HINTS = [
     {
         pattern: /Unable to access jarfile|Invalid or corrupt jarfile|Error: Invalid or corrupt/i,
         recovery: 'The client file is missing or damaged. Delete it from the .microbot folder and launch again to download it.'
+    },
+    {
+        pattern: /Could not create the Java Virtual Machine|Error occurred during initialization of VM|A fatal exception has occurred/i,
+        recovery: `Install Java ${RECOMMENDED_JAVA_MAJOR} (64-bit), or lower the client RAM setting, then try again.`,
+        offerDownload: true
     }
 ];
-
-const VM_FAILURE_PATTERN = /Could not create the Java Virtual Machine|Error occurred during initialization of VM|A fatal exception has occurred|Unable to access jarfile|Invalid or corrupt jarfile|UnsupportedClassVersionError|insufficient memory for the Java Runtime/i;
 
 function classifyLaunchFailure({ error, code, signal, stderr } = {}) {
     if (error) {
@@ -267,15 +266,13 @@ function classifyLaunchFailure({ error, code, signal, stderr } = {}) {
     const output = typeof stderr === 'string' ? stderr : '';
     const hint = VM_FAILURE_HINTS.find((h) => h.pattern.test(output));
     const exitText = code !== null && code !== undefined ? `exit code ${code}` : `signal ${signal}`;
-    if (VM_FAILURE_PATTERN.test(output) || hint) {
+    if (hint) {
         return {
             kind: 'vm-failure',
             title: 'Java Could Not Start The Client',
             message: `The Java virtual machine failed to start (${exitText}).`,
-            recovery: hint
-                ? hint.recovery
-                : `Install Java ${RECOMMENDED_JAVA_MAJOR} (64-bit), or lower the client RAM setting, then try again.`,
-            offerDownload: Boolean(hint && hint.offerDownload) || !hint
+            recovery: hint.recovery,
+            offerDownload: Boolean(hint.offerDownload)
         };
     }
     return {
