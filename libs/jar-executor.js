@@ -2,6 +2,11 @@ module.exports = async function (deps) {
     const { spawn, path, dialog, shell, log, fs, microbotDir, ipcMain, clipboard, packageJson } = deps;
     const os = require('os');
     const javaRuntime = require(path.join(__dirname, 'java-runtime.js'));
+    const managedJdk = require(path.join(__dirname, 'managed-jdk.js'));
+    const progressFor = (event) => (percent, status) => {
+        if (event && event.sender) event.sender.send('progress', { percent, status });
+    };
+    let managedJavaReady = null;
     const { toProxyUri } = require(path.join(__dirname, 'login-proxy.js'));
     const STARTUP_WINDOW_MS = deps.startupWindowMs || 20000;
     const MAX_CAPTURED_STDERR = 64 * 1024;
@@ -76,7 +81,7 @@ module.exports = async function (deps) {
                     );
                 }
 
-                checkJavaAndRunJar(commandArgs, accountSecrets(account));
+                checkJavaAndRunJar(commandArgs, accountSecrets(account), progressFor(event));
                 return { success: true };
             } catch (error) {
                 log.error(error.message);
@@ -142,12 +147,12 @@ module.exports = async function (deps) {
                 );
             }
 
-            checkJavaAndRunJar(commandArgs);
+            checkJavaAndRunJar(commandArgs, [], progressFor(event));
             return { success: true };
         }
     );
 
-    function probeJava(callback) {
+    function probeJava(callback, command = 'java') {
         let called = false;
         let timeoutHandle = null;
         const finish = (result) => {
@@ -158,7 +163,7 @@ module.exports = async function (deps) {
         };
 
         try {
-            const javaProcess = spawn('java', javaRuntime.PROBE_ARGS);
+            const javaProcess = spawn(command, javaRuntime.PROBE_ARGS);
             let output = '';
             const TIMEOUT_MS = 5000;
 
@@ -380,40 +385,139 @@ module.exports = async function (deps) {
         }
     }
 
-    function checkJavaAndRunJar(commandArgs, secrets = []) {
-        probeJava(({ runtime, problem }) => {
-            if (problem) {
-                showLaunchProblem(problem, { stderr: problem.stderr, secrets });
+    function checkJavaAndRunJar(commandArgs, secrets = [], progress = () => {}) {
+        probeJava((result) => {
+            if (!needsManagedJava(result)) {
+                launchWithRuntime(result, commandArgs, secrets);
                 return;
             }
-
-            log.info(`Selected Java runtime: ${javaRuntime.describeRuntime(runtime)} at ${runtime.home || 'unknown home'}`);
-            const evaluation = javaRuntime.evaluateRuntime(runtime, {
-                heapMb: javaRuntime.heapMbFromArgs(commandArgs)
+            probeManagedJava((managed) => {
+                if (!needsManagedJava(managed)) {
+                    launchWithRuntime(managed, commandArgs, secrets);
+                    return;
+                }
+                offerManagedInstall(commandArgs, secrets, progress);
             });
-            evaluation.warnings.forEach((warning) => log.warn(warning.message));
-            if (!evaluation.compatible) {
-                showLaunchProblem(
-                    {
-                        kind: 'incompatible-java',
-                        title: 'Incompatible Java',
-                        message: evaluation.problems.map((p) => p.message).join(' '),
-                        recovery: evaluation.problems.map((p) => p.recovery).join(' '),
-                        offerDownload: true
-                    },
-                    { runtime, secrets }
-                );
-                return;
-            }
-
-            const launchArgs = javaRuntime.supportedVmArgs(runtime, commandArgs);
-            if (!javaRuntime.supportsZgc(runtime)) {
-                log.info(`${javaRuntime.describeRuntime(runtime)} cannot use ZGC; launching without ZGC flags.`);
-            }
-            const executable = javaRuntime.launcherExecutable(runtime, process.platform, fs.existsSync);
-            log.info('Java runtime is compatible, running the JAR...');
-            executeJar(executable, launchArgs, runtime, secrets);
         });
+    }
+
+    function needsManagedJava(result) {
+        if (!result) return true;
+        if (result.problem) return result.problem.kind === 'missing-java';
+        return Boolean(result.runtime.major) && result.runtime.major < javaRuntime.MIN_JAVA_MAJOR;
+    }
+
+    function probeManagedJava(callback) {
+        const candidate = managedJdk.javaPath(microbotDir, process.platform);
+        if (!fs.existsSync(candidate)) {
+            callback(null);
+            return;
+        }
+        probeJava(callback, candidate);
+    }
+
+    function probeJavaAsync(command) {
+        return new Promise((resolve) => probeJava(resolve, command));
+    }
+
+    function launchWithRuntime({ runtime, problem }, commandArgs, secrets) {
+        if (problem) {
+            showLaunchProblem(problem, { stderr: problem.stderr, secrets });
+            return;
+        }
+
+        log.info(`Selected Java runtime: ${javaRuntime.describeRuntime(runtime)} at ${runtime.home || 'unknown home'}`);
+        const evaluation = javaRuntime.evaluateRuntime(runtime, {
+            heapMb: javaRuntime.heapMbFromArgs(commandArgs)
+        });
+        evaluation.warnings.forEach((warning) => log.warn(warning.message));
+        if (!evaluation.compatible) {
+            showLaunchProblem(
+                {
+                    kind: 'incompatible-java',
+                    title: 'Incompatible Java',
+                    message: evaluation.problems.map((p) => p.message).join(' '),
+                    recovery: evaluation.problems.map((p) => p.recovery).join(' '),
+                    offerDownload: true
+                },
+                { runtime, secrets }
+            );
+            return;
+        }
+
+        const launchArgs = javaRuntime.supportedVmArgs(runtime, commandArgs);
+        if (!javaRuntime.supportsZgc(runtime)) {
+            log.info(`${javaRuntime.describeRuntime(runtime)} cannot use ZGC; launching without ZGC flags.`);
+        }
+        const executable = javaRuntime.launcherExecutable(runtime, process.platform, fs.existsSync);
+        log.info('Java runtime is compatible, running the JAR...');
+        executeJar(executable, launchArgs, runtime, secrets);
+    }
+
+    function obtainManagedJava(progress) {
+        if (!managedJavaReady) {
+            managedJavaReady = promptAndInstallManagedJava(progress).finally(() => {
+                managedJavaReady = null;
+            });
+        }
+        return managedJavaReady;
+    }
+
+    function offerManagedInstall(commandArgs, secrets, progress) {
+        obtainManagedJava(progress).then((result) => {
+            if (result) launchWithRuntime(result, commandArgs, secrets);
+        });
+    }
+
+    async function promptAndInstallManagedJava(progress) {
+        const major = javaRuntime.RECOMMENDED_JAVA_MAJOR;
+        if (!dialog) {
+            log.error(`Java ${major} is required, but no dialog is available to offer the install.`);
+            return null;
+        }
+        const choice = await dialog.showMessageBox({
+            type: 'question',
+            title: `Install Java ${major}`,
+            message: `Microbot needs 64-bit Java ${major}, and no usable Java was found.`,
+            detail: `Microbot can download Eclipse Temurin Java ${major} (about 190 MB) into its own .microbot folder. Your system Java is not changed.`,
+            buttons: [`Install Java ${major}`, 'Open download page', 'Cancel'],
+            defaultId: 0,
+            cancelId: 2
+        });
+        if (choice.response === 1) {
+            shell.openExternal(javaRuntime.javaDownloadUrl(process.platform, process.arch));
+            return null;
+        }
+        if (choice.response !== 0) {
+            log.info('User declined installing Java.');
+            return null;
+        }
+        try {
+            const install = deps.installManagedJdk || managedJdk.install;
+            const javaCommand = await install({
+                axios: deps.axios,
+                microbotDir,
+                platform: process.platform,
+                arch: process.arch,
+                onProgress: progress
+            });
+            const result = await probeJavaAsync(javaCommand);
+            if (needsManagedJava(result)) {
+                throw new Error(result.problem ? result.problem.message : 'The installed Java is too old.');
+            }
+            progress(100, 'Starting Microbot...');
+            return result;
+        } catch (error) {
+            log.error(`Java install failed: ${error.message}`);
+            showLaunchProblem({
+                kind: 'java-install-failed',
+                title: 'Java Could Not Be Installed',
+                message: error.message,
+                recovery: `Install Java ${major} (64-bit) yourself from the download page, then try again.`,
+                offerDownload: true
+            });
+            return null;
+        }
     }
 };
 

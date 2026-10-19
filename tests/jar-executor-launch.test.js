@@ -33,7 +33,7 @@ function buildTestJar() {
     ]);
 }
 
-function createHarness({ clipboard = true, response = 0, startupWindowMs = 2500 } = {}) {
+function createHarness({ clipboard = true, response = 0, startupWindowMs = 2500, installManagedJdk } = {}) {
     const handlers = {};
     const spawnCalls = [];
     const dialogs = [];
@@ -53,6 +53,7 @@ function createHarness({ clipboard = true, response = 0, startupWindowMs = 2500 
         microbotDir,
         startupWindowMs,
         packageJson: { version: '3.2.8-test' },
+        installManagedJdk,
         ipcMain: { handle: (name, fn) => { handlers[name] = fn; } },
         shell: { openExternal: jest.fn() },
         clipboard: clipboard ? { writeText: jest.fn() } : undefined,
@@ -81,6 +82,11 @@ function useJava(major) {
 const within = (promise, ms) =>
     Promise.race([promise, new Promise((resolve) => setTimeout(() => resolve(null), ms))]);
 const flush = () => new Promise((resolve) => setImmediate(resolve));
+const waitFor = async (predicate) => {
+    for (let i = 0; i < 200 && !predicate(); i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+};
 
 beforeAll(() => {
     workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'm07-launch-'));
@@ -107,15 +113,14 @@ afterEach(() => {
 });
 
 describe('open-client launch diagnostics with real Java runtimes', () => {
-    test('missing Java shows the download dialog and preserves the Temurin link', async () => {
+    test('missing Java offers an install and keeps the Temurin download page as the fallback', async () => {
         const empty = path.join(workDir, 'empty-bin');
         fs.mkdirSync(empty, { recursive: true });
         process.env.PATH = empty;
-        const harness = createHarness({ response: 0 });
+        const harness = createHarness({ response: 1 });
         expect(await launch(harness)).toEqual({ success: true });
         const shown = await within(harness.dialogShown, 5000);
-        expect(shown).toMatchObject({ title: 'Java Not Found', buttons: ['Yes, Download JDK', 'Copy details', 'Cancel'] });
-        expect(shown.detail).toContain('(missing-java)');
+        expect(shown).toMatchObject({ title: 'Install Java 17', buttons: ['Install Java 17', 'Open download page', 'Cancel'] });
         await flush();
         expect(harness.deps.shell.openExternal).toHaveBeenCalledWith(
             require('../libs/java-runtime').javaDownloadUrl(process.platform, process.arch)
@@ -123,16 +128,14 @@ describe('open-client launch diagnostics with real Java runtimes', () => {
         expect(harness.spawnCalls).toHaveLength(1);
     });
 
-    withJdk(8)('Java 8 is rejected before launch as incompatible', async () => {
+    withJdk(8)('Java 8 is replaced by an install offer when no managed copy exists', async () => {
         useJava(8);
         const harness = createHarness({ response: 1 });
         await launch(harness);
         const shown = await within(harness.dialogShown, 10000);
-        expect(shown.title).toBe('Incompatible Java');
-        expect(shown.message).toContain('Java 8 is too old');
-        expect(shown.detail).toMatch(/Runtime: Java 1\.8\.0_\d+ Temurin \(amd64, 64-bit\)/);
+        expect(shown.title).toBe('Install Java 17');
         await flush();
-        expect(harness.deps.clipboard.writeText).toHaveBeenCalledWith(shown.detail);
+        expect(harness.deps.shell.openExternal).toHaveBeenCalledWith(expect.stringContaining('adoptium.net'));
         expect(harness.spawnCalls).toHaveLength(1);
     });
 
@@ -340,6 +343,76 @@ describe('open-client launch diagnostics with real Java runtimes', () => {
         expect(launchLine()).toContain('-profile=***');
         expect(launchLine()).not.toContain('secret');
         expect(launchLine()).not.toContain('name');
+    }, 15000);
+
+    withJdk(17)('accepting the install offer launches the freshly installed Java', async () => {
+        const empty = path.join(workDir, 'empty-bin');
+        fs.mkdirSync(empty, { recursive: true });
+        process.env.PATH = empty;
+        process.env.M07_MODE = 'sleep';
+        const installed = path.join(fs.realpathSync(JDKS[17]), 'bin', 'java');
+        const harness = createHarness({ response: 0, installManagedJdk: jest.fn(async () => installed) });
+        await launch(harness);
+        await waitFor(() => harness.spawnCalls.length >= 3);
+        expect(harness.deps.installManagedJdk).toHaveBeenCalledWith(
+            expect.objectContaining({ platform: process.platform, microbotDir })
+        );
+        expect(harness.spawnCalls[1].command).toBe(installed);
+        expect(harness.spawnCalls[2].command).toBe(installed);
+    }, 15000);
+
+    withJdk(17)('an installed managed copy is used when Java is not on PATH', async () => {
+        const empty = path.join(workDir, 'empty-bin');
+        fs.mkdirSync(empty, { recursive: true });
+        process.env.PATH = empty;
+        process.env.M07_MODE = 'sleep';
+        const managed = path.join(microbotDir, 'jdk', 'temurin-17');
+        fs.mkdirSync(path.dirname(managed), { recursive: true });
+        fs.symlinkSync(JDKS[17], managed, 'dir');
+        try {
+            const harness = createHarness();
+            await launch(harness);
+            expect(await within(harness.dialogShown, 3000)).toBeNull();
+            await waitFor(() => harness.spawnCalls.length >= 3);
+            expect(harness.spawnCalls[0].command).toBe('java');
+            expect(harness.spawnCalls[1].command).toBe(path.join(managed, 'bin', 'java'));
+            expect(harness.spawnCalls[2].command).toBe(path.join(fs.realpathSync(JDKS[17]), 'bin', 'java'));
+        } finally {
+            fs.rmSync(path.join(microbotDir, 'jdk'), { recursive: true, force: true });
+        }
+    }, 15000);
+
+    withJdk(17)('two launch requests while Java is missing share one install prompt', async () => {
+        const empty = path.join(workDir, 'empty-bin');
+        fs.mkdirSync(empty, { recursive: true });
+        process.env.PATH = empty;
+        process.env.M07_MODE = 'sleep';
+        const installed = path.join(fs.realpathSync(JDKS[17]), 'bin', 'java');
+        const harness = createHarness({ response: 0, installManagedJdk: jest.fn(async () => installed) });
+        await require('../libs/jar-executor')(harness.deps);
+        await Promise.all([
+            harness.handlers['open-client']({}, VERSION, null, null, ''),
+            harness.handlers['open-client']({}, VERSION, null, null, '')
+        ]);
+        await waitFor(() => harness.spawnCalls.filter((call) => call.command === installed).length >= 3);
+        expect(harness.dialogs).toHaveLength(1);
+        expect(harness.deps.installManagedJdk).toHaveBeenCalledTimes(1);
+    }, 15000);
+
+    withJdk(17)('a failed Java install is reported to the user', async () => {
+        const empty = path.join(workDir, 'empty-bin');
+        fs.mkdirSync(empty, { recursive: true });
+        process.env.PATH = empty;
+        const harness = createHarness({
+            response: 0,
+            installManagedJdk: jest.fn(async () => {
+                throw new Error('network unreachable');
+            })
+        });
+        await launch(harness);
+        await waitFor(() => harness.dialogs.length >= 2);
+        expect(harness.dialogs[1]).toMatchObject({ title: 'Java Could Not Be Installed' });
+        expect(harness.dialogs[1].detail).toContain('network unreachable');
     }, 15000);
 
     test('spawn failures of the resolved executable are process-launch problems', async () => {
