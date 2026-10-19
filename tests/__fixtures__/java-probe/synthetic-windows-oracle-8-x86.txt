@@ -1,0 +1,10 @@
+    java.home = C:\Program Files (x86)\Java\jre1.8.0_401
+    java.runtime.name = Java(TM) SE Runtime Environment
+    java.vendor = Oracle Corporation
+    java.version = 1.8.0_401
+    java.vm.name = Java HotSpot(TM) Client VM
+    os.arch = x86
+    sun.arch.data.model = 32
+java version "1.8.0_401"
+Java(TM) SE Runtime Environment (build 1.8.0_401-b10)
+Java HotSpot(TM) Client VM (build 25.401-b10, mixed mode, sharing)
