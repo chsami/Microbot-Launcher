@@ -290,7 +290,8 @@ module.exports = async function (deps) {
     }
 
     function executeJar(executable, commandArgs, runtime, secrets) {
-        log.info(`${executable} ${javaRuntime.redactText(commandArgs.join(' '), { homeDir: homeDirectories() })}`);
+        const loggedArgs = commandArgs.map((arg) => arg.replace(/^(-(?:profile|proxy)=).*/s, '$1***'));
+        log.info(`${executable} ${javaRuntime.redactText(loggedArgs.join(' '), { homeDir: homeDirectories() })}`);
 
         /**
          * Additional arguments for spawn library.
