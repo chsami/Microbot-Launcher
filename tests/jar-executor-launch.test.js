@@ -382,6 +382,39 @@ describe('open-client launch diagnostics with real Java runtimes', () => {
         }
     }, 15000);
 
+    withJdk(17)('two launch requests while Java is missing share one install prompt', async () => {
+        const empty = path.join(workDir, 'empty-bin');
+        fs.mkdirSync(empty, { recursive: true });
+        process.env.PATH = empty;
+        process.env.M07_MODE = 'sleep';
+        const installed = path.join(fs.realpathSync(JDKS[17]), 'bin', 'java');
+        const harness = createHarness({ response: 0, installManagedJdk: jest.fn(async () => installed) });
+        await require('../libs/jar-executor')(harness.deps);
+        await Promise.all([
+            harness.handlers['open-client']({}, VERSION, null, null, ''),
+            harness.handlers['open-client']({}, VERSION, null, null, '')
+        ]);
+        await waitFor(() => harness.spawnCalls.filter((call) => call.command === installed).length >= 3);
+        expect(harness.dialogs).toHaveLength(1);
+        expect(harness.deps.installManagedJdk).toHaveBeenCalledTimes(1);
+    }, 15000);
+
+    withJdk(17)('a failed Java install is reported to the user', async () => {
+        const empty = path.join(workDir, 'empty-bin');
+        fs.mkdirSync(empty, { recursive: true });
+        process.env.PATH = empty;
+        const harness = createHarness({
+            response: 0,
+            installManagedJdk: jest.fn(async () => {
+                throw new Error('network unreachable');
+            })
+        });
+        await launch(harness);
+        await waitFor(() => harness.dialogs.length >= 2);
+        expect(harness.dialogs[1]).toMatchObject({ title: 'Java Could Not Be Installed' });
+        expect(harness.dialogs[1].detail).toContain('network unreachable');
+    }, 15000);
+
     test('spawn failures of the resolved executable are process-launch problems', async () => {
         const fakeRuntime = [
             '    java.home = /opt/fake-jdk',

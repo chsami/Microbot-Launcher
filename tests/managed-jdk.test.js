@@ -71,6 +71,11 @@ describe('managed JDK asset selection', () => {
         const axios = { get: jest.fn(async () => ({ data: [] })) };
         await expect(managedJdk.fetchAsset(axios, 'linux', 'x64')).rejects.toThrow(/no JDK package/);
     });
+
+    test.each(['..', '.', '', 'bad name.zip'])('rejects the unsafe file name %p', async (name) => {
+        const axios = fakeAxios('', { link: 'x', checksum: 'x', name });
+        await expect(managedJdk.fetchAsset(axios, 'linux', 'x64')).rejects.toThrow(/unexpected file name|no JDK package/);
+    });
 });
 
 describe('managed JDK install', () => {

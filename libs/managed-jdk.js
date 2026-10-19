@@ -7,6 +7,8 @@ const AdmZip = require('adm-zip');
 const { RECOMMENDED_JAVA_MAJOR } = require('./java-runtime.js');
 
 const ADOPTIUM_ASSETS = `https://api.adoptium.net/v3/assets/latest/${RECOMMENDED_JAVA_MAJOR}/hotspot`;
+const MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024;
+const DOWNLOAD_SLACK_BYTES = 1024 * 1024;
 const OS_NAMES = { win32: 'windows', darwin: 'mac', linux: 'linux' };
 const ARCH_NAMES = { x64: 'x64', arm64: 'aarch64' };
 
@@ -50,10 +52,14 @@ async function fetchAsset(axios, platform, arch) {
     if (!pkg || !pkg.link || !pkg.checksum || !pkg.name) {
         throw new Error('Adoptium returned no JDK package.');
     }
+    const name = path.basename(String(pkg.name));
+    if (!/^\w[\w.+-]*$/.test(name)) {
+        throw new Error('Adoptium returned an unexpected file name.');
+    }
     return {
         url: pkg.link,
         checksum: String(pkg.checksum).toLowerCase(),
-        name: path.basename(pkg.name),
+        name,
         size: Number(pkg.size) || 0
     };
 }
@@ -64,9 +70,14 @@ async function downloadVerified(axios, asset, target, onProgress) {
     const hash = crypto.createHash('sha256');
     let received = 0;
     let reportedPercent = -1;
+    const limit = (asset.size || MAX_DOWNLOAD_BYTES) + DOWNLOAD_SLACK_BYTES;
     response.data.on('data', (chunk) => {
         hash.update(chunk);
         received += chunk.length;
+        if (received > limit) {
+            response.data.destroy(new Error('The Java download is larger than expected.'));
+            return;
+        }
         if (!total) return;
         const percent = Math.floor((received / total) * 100);
         if (percent === reportedPercent) return;

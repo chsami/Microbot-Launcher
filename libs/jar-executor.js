@@ -6,7 +6,7 @@ module.exports = async function (deps) {
     const progressFor = (event) => (percent, status) => {
         if (event && event.sender) event.sender.send('progress', { percent, status });
     };
-    let managedInstallRunning = false;
+    let managedJavaReady = null;
     const { toProxyUri } = require(path.join(__dirname, 'login-proxy.js'));
     const STARTUP_WINDOW_MS = deps.startupWindowMs || 20000;
     const MAX_CAPTURED_STDERR = 64 * 1024;
@@ -454,42 +454,44 @@ module.exports = async function (deps) {
         executeJar(executable, launchArgs, runtime, secrets);
     }
 
-    function offerManagedInstall(commandArgs, secrets, progress) {
-        const major = javaRuntime.RECOMMENDED_JAVA_MAJOR;
-        if (managedInstallRunning) {
-            log.info('A Java install is already running.');
-            return;
+    function obtainManagedJava(progress) {
+        if (!managedJavaReady) {
+            managedJavaReady = promptAndInstallManagedJava(progress).finally(() => {
+                managedJavaReady = null;
+            });
         }
-        if (!dialog) {
-            log.error(`Java ${major} is required, but no dialog is available to offer the install.`);
-            return;
-        }
-        dialog
-            .showMessageBox({
-                type: 'question',
-                title: `Install Java ${major}`,
-                message: `Microbot needs 64-bit Java ${major}, and no usable Java was found.`,
-                detail: `Microbot can download Eclipse Temurin Java ${major} (about 190 MB) into its own .microbot folder. Your system Java is not changed.`,
-                buttons: [`Install Java ${major}`, 'Open download page', 'Cancel'],
-                defaultId: 0,
-                cancelId: 2
-            })
-            .then((result) => {
-                if (result.response === 0) {
-                    return installManagedJava(commandArgs, secrets, progress);
-                }
-                if (result.response === 1) {
-                    shell.openExternal(javaRuntime.javaDownloadUrl(process.platform, process.arch));
-                    return undefined;
-                }
-                log.info('User declined installing Java.');
-                return undefined;
-            })
-            .catch((err) => log.error(`Failed to show Java install prompt: ${err.message}`));
+        return managedJavaReady;
     }
 
-    async function installManagedJava(commandArgs, secrets, progress) {
-        managedInstallRunning = true;
+    function offerManagedInstall(commandArgs, secrets, progress) {
+        obtainManagedJava(progress).then((result) => {
+            if (result) launchWithRuntime(result, commandArgs, secrets);
+        });
+    }
+
+    async function promptAndInstallManagedJava(progress) {
+        const major = javaRuntime.RECOMMENDED_JAVA_MAJOR;
+        if (!dialog) {
+            log.error(`Java ${major} is required, but no dialog is available to offer the install.`);
+            return null;
+        }
+        const choice = await dialog.showMessageBox({
+            type: 'question',
+            title: `Install Java ${major}`,
+            message: `Microbot needs 64-bit Java ${major}, and no usable Java was found.`,
+            detail: `Microbot can download Eclipse Temurin Java ${major} (about 190 MB) into its own .microbot folder. Your system Java is not changed.`,
+            buttons: [`Install Java ${major}`, 'Open download page', 'Cancel'],
+            defaultId: 0,
+            cancelId: 2
+        });
+        if (choice.response === 1) {
+            shell.openExternal(javaRuntime.javaDownloadUrl(process.platform, process.arch));
+            return null;
+        }
+        if (choice.response !== 0) {
+            log.info('User declined installing Java.');
+            return null;
+        }
         try {
             const install = deps.installManagedJdk || managedJdk.install;
             const javaCommand = await install({
@@ -504,21 +506,17 @@ module.exports = async function (deps) {
                 throw new Error(result.problem ? result.problem.message : 'The installed Java is too old.');
             }
             progress(100, 'Starting Microbot...');
-            launchWithRuntime(result, commandArgs, secrets);
+            return result;
         } catch (error) {
             log.error(`Java install failed: ${error.message}`);
-            showLaunchProblem(
-                {
-                    kind: 'java-install-failed',
-                    title: 'Java Could Not Be Installed',
-                    message: error.message,
-                    recovery: `Install Java ${javaRuntime.RECOMMENDED_JAVA_MAJOR} (64-bit) yourself from the download page, then try again.`,
-                    offerDownload: true
-                },
-                { secrets }
-            );
-        } finally {
-            managedInstallRunning = false;
+            showLaunchProblem({
+                kind: 'java-install-failed',
+                title: 'Java Could Not Be Installed',
+                message: error.message,
+                recovery: `Install Java ${major} (64-bit) yourself from the download page, then try again.`,
+                offerDownload: true
+            });
+            return null;
         }
     }
 };
