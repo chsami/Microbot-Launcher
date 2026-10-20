@@ -989,7 +989,8 @@ function renderAccountsList() {
         deleteButton.dataset.accountId = account.accountId;
         deleteButton.title = `Delete ${label}`;
         deleteButton.setAttribute('aria-label', `Delete ${label}`);
-        deleteButton.innerHTML = '<span aria-hidden="true">🗑️</span>';
+        deleteButton.innerHTML =
+            '<svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14"><path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>';
         deleteButton.addEventListener('click', async (event) => {
             event.stopPropagation();
             closeDropdown();
@@ -1032,10 +1033,23 @@ function renderAccountsList() {
         }
     };
 
+    const fitDropdownToBoundary = () => {
+        const boundary = (dropdown.closest('.sidebar') || document.body).getBoundingClientRect();
+        const rect = dropdown.getBoundingClientRect();
+        const edgeGap = 12;
+        const spaceBelow = boundary.bottom - rect.bottom - edgeGap;
+        const spaceAbove = rect.top - boundary.top - edgeGap;
+        const openUp = spaceBelow < 200 && spaceAbove > spaceBelow;
+        const room = openUp ? spaceAbove : spaceBelow;
+        dropdown.classList.toggle('open-up', openUp);
+        optionsList.style.maxHeight = `${Math.max(120, Math.min(240, room - searchWrapper.offsetHeight - 12))}px`;
+    };
+
     const openDropdown = () => {
         dropdown.classList.add('open');
         toggleButton.setAttribute('aria-expanded', 'true');
         renderOptions(searchInput.value);
+        fitDropdownToBoundary();
         requestAnimationFrame(() => {
             searchInput.focus();
         });
