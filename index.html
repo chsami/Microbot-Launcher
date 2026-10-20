@@ -17,7 +17,7 @@
     <div id="auth-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true">
         <div class="auth-card">
             <h1 class="auth-title">Microbot Launcher</h1>
-            <p class="auth-subtitle">Sign in to continue</p>
+            <p id="auth-subtitle" class="auth-subtitle">Sign in to continue</p>
             <div class="auth-tabs" role="tablist">
                 <button id="auth-tab-signin" class="auth-tab active" data-target="signin" role="tab"
                     aria-selected="true">
@@ -39,7 +39,8 @@
                 <input id="signup-email" name="email" type="email" autocomplete="email" required />
                 <label for="signup-password">Password</label>
                 <input id="signup-password" name="password" type="password" autocomplete="new-password" minlength="8"
-                    required />
+                    required aria-describedby="signup-password-hint" />
+                <p id="signup-password-hint" class="auth-hint">At least 8 characters.</p>
                 <button id="signup-submit" type="submit" class="auth-submit">Create Account</button>
             </form>
             <p id="auth-error" class="auth-error" role="alert" aria-live="polite"></p>

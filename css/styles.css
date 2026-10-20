@@ -1663,3 +1663,43 @@ button.hamburger {
 .profiles-empty.auth-hidden {
     display: none;
 }
+
+.auth-tab {
+    font-family: var(--mb-body);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .03em;
+}
+
+.auth-form label {
+    font-family: var(--mb-body);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--mb-muted);
+}
+
+.auth-form input {
+    font-family: var(--mb-body);
+    font-size: 14px;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.auth-form input::placeholder {
+    color: var(--mb-faint, #6f685d);
+}
+
+.auth-hint {
+    margin: -6px 0 0;
+    font-size: 12px;
+    color: var(--mb-muted);
+}
+
+.auth-error:empty {
+    display: none;
+}
+
+.auth-card .auth-subtitle {
+    font-family: var(--mb-body);
+    font-size: 14px;
+}

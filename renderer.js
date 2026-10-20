@@ -63,6 +63,10 @@ function setActiveAuthTab(target) {
     if (signupTab) signupTab.setAttribute('aria-selected', isSignin ? 'false' : 'true');
     toggleClass(signinForm, 'auth-hidden', !isSignin);
     toggleClass(signupForm, 'auth-hidden', isSignin);
+    const subtitle = $('auth-subtitle');
+    if (subtitle) {
+        subtitle.textContent = isSignin ? 'Sign in to continue' : 'Create your Microbot account';
+    }
     setAuthError('');
 }
 
