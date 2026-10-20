@@ -174,8 +174,19 @@ describe('api-auth', () => {
 
         await ipcMain.invoke('auth:signout');
 
+        expect(axios.post).toHaveBeenLastCalledWith('https://api.test/api/auth/logout', { refreshToken: 'refresh' }, expect.any(Object));
         expect(fs.existsSync(sessionFile)).toBe(false);
         expect((await ipcMain.invoke('auth:status')).authenticated).toBe(false);
+    });
+
+    test('sign out still works offline', async () => {
+        axios.post.mockResolvedValueOnce({ data: { token: 'access', refreshToken: 'refresh' } });
+        axios.post.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+        const ipcMain = setup();
+        await ipcMain.invoke('auth:signin', { email: 'a@b.co', password: 'secret123' });
+
+        expect(await ipcMain.invoke('auth:signout')).toEqual({ success: true });
+        expect(fs.existsSync(sessionFile)).toBe(false);
     });
 
     test('resend verification and password reset post the email', async () => {

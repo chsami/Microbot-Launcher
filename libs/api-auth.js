@@ -147,7 +147,15 @@ module.exports = function setupApiAuth(deps) {
     });
 
     ipcMain.handle('auth:signout', async () => {
+        const current = session;
         writeSession(null);
+        if (current) {
+            try {
+                await post('logout', { refreshToken: current.refreshToken });
+            } catch (error) {
+                log.warn(`Could not end the session on the server: ${error?.message || error}`);
+            }
+        }
         return { success: true };
     });
 
