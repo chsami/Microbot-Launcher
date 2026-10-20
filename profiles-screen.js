@@ -311,8 +311,27 @@
         close();
     };
 
+    const renderCloudCard = async () => {
+        let status = null;
+        try {
+            status = await window.electron.auth.status();
+        } catch (error) {
+            status = null;
+        }
+        const email = status?.authenticated ? status?.user?.email : '';
+        const title = $('profiles-cloud-title');
+        const text = $('profiles-cloud-text');
+        if (title) title.textContent = email ? `Signed in as ${email}` : 'Back up your profiles';
+        if (text) {
+            text.textContent = email
+                ? 'Cloud backup for profiles is coming soon.'
+                : 'Sign in to keep your profiles in the cloud and use them on any PC.';
+        }
+        $('profiles-sign-in')?.classList.toggle('auth-hidden', Boolean(email));
+    };
+
     const open = async () => {
-        await load();
+        await Promise.all([load(), renderCloudCard()]);
         state.query = '';
         state.editing = null;
         state.confirming = null;

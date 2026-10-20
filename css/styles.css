@@ -1660,7 +1660,8 @@ button.hamburger {
 }
 
 .profiles-new-form.auth-hidden,
-.profiles-empty.auth-hidden {
+.profiles-empty.auth-hidden,
+.profiles-cloud-button.auth-hidden {
     display: none;
 }
 
@@ -1697,6 +1698,29 @@ button.hamburger {
 
 .auth-error:empty {
     display: none;
+}
+
+.auth-cancel.auth-hidden,
+.auth-link.auth-hidden,
+.session-action.hidden {
+    display: none;
+}
+
+.auth-link {
+    align-self: flex-end;
+    margin-top: -4px;
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--mb-gold);
+    font-family: var(--mb-body);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.auth-link:hover {
+    text-decoration: underline;
 }
 
 .auth-card .auth-subtitle {

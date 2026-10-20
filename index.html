@@ -32,6 +32,7 @@
                 <input id="signin-email" name="email" type="email" autocomplete="username" required />
                 <label for="signin-password">Password</label>
                 <input id="signin-password" name="password" type="password" autocomplete="current-password" required />
+                <button id="auth-forgot" class="auth-link auth-hidden" type="button">Forgot password?</button>
                 <button id="signin-submit" type="submit" class="auth-submit">Sign In</button>
             </form>
             <form id="signup-form" class="auth-form auth-hidden" novalidate>
@@ -47,6 +48,8 @@
                 <button id="signup-submit" type="submit" class="auth-submit">Create Account</button>
             </form>
             <p id="auth-error" class="auth-error" role="alert" aria-live="polite"></p>
+            <button id="auth-resend" class="auth-cancel auth-hidden" type="button">Resend verification email</button>
+            <button id="auth-dismiss" class="auth-cancel auth-hidden" type="button">Not now</button>
         </div>
     </div>
 
@@ -128,7 +131,7 @@
                 </div>
                 <div class="profiles-cloud-text">
                     <h2 id="profiles-cloud-title">Back up your profiles</h2>
-                    <p>Sign in to keep your profiles in the cloud and use them on any PC.</p>
+                    <p id="profiles-cloud-text">Sign in to keep your profiles in the cloud and use them on any PC.</p>
                 </div>
                 <button id="profiles-sign-in" class="profiles-cloud-button" type="button">Sign in</button>
             </section>
@@ -199,6 +202,7 @@
             <span class="titlebar-title">Microbot Launcher - 0.0.0.0</span>
             <div id="user-session" class="user-session" aria-live="polite">
                 <span id="session-email" class="session-email"></span>
+                <button id="signin-btn" class="session-action hidden" type="button">Sign In</button>
                 <button id="change-password-btn" class="session-action" type="button">Change Password</button>
                 <button id="signout-btn" class="session-action" type="button">Sign Out</button>
             </div>

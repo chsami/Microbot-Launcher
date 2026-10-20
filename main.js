@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell, nativeImage, clipboard } = require('electron');
+const { app, BrowserWindow, dialog, shell, nativeImage, clipboard, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
@@ -52,18 +52,21 @@ async function loadLibraries() {
             mainWindow: mainWindow
         };
         try {
-            const mockAuthHandler = require(path.join(
-                __dirname,
-                'libs',
-                'mock-auth.js'
-            ));
-            if (typeof mockAuthHandler === 'function') {
-                mockAuthHandler({ ipcMain, log });
+            const useMockAuth = process.env.MOCK_AUTH === '1' || process.env.MOCK_AUTH === 'true';
+            if (useMockAuth) {
+                require(path.join(__dirname, 'libs', 'mock-auth.js'))({ ipcMain, log });
             } else {
-                log.error('mock-auth does not export a function');
+                require(path.join(__dirname, 'libs', 'api-auth.js'))({
+                    ipcMain,
+                    log,
+                    axios,
+                    fs,
+                    safeStorage,
+                    sessionFile: path.join(microbotDir, 'session.dat')
+                });
             }
         } catch (authError) {
-            log.error('Error requiring mock-auth:', authError);
+            log.error('Error setting up auth:', authError);
         }
         if (typeof handler === 'function') {
             await handler(deps);

@@ -9,7 +9,12 @@ const DEFAULT_CLIENT_RAM = '1g';
 let launcherInitialized = false;
 let authUiReady = false;
 let mockAuthEnabled = false;
+let apiAuthEnabled = false;
 let currentSessionEmail = '';
+
+function authAvailable() {
+    return mockAuthEnabled || apiAuthEnabled;
+}
 
 function $(id) {
     return document.getElementById(id);
@@ -65,9 +70,20 @@ function setActiveAuthTab(target) {
     toggleClass(signupForm, 'auth-hidden', isSignin);
     const subtitle = $('auth-subtitle');
     if (subtitle) {
-        subtitle.textContent = isSignin ? 'Sign in to continue' : 'Create your Microbot account';
+        subtitle.textContent = isSignin ? 'Sign in to your Microbot account' : 'Create your Microbot account';
     }
+    toggleClass($('auth-resend'), 'auth-hidden', true);
     setAuthError('');
+}
+
+function authModalDismissible() {
+    return !mockAuthEnabled;
+}
+
+function onAuthModalKeydown(event) {
+    if (event.key === 'Escape' && authModalDismissible()) {
+        hideAuthModal();
+    }
 }
 
 function showAuthModal() {
@@ -77,12 +93,17 @@ function showAuthModal() {
     $('signin-form')?.reset();
     $('signup-form')?.reset();
     setActiveAuthTab('signin');
+    toggleClass($('auth-forgot'), 'auth-hidden', !apiAuthEnabled);
+    toggleClass($('auth-dismiss'), 'auth-hidden', !authModalDismissible());
+    document.addEventListener('keydown', onAuthModalKeydown);
+    setTimeout(() => $('signin-email')?.focus(), 0);
 }
 
 function hideAuthModal() {
     const modal = $('auth-modal');
     if (!modal) return;
     modal.classList.add('auth-hidden');
+    document.removeEventListener('keydown', onAuthModalKeydown);
     setAuthError('');
 }
 
@@ -111,18 +132,66 @@ function updateSessionEmail(email) {
     const sessionContainer = $('user-session');
     const emailLabel = $('session-email');
     if (!sessionContainer || !emailLabel) return;
-    if (!mockAuthEnabled || !currentSessionEmail) {
-        sessionContainer.classList.add('hidden');
-        emailLabel.textContent = '';
-    } else {
-        emailLabel.textContent = currentSessionEmail;
-        sessionContainer.classList.remove('hidden');
+    const signedIn = Boolean(currentSessionEmail);
+    toggleClass(sessionContainer, 'hidden', !authAvailable() || (mockAuthEnabled && !signedIn));
+    emailLabel.textContent = currentSessionEmail;
+    toggleClass($('signin-btn'), 'hidden', signedIn);
+    toggleClass($('signout-btn'), 'hidden', !signedIn);
+    toggleClass($('change-password-btn'), 'hidden', !signedIn || !mockAuthEnabled);
+}
+
+function signinEmail() {
+    return $('signin-email')?.value?.trim() || '';
+}
+
+async function handleResendVerification() {
+    const email = signinEmail();
+    const button = $('auth-resend');
+    setButtonLoading(button, true, 'Sending...');
+    try {
+        const result = await window.electron.auth.resendVerification({ email });
+        if (result?.success) {
+            setAuthError(`We sent a new verification link to ${email}.`, 'auth-error', true);
+        } else {
+            setAuthError(result?.error || 'Could not send the verification email.');
+        }
+    } catch (error) {
+        setAuthError(error?.message || 'Could not send the verification email.');
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
+
+async function handleForgotPassword() {
+    const email = signinEmail();
+    if (!email) {
+        setAuthError('Enter your email above, then click "Forgot password?" again.');
+        $('signin-email')?.focus();
+        return;
+    }
+    const button = $('auth-forgot');
+    setButtonLoading(button, true, 'Sending...');
+    try {
+        const result = await window.electron.auth.requestPasswordReset({ email });
+        if (result?.success) {
+            setAuthError(
+                `If an account exists for ${email}, we sent a password reset link. It expires in 15 minutes.`,
+                'auth-error',
+                true
+            );
+        } else {
+            setAuthError(result?.error || 'Could not send the reset email.');
+        }
+    } catch (error) {
+        setAuthError(error?.message || 'Could not send the reset email.');
+    } finally {
+        setButtonLoading(button, false);
     }
 }
 
 async function handleSignIn(event) {
     event.preventDefault();
-    if (!mockAuthEnabled) {
+    if (!authAvailable()) {
         hideAuthModal();
         await ensureLauncherInitialized();
         return;
@@ -134,6 +203,7 @@ async function handleSignIn(event) {
         return;
     }
     setAuthError('');
+    toggleClass($('auth-resend'), 'auth-hidden', true);
     const button = $('signin-submit');
     setButtonLoading(button, true, 'Signing In...');
     try {
@@ -142,6 +212,7 @@ async function handleSignIn(event) {
             await refreshAuthStatus();
         } else {
             setAuthError(result?.error || 'Unable to sign in');
+            toggleClass($('auth-resend'), 'auth-hidden', result?.code !== 'unverified');
         }
     } catch (error) {
         setAuthError(error?.message || 'Unable to sign in');
@@ -152,7 +223,7 @@ async function handleSignIn(event) {
 
 async function handleSignUp(event) {
     event.preventDefault();
-    if (!mockAuthEnabled) {
+    if (!authAvailable()) {
         hideAuthModal();
         await ensureLauncherInitialized();
         return;
@@ -177,7 +248,20 @@ async function handleSignUp(event) {
     setButtonLoading(button, true, 'Creating Account...');
     try {
         const result = await window.electron.auth.signup({ email, password });
-        if (result?.success) {
+        if (result?.pendingVerification) {
+            setActiveAuthTab('signin');
+            $('signup-form')?.reset();
+            const signinEmailInput = $('signin-email');
+            if (signinEmailInput) signinEmailInput.value = email;
+            setAuthError(
+                result.verificationEmailSent
+                    ? `Account created. We sent a verification link to ${email}. Verify your email, then sign in here.`
+                    : `Account created, but we couldn't send the verification email. Click "Resend verification email" below.`,
+                'auth-error',
+                result.verificationEmailSent
+            );
+            toggleClass($('auth-resend'), 'auth-hidden', false);
+        } else if (result?.success) {
             await refreshAuthStatus();
         } else {
             setAuthError(result?.error || 'Unable to create account');
@@ -190,7 +274,7 @@ async function handleSignUp(event) {
 }
 
 async function handleSignOut() {
-    if (!mockAuthEnabled) return;
+    if (!authAvailable()) return;
     const button = $('signout-btn');
     setButtonLoading(button, true, 'Signing Out...');
     try {
@@ -258,6 +342,13 @@ function setupAuthUI() {
     $('change-password-btn')?.addEventListener('click', showChangePasswordModal);
     $('change-password-cancel')?.addEventListener('click', hideChangePasswordModal);
     $('change-password-form')?.addEventListener('submit', handleChangePassword);
+    $('signin-btn')?.addEventListener('click', showAuthModal);
+    $('auth-dismiss')?.addEventListener('click', hideAuthModal);
+    $('auth-resend')?.addEventListener('click', handleResendVerification);
+    $('auth-forgot')?.addEventListener('click', handleForgotPassword);
+    $('auth-modal')?.addEventListener('click', (event) => {
+        if (event.target === event.currentTarget && authModalDismissible()) hideAuthModal();
+    });
     setActiveAuthTab('signin');
 }
 
@@ -266,26 +357,22 @@ async function refreshAuthStatus() {
     try {
         status = await window.electron.auth.status();
     } catch (error) {
-        status = { authenticated: true, mock: false };
+        status = { authenticated: false, mock: false, api: false };
     }
 
     mockAuthEnabled = Boolean(status?.mock);
-    if (!mockAuthEnabled) {
-        hideAuthModal();
-        hideChangePasswordModal();
-        updateSessionEmail(status?.user?.email || '');
-        await ensureLauncherInitialized();
+    apiAuthEnabled = Boolean(status?.api);
+
+    if (mockAuthEnabled && !status?.authenticated) {
+        showAuthModal();
+        updateSessionEmail('');
         return;
     }
 
-    if (status?.authenticated) {
-        hideAuthModal();
-        updateSessionEmail(status?.user?.email || '');
-        await ensureLauncherInitialized();
-    } else {
-        showAuthModal();
-        updateSessionEmail('');
-    }
+    hideAuthModal();
+    if (!status?.authenticated) hideChangePasswordModal();
+    updateSessionEmail(status?.authenticated ? status?.user?.email || '' : '');
+    await ensureLauncherInitialized();
 }
 
 async function ensureLauncherInitialized() {

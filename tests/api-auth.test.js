@@ -1,0 +1,211 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const setupApiAuth = require('../libs/api-auth');
+
+class FakeIpcMain {
+    constructor() {
+        this.handlers = new Map();
+    }
+
+    handle(channel, handler) {
+        this.handlers.set(channel, handler);
+    }
+
+    invoke(channel, payload) {
+        return this.handlers.get(channel)(null, payload);
+    }
+}
+
+const safeStorage = {
+    isEncryptionAvailable: () => true,
+    encryptString: (value) => Buffer.from(`enc:${value}`),
+    decryptString: (buffer) => buffer.toString().replace(/^enc:/, '')
+};
+
+const log = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+
+const httpError = (status, message) =>
+    Object.assign(new Error(`HTTP ${status}`), { response: { status, data: { message } } });
+
+describe('api-auth', () => {
+    let dir;
+    let sessionFile;
+    let axios;
+
+    const setup = () => {
+        const ipcMain = new FakeIpcMain();
+        setupApiAuth({ ipcMain, log, axios, fs, safeStorage, sessionFile, baseUrl: 'https://api.test/' });
+        return ipcMain;
+    };
+
+    const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+    beforeEach(() => {
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'api-auth-'));
+        sessionFile = path.join(dir, 'session.dat');
+        axios = { post: jest.fn() };
+    });
+
+    afterEach(() => {
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('sign in stores an encrypted session and normalizes the email', async () => {
+        axios.post.mockResolvedValue({ data: { token: 'access', refreshToken: 'refresh' } });
+        const ipcMain = setup();
+
+        const result = await ipcMain.invoke('auth:signin', { email: ' Player@Example.com ', password: 'secret123' });
+
+        expect(result).toEqual({ success: true, user: { email: 'player@example.com' } });
+        expect(axios.post).toHaveBeenCalledWith(
+            'https://api.test/api/auth/login',
+            { email: 'player@example.com', password: 'secret123' },
+            expect.any(Object)
+        );
+        const stored = JSON.parse(safeStorage.decryptString(fs.readFileSync(sessionFile)));
+        expect(stored).toEqual({ email: 'player@example.com', accessToken: 'access', refreshToken: 'refresh' });
+    });
+
+    test('sign in maps wrong password, unverified email and rate limiting', async () => {
+        const ipcMain = setup();
+
+        axios.post.mockRejectedValueOnce(httpError(401, 'Wrong email or password.'));
+        expect((await ipcMain.invoke('auth:signin', { email: 'a@b.co', password: 'x' })).error).toBe('Wrong email or password.');
+
+        axios.post.mockRejectedValueOnce(httpError(403, 'Email not verified.'));
+        expect((await ipcMain.invoke('auth:signin', { email: 'a@b.co', password: 'x' })).code).toBe('unverified');
+
+        axios.post.mockRejectedValueOnce(httpError(429));
+        expect((await ipcMain.invoke('auth:signin', { email: 'a@b.co', password: 'x' })).error).toMatch(/Too many attempts/);
+
+        expect(fs.existsSync(sessionFile)).toBe(false);
+    });
+
+    test('sign in reports when the API is unreachable', async () => {
+        axios.post.mockRejectedValue(new Error('ENOTFOUND'));
+        const ipcMain = setup();
+
+        const result = await ipcMain.invoke('auth:signin', { email: 'a@b.co', password: 'secret123' });
+
+        expect(result.error).toMatch(/Can't reach Microbot servers/);
+    });
+
+    test('sign up asks the user to verify and does not sign in', async () => {
+        axios.post.mockResolvedValue({ data: {} });
+        const ipcMain = setup();
+
+        const result = await ipcMain.invoke('auth:signup', { email: 'new@example.com', password: 'secret123' });
+
+        expect(result).toEqual({
+            success: true,
+            pendingVerification: true,
+            verificationEmailSent: true,
+            user: { email: 'new@example.com' }
+        });
+        expect(fs.existsSync(sessionFile)).toBe(false);
+    });
+
+    test('sign up reports when the verification email could not be sent', async () => {
+        axios.post.mockResolvedValue({ data: { verificationEmailSent: false } });
+        const ipcMain = setup();
+
+        const result = await ipcMain.invoke('auth:signup', { email: 'new@example.com', password: 'secret123' });
+
+        expect(result.verificationEmailSent).toBe(false);
+    });
+
+    test('sign up surfaces duplicate and validation errors', async () => {
+        const ipcMain = setup();
+
+        axios.post.mockRejectedValueOnce(httpError(409, 'Email already registered.'));
+        expect((await ipcMain.invoke('auth:signup', { email: 'a@b.co', password: 'secret123' })).error).toMatch(/already exists/);
+
+        axios.post.mockRejectedValueOnce(httpError(400, 'Enter a valid email address.'));
+        expect((await ipcMain.invoke('auth:signup', { email: 'a@b', password: 'secret123' })).error).toBe('Enter a valid email address.');
+    });
+
+    test('status restores a saved session and rotates its tokens', async () => {
+        fs.writeFileSync(sessionFile, safeStorage.encryptString(JSON.stringify({ email: 'a@b.co', accessToken: 'old', refreshToken: 'old-r' })));
+        axios.post.mockResolvedValue({ data: { token: 'new', refreshToken: 'new-r' } });
+        const ipcMain = setup();
+
+        const status = await ipcMain.invoke('auth:status');
+        await flush();
+
+        expect(status).toEqual({ authenticated: true, mock: false, api: true, user: { email: 'a@b.co' } });
+        expect(axios.post).toHaveBeenCalledWith(
+            'https://api.test/api/auth/refresh-token',
+            { accessToken: 'old', refreshToken: 'old-r' },
+            expect.any(Object)
+        );
+        const stored = JSON.parse(safeStorage.decryptString(fs.readFileSync(sessionFile)));
+        expect(stored.refreshToken).toBe('new-r');
+    });
+
+    test('an expired saved session signs the user out', async () => {
+        fs.writeFileSync(sessionFile, safeStorage.encryptString(JSON.stringify({ email: 'a@b.co', accessToken: 'old', refreshToken: 'old-r' })));
+        axios.post.mockRejectedValue(httpError(400, 'Invalid or expired refresh token'));
+        const ipcMain = setup();
+
+        await ipcMain.invoke('auth:status');
+        await flush();
+
+        expect((await ipcMain.invoke('auth:status')).authenticated).toBe(false);
+        expect(fs.existsSync(sessionFile)).toBe(false);
+    });
+
+    test('a saved session survives being offline', async () => {
+        fs.writeFileSync(sessionFile, safeStorage.encryptString(JSON.stringify({ email: 'a@b.co', accessToken: 'old', refreshToken: 'old-r' })));
+        axios.post.mockRejectedValue(new Error('ECONNREFUSED'));
+        const ipcMain = setup();
+
+        await ipcMain.invoke('auth:status');
+        await flush();
+
+        expect((await ipcMain.invoke('auth:status')).authenticated).toBe(true);
+        expect(fs.existsSync(sessionFile)).toBe(true);
+    });
+
+    test('sign out removes the saved session', async () => {
+        axios.post.mockResolvedValue({ data: { token: 'access', refreshToken: 'refresh' } });
+        const ipcMain = setup();
+        await ipcMain.invoke('auth:signin', { email: 'a@b.co', password: 'secret123' });
+
+        await ipcMain.invoke('auth:signout');
+
+        expect(fs.existsSync(sessionFile)).toBe(false);
+        expect((await ipcMain.invoke('auth:status')).authenticated).toBe(false);
+    });
+
+    test('resend verification and password reset post the email', async () => {
+        axios.post.mockResolvedValue({ data: {} });
+        const ipcMain = setup();
+
+        expect(await ipcMain.invoke('auth:resend-verification', { email: 'A@b.co' })).toEqual({ success: true });
+        expect(await ipcMain.invoke('auth:request-password-reset', { email: 'A@b.co' })).toEqual({ success: true });
+        expect((await ipcMain.invoke('auth:request-password-reset', { email: '' })).error).toBe('Enter your email first.');
+
+        expect(axios.post).toHaveBeenCalledWith('https://api.test/api/auth/resend-verification', { email: 'a@b.co' }, expect.any(Object));
+        expect(axios.post).toHaveBeenCalledWith('https://api.test/api/auth/request-password-reset', { email: 'a@b.co' }, expect.any(Object));
+    });
+
+    test('nothing is written to disk when encryption is unavailable', async () => {
+        axios.post.mockResolvedValue({ data: { token: 'access', refreshToken: 'refresh' } });
+        const ipcMain = new FakeIpcMain();
+        setupApiAuth({
+            ipcMain,
+            log,
+            axios,
+            fs,
+            safeStorage: { ...safeStorage, isEncryptionAvailable: () => false },
+            sessionFile,
+            baseUrl: 'https://api.test'
+        });
+
+        await ipcMain.invoke('auth:signin', { email: 'a@b.co', password: 'secret123' });
+
+        expect(fs.existsSync(sessionFile)).toBe(false);
+        expect((await ipcMain.invoke('auth:status')).authenticated).toBe(true);
+    });
+});
