@@ -1,9 +1,21 @@
 /* styles.css */
+:root {
+    --mb-gold: #ffb13b;
+    --mb-gold-soft: #e9c98f;
+    --mb-red: #8b1010;
+    --mb-red-bright: #d4231f;
+    --mb-text: #d6cfc2;
+    --mb-muted: #9b9384;
+    --mb-line: #302817;
+    --mb-display: Cinzel, Georgia, serif;
+    --mb-body: Montserrat, Roboto, sans-serif;
+}
+
 body {
     margin: 0;
-    font-family: Arial, sans-serif;
-    background-color: #1a1d29;
-    color: white;
+    font-family: var(--mb-body);
+    background-color: #0c0a08;
+    color: var(--mb-text);
     border-radius: 20px;
 }
 
@@ -48,7 +60,7 @@ webview#website {
     justify-content: space-between;
     align-items: center;
     padding: 10px 20px;
-    background-color: #121425;
+    background-color: #100d0b;
     color: white;
 }
 
@@ -85,7 +97,8 @@ webview#website {
     display: flex;
     position: fixed;
     width: 100%;
-    background: #1a1d29;
+    background: #0c0a08;
+    border-top: 2px solid var(--mb-red-bright);
     bottom: 0;
     flex-direction: column;
     align-items: center;
@@ -96,7 +109,7 @@ webview#website {
 .auth-modal {
     position: fixed;
     inset: 0;
-    background: rgba(11, 13, 23, 0.92);
+    background: rgba(10, 8, 6, 0.92);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -109,8 +122,10 @@ webview#website {
 }
 
 .auth-card {
-    background: #1f2233;
-    border-radius: 16px;
+    background: linear-gradient(180deg, #1d1813 0%, #120f0c 100%);
+    border: 1px solid var(--mb-line);
+    border-top: 2px solid var(--mb-red-bright);
+    border-radius: 12px;
     padding: 32px;
     width: min(420px, 100%);
     box-shadow: 0 20px 45px rgba(0, 0, 0, 0.4);
@@ -122,20 +137,23 @@ webview#website {
 .auth-title {
     margin: 0;
     text-align: center;
+    font-family: var(--mb-display);
     font-size: 26px;
-    font-weight: 600;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: .04em;
 }
 
 .auth-subtitle {
     margin: 0;
     text-align: center;
-    color: #a5acc5;
+    color: #c4b9a6;
 }
 
 .auth-tabs {
     display: flex;
     gap: 8px;
-    background: #2a2d3f;
+    background: #211a14;
     padding: 6px;
     border-radius: 12px;
 }
@@ -144,7 +162,7 @@ webview#website {
     flex: 1;
     border: none;
     background: transparent;
-    color: #c6cce7;
+    color: #d6cfc2;
     padding: 10px;
     border-radius: 8px;
     cursor: pointer;
@@ -153,7 +171,7 @@ webview#website {
 }
 
 .auth-tab.active {
-    background: #3c4057;
+    background: #3a2e22;
     color: #fff;
 }
 
@@ -169,28 +187,32 @@ webview#website {
 
 .auth-form label {
     font-size: 14px;
-    color: #c6cce7;
+    color: #d6cfc2;
 }
 
 .auth-form input {
     padding: 10px 12px;
     border-radius: 8px;
-    border: 1px solid #35384d;
-    background: #121425;
+    border: 1px solid #3a2e22;
+    background: #100d0b;
     color: #fff;
 }
 
 .auth-form input:focus {
-    outline: 2px solid #5865f2;
+    outline: 2px solid var(--mb-gold);
 }
 
 .auth-submit {
-    background: linear-gradient(135deg, #5865f2, #4b53d3);
-    border: none;
+    background: linear-gradient(135deg, #d4231f, #8b1010);
+    border: 1px solid #b81e1a;
     padding: 12px;
-    border-radius: 10px;
+    border-radius: 8px;
     color: #fff;
-    font-size: 16px;
+    font-family: var(--mb-body);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
     cursor: pointer;
     transition: opacity 0.2s ease;
 }
@@ -201,14 +223,14 @@ webview#website {
 }
 
 .auth-error {
-    color: #ff8c94;
+    color: #ff7a6e;
     min-height: 20px;
     text-align: center;
     font-size: 14px;
 }
 
 .auth-error.success {
-    color: #7df7b5;
+    color: #9fd98a;
 }
 
 .proxy-info-list {
@@ -217,7 +239,7 @@ webview#website {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    color: #c6cce7;
+    color: #d6cfc2;
     font-size: 14px;
     line-height: 1.4;
 }
@@ -227,14 +249,14 @@ webview#website {
     align-items: center;
     gap: 8px;
     font-size: 14px;
-    color: #a5acc5;
+    color: #c4b9a6;
     cursor: pointer;
 }
 
 .auth-cancel {
     background: transparent;
     border: none;
-    color: #c6cce7;
+    color: #d6cfc2;
     cursor: pointer;
     align-self: center;
     font-size: 14px;
@@ -257,13 +279,13 @@ webview#website {
 
 .session-email {
     font-size: 14px;
-    color: #c6cce7;
+    color: #d6cfc2;
 }
 
 .session-action {
-    background: #2c3146;
-    border: 1px solid #3a3f58;
-    color: #e3e6ff;
+    background: #2a2119;
+    border: 1px solid #4a3a2a;
+    color: #f1ebe0;
     border-radius: 6px;
     padding: 6px 12px;
     cursor: pointer;
@@ -272,12 +294,14 @@ webview#website {
 }
 
 .session-action:hover {
-    background: #3f4563;
+    background: #3a2e22;
 }
 
 h2 {
     margin-bottom: 15px;
+    font-family: var(--mb-display);
     font-size: 20px;
+    color: #fff;
 }
 
 .recent-updates {
@@ -290,7 +314,7 @@ h2 {
 }
 
 .update {
-    background-color: #242a3b;
+    background-color: #1d1813;
     border-radius: 8px;
     overflow: hidden;
     flex: 1 1 calc(33.333% - 15px);
@@ -315,13 +339,14 @@ h2 {
 
 .update-info p {
     font-size: 12px;
-    color: #8e93a2;
+    color: #9b9384;
     margin: 0;
 }
 
 .sidebar {
     width: 400px;
-    background-color: #121425;
+    background: linear-gradient(180deg, #17120e 0%, #0c0a08 100%);
+    border-right: 1px solid var(--mb-line);
     padding: 20px;
     display: flex;
     flex-direction: column;
@@ -335,8 +360,8 @@ h2 {
 }
 
 .refresh-btn {
-    background-color: #242a3b;
-    color: greenyellow;
+    background-color: #1d1813;
+    color: #e9c98f;
     padding: 10px 20px;
     border: none;
     border-radius: 5px;
@@ -348,12 +373,16 @@ h2 {
 
 
 .play-button {
-    background-color: #00d4a4;
-    color: #2b2d2d;
-    padding: 10px 20px;
+    background: linear-gradient(135deg, #ffc35c, #e89a22);
+    color: #1a1714;
+    padding: 12px 20px;
     border: none;
-    border-radius: 5px;
-    font-size: 16px;
+    border-radius: 6px;
+    font-family: var(--mb-body);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
     cursor: pointer;
     margin-bottom: 20px;
     width: 100%;
@@ -367,12 +396,16 @@ h2 {
 }
 
 .logout-button {
-    background-color: rgba(255, 0, 0, 0.6);
-    color: white;
-    padding: 10px 20px;
-    border: none;
-    border-radius: 5px;
-    font-size: 16px;
+    background: linear-gradient(135deg, #d4231f, #8b1010);
+    color: #fff;
+    padding: 12px 20px;
+    border: 1px solid #b81e1a;
+    border-radius: 6px;
+    font-family: var(--mb-body);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
     cursor: pointer;
     margin-bottom: 20px;
     width: 100%;
@@ -380,12 +413,16 @@ h2 {
 }
 
 .add-accounts {
-    background-color: #00d4a4;
-    color: #2b2d2d;
-    padding: 10px 20px;
+    background: linear-gradient(135deg, #ffc35c, #e89a22);
+    color: #1a1714;
+    padding: 12px 20px;
     border: none;
-    border-radius: 5px;
-    font-size: 16px;
+    border-radius: 6px;
+    font-family: var(--mb-body);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
     cursor: pointer;
     margin-bottom: 20px;
     width: 100%;
@@ -417,10 +454,10 @@ h2 {
 
 /* Refresh accounts button styling */
 .refresh-accounts-btn {
-    background-color: #1f2638;
-    border: 1px solid #2f3950;
+    background-color: #1b1612;
+    border: 1px solid #3a2e22;
     border-radius: 8px;
-    color: #00d4a4;
+    color: #ffb13b;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -432,8 +469,8 @@ h2 {
 }
 
 .refresh-accounts-btn:hover:not(:disabled) {
-    background-color: #243049;
-    color: #35eac7;
+    background-color: #2a2119;
+    color: #ffd27a;
 }
 
 .refresh-accounts-btn:disabled {
@@ -442,7 +479,7 @@ h2 {
 }
 
 .refresh-accounts-btn:focus-visible {
-    outline: 2px solid #00d4a4;
+    outline: 2px solid #ffb13b;
     outline-offset: 2px;
 }
 
@@ -457,8 +494,8 @@ h2 {
 
 .accounts-dropdown-toggle {
     align-items: center;
-    background-color: #1f2638;
-    border: 1px solid #2f3950;
+    background-color: #1b1612;
+    border: 1px solid #3a2e22;
     border-radius: 8px;
     color: #ffffff;
     cursor: pointer;
@@ -472,7 +509,7 @@ h2 {
 }
 
 .accounts-dropdown-toggle:focus-visible {
-    outline: 2px solid #00d4a4;
+    outline: 2px solid #ffb13b;
     outline-offset: 2px;
 }
 
@@ -483,7 +520,7 @@ h2 {
 
 .accounts-dropdown-count {
     align-items: center;
-    background-color: #2f3950;
+    background-color: #3a2e22;
     border-radius: 12px;
     display: inline-flex;
     font-size: 12px;
@@ -503,8 +540,8 @@ h2 {
 }
 
 .accounts-dropdown-panel {
-    background-color: #1a1f2d;
-    border: 1px solid #2f3950;
+    background-color: #17130f;
+    border: 1px solid #3a2e22;
     border-radius: 10px;
     box-shadow: 0 12px 30px rgba(5, 10, 26, 0.35);
     display: none;
@@ -529,13 +566,13 @@ h2 {
 }
 
 .accounts-search-wrapper {
-    border-bottom: 1px solid #2f3950;
+    border-bottom: 1px solid #3a2e22;
     padding: 10px;
 }
 
 .accounts-search-input {
-    background-color: #151927;
-    border: 1px solid #2f3950;
+    background-color: #0f0c09;
+    border: 1px solid #3a2e22;
     border-radius: 6px;
     color: #ffffff;
     font-size: 14px;
@@ -544,7 +581,7 @@ h2 {
 }
 
 .accounts-search-input::placeholder {
-    color: #8991a9;
+    color: #9b9384;
 }
 
 .accounts-options {
@@ -569,11 +606,11 @@ h2 {
 }
 
 .account-option:hover {
-    background-color: rgba(0, 212, 164, 0.08);
+    background-color: rgba(255, 177, 59, 0.08);
 }
 
 .account-option.selected {
-    background-color: rgba(0, 212, 164, 0.12);
+    background-color: rgba(255, 177, 59, 0.12);
 }
 
 .account-option.selected .account-option-name {
@@ -596,7 +633,7 @@ h2 {
 }
 
 .account-option-name:focus-visible {
-    outline: 2px solid #00d4a4;
+    outline: 2px solid #ffb13b;
     outline-offset: 2px;
 }
 
@@ -604,7 +641,7 @@ h2 {
     align-items: center;
     background: none;
     border: none;
-    color: #ff5c5c;
+    color: #ff4d3d;
     cursor: pointer;
     display: inline-flex;
     font-size: 16px;
@@ -616,16 +653,16 @@ h2 {
 }
 
 .account-option-delete:hover {
-    color: #ff8a8a;
+    color: #ff7a6e;
 }
 
 .account-option-delete:focus-visible {
-    outline: 2px solid #ff5c5c;
+    outline: 2px solid #ff4d3d;
     outline-offset: 2px;
 }
 
 .accounts-options-empty {
-    color: #8991a9;
+    color: #9b9384;
     font-size: 13px;
     padding: 12px 8px;
     text-align: center;
@@ -665,7 +702,7 @@ h2 {
     border-radius: 5px;
     border: none;
     margin-bottom: 10px;
-    background-color: #242a3b;
+    background-color: #1d1813;
     color: #ffffff;
 }
 
@@ -675,7 +712,7 @@ h2 {
     border-radius: 5px;
     border: none;
     margin-bottom: 10px;
-    background-color: #242a3b;
+    background-color: #1d1813;
     color: #ffffff;
 }
 
@@ -715,7 +752,7 @@ h2 {
 }
 
 .proxy-list::-webkit-scrollbar-thumb {
-    background-color: #2f3950;
+    background-color: #3a2e22;
     border-radius: 4px;
 }
 
@@ -726,10 +763,10 @@ h2 {
 .proxy-list-empty {
     margin: 0;
     padding: 16px;
-    border: 1px dashed #35384d;
+    border: 1px dashed #3a2e22;
     border-radius: 10px;
     text-align: center;
-    color: #a5acc5;
+    color: #c4b9a6;
     font-size: 14px;
 }
 
@@ -738,13 +775,13 @@ h2 {
     align-items: center;
     gap: 8px;
     padding: 8px 10px;
-    border: 1px solid #2f3950;
+    border: 1px solid #3a2e22;
     border-radius: 10px;
     background: #171a2b;
 }
 
 .proxy-row.in-use {
-    border-color: #00d4a4;
+    border-color: #ffb13b;
 }
 
 .proxy-row-details {
@@ -766,17 +803,17 @@ h2 {
 }
 
 .proxy-row-name:hover {
-    border-color: #35384d;
+    border-color: #3a2e22;
 }
 
 .proxy-row-name:focus {
     outline: none;
-    border-color: #5865f2;
-    background: #121425;
+    border-color: #c2231f;
+    background: #100d0b;
 }
 
 .proxy-row-name::placeholder {
-    color: #8991a9;
+    color: #9b9384;
     font-weight: 400;
     font-style: italic;
 }
@@ -784,7 +821,7 @@ h2 {
 .proxy-row-location {
     padding: 0 7px;
     font-size: 12px;
-    color: #a5acc5;
+    color: #c4b9a6;
     font-family: monospace;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -792,21 +829,21 @@ h2 {
 }
 
 .proxy-row-location.invalid {
-    color: #ff8c94;
+    color: #ff7a6e;
 }
 
 .proxy-row-use {
-    background: #242a3b;
-    border: 1px solid #2f3950;
+    background: #1d1813;
+    border: 1px solid #3a2e22;
     border-radius: 8px;
-    color: #00d4a4;
+    color: #ffb13b;
     cursor: pointer;
     font-size: 13px;
     padding: 6px 12px;
 }
 
 .proxy-row-use:hover:not(:disabled) {
-    background: #243049;
+    background: #2a2119;
 }
 
 .proxy-row-use:disabled {
@@ -819,7 +856,7 @@ h2 {
     background: transparent;
     border: none;
     border-radius: 8px;
-    color: #a5acc5;
+    color: #c4b9a6;
     cursor: pointer;
     font-size: 14px;
     padding: 6px 8px;
@@ -827,14 +864,14 @@ h2 {
 
 .proxy-row-remove:hover {
     background: rgba(255, 0, 0, 0.2);
-    color: #ff8c94;
+    color: #ff7a6e;
 }
 
 .proxy-add-input {
     padding: 10px 12px;
     border-radius: 8px;
-    border: 1px solid #35384d;
-    background: #121425;
+    border: 1px solid #3a2e22;
+    background: #100d0b;
     color: #fff;
     font-family: monospace;
     font-size: 13px;
@@ -842,18 +879,18 @@ h2 {
 }
 
 .proxy-add-input:focus {
-    outline: 2px solid #5865f2;
+    outline: 2px solid #c2231f;
 }
 
 .proxy-add-hint {
     margin: 0;
     font-size: 12px;
-    color: #a5acc5;
+    color: #c4b9a6;
     line-height: 1.4;
 }
 
 .proxy-add-hint code {
-    background: #2a2d3f;
+    background: #211a14;
     border-radius: 4px;
     padding: 1px 4px;
     white-space: nowrap;
@@ -866,7 +903,7 @@ h2 {
 }
 
 .links a {
-    color: #00d4a4;
+    color: #ffb13b;
     text-decoration: none;
     display: block;
     margin-bottom: 10px;
@@ -875,7 +912,7 @@ h2 {
 
 #loader {
     width: 100%;
-    background-color: #f3f3f3;
+    background-color: #2a2119;
     border-radius: 4px;
     margin-top: 20px;
     overflow: hidden;
@@ -885,7 +922,7 @@ h2 {
 #progress-bar {
     width: 0;
     height: 30px;
-    background-color: #4caf50;
+    background-color: #ffb13b;
     border-radius: 4px;
     text-align: center;
     line-height: 30px;
@@ -931,7 +968,7 @@ h2 {
     align-items: center;
     justify-content: center;
     position: fixed;
-    background: #242a3b;
+    background: #1d1813;
     z-index: 125;
     width: 40%;
     margin: 1rem;
@@ -958,7 +995,7 @@ h2 {
 }
 
 #remind-me-later-btn {
-    background-color: #1a1d29;
+    background-color: #0c0a08;
     border: 1px solid white;
     color: white;
     padding: 10px 20px;
@@ -975,8 +1012,8 @@ h2 {
 }
 
 #update-now-btn {
-    background-color: #00d4a4;
-    color: #2b2d2d;
+    background-color: #ffb13b;
+    color: #1a1714;
     padding: 10px 20px;
     border: none;
     border-radius: 5px;
@@ -1037,9 +1074,10 @@ h2 {
 
 /* titlebar layout: [hamburger button] [centered title that expands] [window controls] */
 .titlebar {
-    height: 30px;
-    background: #242a3b;
-    color: white;
+    height: 32px;
+    background: linear-gradient(90deg, #0c0a08 0%, #1d1813 50%, #0c0a08 100%);
+    border-bottom: 1px solid var(--mb-line);
+    color: var(--mb-text);
     display: grid;
     grid-template-columns: auto 1fr auto auto;
     align-items: center;
@@ -1063,13 +1101,26 @@ h2 {
 /* center title */
 .titlebar .titlebar-title {
     grid-column: 2;
-    font-size: 14px;
+    font-family: var(--mb-display);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .14em;
+    color: var(--mb-gold-soft);
+    gap: 8px;
     display: flex;
     justify-content: center;
     align-items: center;
     overflow: hidden;
     padding: 0 8px;
     user-select: none;
+}
+
+.titlebar .titlebar-title::before {
+    content: '';
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    background: url('../images/microbot_transparent.png') center / contain no-repeat;
 }
 
 /* right window control buttons */
@@ -1109,7 +1160,7 @@ h2 {
 .titlebar button.hamburger:focus-visible,
 .app-menu .menu-item:focus-visible,
 .app-menu .submenu-item:focus-visible {
-    outline: 2px solid #00d4a4;
+    outline: 2px solid #ffb13b;
     outline-offset: -2px;
     background: rgba(255, 255, 255, 0.08);
 }
@@ -1129,7 +1180,7 @@ button.hamburger {
     position: absolute;
     top: 30px;
     left: 0;
-    background: #121425;
+    background: #100d0b;
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     border-radius: 6px;
@@ -1186,7 +1237,7 @@ button.hamburger {
     position: absolute;
     top: 0;
     left: 100%;
-    background: #121425;
+    background: #100d0b;
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     border-radius: 6px;
