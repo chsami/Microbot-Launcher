@@ -167,6 +167,11 @@ async function handleSignUp(event) {
         setAuthError('Password must be at least 8 characters.');
         return;
     }
+    const confirmPassword = $('signup-confirm-password')?.value || '';
+    if (password !== confirmPassword) {
+        setAuthError('Passwords do not match.');
+        return;
+    }
     setAuthError('');
     const button = $('signup-submit');
     setButtonLoading(button, true, 'Creating Account...');
