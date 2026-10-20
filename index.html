@@ -104,6 +104,58 @@
             <button id="proxy-manager-close" class="auth-cancel" type="button">Done</button>
         </div>
     </div>
+    <div id="profiles-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
+        aria-labelledby="profiles-title" aria-describedby="profiles-summary">
+        <div class="auth-card profiles-card">
+            <header class="profiles-header">
+                <div>
+                    <h1 id="profiles-title" class="auth-title">Profiles</h1>
+                    <p id="profiles-summary" class="profiles-summary"></p>
+                </div>
+                <button id="profiles-new" class="profiles-new-button" type="button">New profile</button>
+            </header>
+
+            <section class="profiles-cloud" aria-labelledby="profiles-cloud-title">
+                <div class="profiles-cloud-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M7 18a4.5 4.5 0 0 1-.9-8.9A6 6 0 0 1 17.7 8 4.5 4.5 0 0 1 17 18H7z"></path>
+                    </svg>
+                </div>
+                <div class="profiles-cloud-text">
+                    <h2 id="profiles-cloud-title">Back up your profiles</h2>
+                    <p>Sign in to keep your profiles in the cloud and use them on any PC.</p>
+                </div>
+                <button id="profiles-sign-in" class="profiles-cloud-button" type="button">Sign in</button>
+            </section>
+
+            <p id="profiles-preview-note" class="profiles-note">
+                Preview: changes on this screen are not saved yet.
+            </p>
+
+            <div class="profiles-search">
+                <input id="profiles-search" type="search" placeholder="Search profiles" autocomplete="off"
+                    aria-label="Search profiles">
+            </div>
+
+            <form id="profiles-new-form" class="profiles-new-form auth-hidden" novalidate>
+                <label for="profiles-new-input">Profile name</label>
+                <div class="profiles-inline-row">
+                    <input id="profiles-new-input" type="text" maxlength="32" autocomplete="off" spellcheck="false"
+                        placeholder="For example: Ironman" />
+                    <button type="submit" class="profiles-inline-primary">Create</button>
+                    <button type="button" id="profiles-new-cancel" class="profiles-inline-secondary">Cancel</button>
+                </div>
+            </form>
+
+            <ul id="profiles-list" class="profiles-list" aria-label="Profiles"></ul>
+            <p id="profiles-empty" class="profiles-empty auth-hidden">
+                No profiles match your search.
+            </p>
+            <p id="profiles-error" class="auth-error" role="alert" aria-live="polite"></p>
+            <button id="profiles-close" class="auth-cancel" type="button">Done</button>
+        </div>
+    </div>
     <div id="loader-container">
         <h1>Download and Unpack Progress</h1>
         <div id="loader">
@@ -227,9 +279,19 @@
                     <select id="character" class="account-select-hidden" aria-hidden="true" tabindex="-1"></select>
 
                     <label for="profile">Profile</label>
-                    <select id="profile">
-                        <option value="default">Default</option>
-                    </select>
+                    <div class="profile-select-row">
+                        <select id="profile">
+                            <option value="default">Default</option>
+                        </select>
+                        <button id="manage-profiles" class="refresh-accounts-btn" type="button"
+                            title="Create, rename, duplicate and back up your profiles" aria-label="Manage profiles">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 3l9 5-9 5-9-5 9-5z"></path>
+                                <path d="M3 13l9 5 9-5"></path>
+                            </svg>
+                        </button>
+                    </div>
                     <label for="client-ram">Client RAM</label>
                     <select id="client-ram">
                         <option value="256m">256 MB</option>
@@ -275,6 +337,7 @@
         script.src = `renderer.js?cache-bust=${Date.now()}`;
         document.head.appendChild(script);
     </script>
+    <script src="profiles-screen.js"></script>
 
 
 </body>
