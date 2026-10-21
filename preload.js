@@ -86,6 +86,11 @@ contextBridge.exposeInMainWorld('electron', {
             ipcRenderer.invoke('auth:request-password-reset', payload),
         status: () => ipcRenderer.invoke('auth:status')
     },
+    alerts: {
+        status: (profiles) => ipcRenderer.invoke('alerts:status', profiles),
+        setEnabled: (profile, enabled) =>
+            ipcRenderer.invoke('alerts:set-enabled', profile, enabled)
+    },
     ipcRenderer: {
         send: (channel, data) => ipcRenderer.send(channel, data),
         receive: (channel, func) =>

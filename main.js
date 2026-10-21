@@ -51,12 +51,13 @@ async function loadLibraries() {
             app: app,
             mainWindow: mainWindow
         };
+        let apiAuth = null;
         try {
             const useMockAuth = process.env.MOCK_AUTH === '1' || process.env.MOCK_AUTH === 'true';
             if (useMockAuth) {
                 require(path.join(__dirname, 'libs', 'mock-auth.js'))({ ipcMain, log });
             } else {
-                require(path.join(__dirname, 'libs', 'api-auth.js'))({
+                apiAuth = require(path.join(__dirname, 'libs', 'api-auth.js'))({
                     ipcMain,
                     log,
                     axios,
@@ -78,6 +79,19 @@ async function loadLibraries() {
             }
         } catch (authError) {
             log.error('Error setting up auth:', authError);
+        }
+        try {
+            deps.alerts = require(path.join(__dirname, 'libs', 'client-alerts.js'))({
+                ipcMain,
+                log,
+                fs,
+                safeStorage,
+                auth: apiAuth,
+                linksFile: path.join(microbotDir, 'alert-links.dat'),
+                settingsFile: path.join(microbotDir, 'alert-profiles.json')
+            });
+        } catch (alertsError) {
+            log.error('Error setting up bot alerts:', alertsError);
         }
         if (typeof handler === 'function') {
             await handler(deps);
