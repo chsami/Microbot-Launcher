@@ -24,6 +24,7 @@
             </button>
             <h1 class="auth-title">Microbot Launcher</h1>
             <p id="auth-subtitle" class="auth-subtitle">Sign in to continue</p>
+            <button id="auth-account-info" class="auth-link auth-link-center" type="button">What is a Microbot account?</button>
             <div class="auth-tabs" role="tablist">
                 <button id="auth-tab-signin" class="auth-tab active" data-target="signin" role="tab"
                     aria-selected="true">
@@ -58,6 +59,32 @@
         </div>
     </div>
 
+    <div id="account-info-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
+        aria-labelledby="account-info-title">
+        <div class="auth-card account-info-card">
+            <button id="account-info-close" class="auth-close" type="button" aria-label="Close">
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18M6 6l12 12"></path>
+                </svg>
+            </button>
+            <h1 id="account-info-title" class="auth-title">Microbot account</h1>
+            <p class="auth-subtitle">Your account for Microbot itself: this launcher and the Microbot dashboard.</p>
+            <dl class="account-info-list">
+                <dt>Is it my RuneScape or Jagex account?</dt>
+                <dd>No. It's a separate account with its own email and password, so don't reuse your Jagex password.
+                    Signing in doesn't share your game accounts with Microbot.</dd>
+                <dt>What do I get?</dt>
+                <dd>One sign-in for the launcher and the dashboard at dashboard.microbot.cloud. Coming soon: back up your
+                    profiles and use them on another PC.</dd>
+                <dt>Do I need one?</dt>
+                <dd>No. The launcher and the client work without an account. Signing in is optional.</dd>
+                <dt>What do you store?</dt>
+                <dd>Your email address and your password in hashed form. Nothing else is needed.</dd>
+            </dl>
+            <button id="account-info-create" class="auth-submit" type="button">Create a free account</button>
+        </div>
+    </div>
     <div id="change-password-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
         aria-labelledby="change-password-title">
         <div class="auth-card">
@@ -259,7 +286,17 @@
                 <section id="user-session" class="account-card hidden" aria-live="polite">
                     <div id="account-avatar" class="account-avatar" aria-hidden="true"></div>
                     <div class="account-text">
-                        <span id="session-email" class="account-name"></span>
+                        <span class="account-name-row">
+                            <span id="session-email" class="account-name"></span>
+                            <button id="account-info-btn" class="account-info-button" type="button"
+                                title="What is a Microbot account?" aria-label="What is a Microbot account?">
+                                <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <path d="M12 16v-4M12 8h.01"></path>
+                                </svg>
+                            </button>
+                        </span>
                         <span id="session-hint" class="account-hint"></span>
                     </div>
                     <div class="account-actions">

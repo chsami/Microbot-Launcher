@@ -107,6 +107,33 @@ function hideAuthModal() {
     setAuthError('');
 }
 
+function onAccountInfoKeydown(event) {
+    if (event.key !== 'Escape') return;
+    event.stopImmediatePropagation();
+    hideAccountInfo();
+}
+
+function showAccountInfo() {
+    const modal = $('account-info-modal');
+    if (!modal) return;
+    toggleClass($('account-info-create'), 'auth-hidden', Boolean(currentSessionEmail) || !authAvailable());
+    modal.classList.remove('auth-hidden');
+    window.addEventListener('keydown', onAccountInfoKeydown, true);
+    setTimeout(() => $('account-info-close')?.focus(), 0);
+}
+
+function hideAccountInfo() {
+    $('account-info-modal')?.classList.add('auth-hidden');
+    window.removeEventListener('keydown', onAccountInfoKeydown, true);
+}
+
+function showCreateAccountFromInfo() {
+    hideAccountInfo();
+    if ($('auth-modal')?.classList.contains('auth-hidden')) showAuthModal();
+    setActiveAuthTab('signup');
+    setTimeout(() => $('signup-email')?.focus(), 0);
+}
+
 function showChangePasswordModal() {
     if (!mockAuthEnabled) return;
     const modal = $('change-password-modal');
@@ -356,6 +383,13 @@ function setupAuthUI() {
     $('change-password-form')?.addEventListener('submit', handleChangePassword);
     $('signin-btn')?.addEventListener('click', showAuthModal);
     $('auth-dismiss')?.addEventListener('click', hideAuthModal);
+    $('account-info-btn')?.addEventListener('click', showAccountInfo);
+    $('auth-account-info')?.addEventListener('click', showAccountInfo);
+    $('account-info-close')?.addEventListener('click', hideAccountInfo);
+    $('account-info-create')?.addEventListener('click', showCreateAccountFromInfo);
+    $('account-info-modal')?.addEventListener('click', (event) => {
+        if (event.target === event.currentTarget) hideAccountInfo();
+    });
     $('auth-resend')?.addEventListener('click', handleResendVerification);
     $('auth-forgot')?.addEventListener('click', handleForgotPassword);
     $('auth-modal')?.addEventListener('click', (event) => {

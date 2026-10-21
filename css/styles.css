@@ -310,12 +310,74 @@ webview#website {
 }
 
 .account-name {
+    min-width: 0;
     font-size: 14px;
     font-weight: 600;
     color: #f1ebe0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.account-name-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.account-info-button {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    color: var(--mb-muted);
+    cursor: pointer;
+}
+
+.account-info-button:hover,
+.account-info-button:focus-visible {
+    color: var(--mb-gold);
+    background: rgba(255, 177, 59, 0.1);
+}
+
+.auth-link.auth-link-center {
+    align-self: center;
+    margin-top: -8px;
+}
+
+.account-info-card {
+    width: min(460px, 100%);
+}
+
+.account-info-list {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.account-info-list dt {
+    margin-top: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--mb-gold-soft);
+}
+
+.account-info-list dd {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--mb-text);
+}
+
+.auth-submit.auth-hidden {
+    display: none;
 }
 
 .account-hint {
