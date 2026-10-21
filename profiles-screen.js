@@ -11,7 +11,7 @@
         query: '',
         editing: null,
         confirming: null,
-        alerts: { available: false, enabled: {} },
+        alerts: { available: false, enabled: {}, labels: {} },
     };
 
     const $ = (id) => document.getElementById(id);
@@ -160,6 +160,18 @@
         return toggle;
     };
 
+    const alertsLabel = (name) => {
+        const label = state.alerts.labels[name];
+        return typeof label === 'string' && label ? label : name;
+    };
+
+    const buildAlertsHint = (name) => {
+        const hint = document.createElement('p');
+        hint.className = 'profile-alerts-hint';
+        hint.textContent = `Shows up as "${alertsLabel(name)}" in alerts. Rename it on the dashboard.`;
+        return hint;
+    };
+
     const buildEditRow = (name) => {
         const row = document.createElement('li');
         row.className = 'profile-row is-editing';
@@ -231,6 +243,10 @@
         }
 
         row.append(main, actions);
+        if (alertsOn(name) && saved) {
+            row.classList.add('has-alerts-hint');
+            row.appendChild(buildAlertsHint(name));
+        }
         return row;
     };
 
@@ -269,6 +285,7 @@
         state.alerts = {
             available: Boolean(status?.available),
             enabled: status?.enabled && typeof status.enabled === 'object' ? status.enabled : {},
+            labels: status?.labels && typeof status.labels === 'object' ? status.labels : {},
         };
     };
 
@@ -281,6 +298,7 @@
             result = { error: 'Could not save the alert setting.' };
         }
         if (typeof result?.enabled === 'boolean') state.alerts.enabled[name] = result.enabled;
+        if (typeof result?.label === 'string') state.alerts.labels[name] = result.label;
         setError(result?.error || '');
         render();
         document.querySelector(`.profile-alerts-toggle[data-name="${CSS.escape(name)}"]`)?.focus();

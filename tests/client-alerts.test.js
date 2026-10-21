@@ -31,7 +31,7 @@ const SECOND_ID = '22222222-2222-2222-2222-222222222222';
 
 const httpError = (status) => Object.assign(new Error(`HTTP ${status}`), { response: { status } });
 
-const linkRow = (id) => ({ id, label: 'Main', createdAt: '2026-10-21T10:00:00Z', lastSeenAt: null, online: false, runningScripts: [] });
+const linkRow = (id, label = 'Main') => ({ id, label, createdAt: '2026-10-21T10:00:00Z', lastSeenAt: null, online: false, runningScripts: [] });
 
 describe('client-alerts', () => {
     let dir;
@@ -42,6 +42,7 @@ describe('client-alerts', () => {
     let email;
     let serverLinks;
     let created;
+    let serverLabels;
 
     const setup = (overrides = {}) => {
         const ipcMain = new FakeIpcMain();
@@ -56,11 +57,16 @@ describe('client-alerts', () => {
         log = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
         email = 'player@example.com';
         serverLinks = [];
+        serverLabels = {};
         created = [{ id: FIRST_ID, token: FIRST_TOKEN }, { id: SECOND_ID, token: SECOND_TOKEN }];
         auth = {
             email: () => email,
             request: jest.fn(async (config) => {
-                if (config.method === 'get') return { data: serverLinks.map(linkRow) };
+                if (config.method === 'get') return { data: serverLinks.map((id) => linkRow(id, serverLabels[id])) };
+                if (config.method === 'delete') {
+                    serverLinks = serverLinks.filter((id) => config.path !== `/api/alerts/client-links/${id}`);
+                    return { status: 204 };
+                }
                 const next = created.shift();
                 serverLinks.push(next.id);
                 return { data: { id: next.id, label: config.data.label, token: next.token, createdAt: '2026-10-21T10:00:00Z' } };
@@ -73,6 +79,8 @@ describe('client-alerts', () => {
     });
 
     const posts = () => auth.request.mock.calls.filter(([config]) => config.method === 'post');
+    const deletes = () => auth.request.mock.calls.filter(([config]) => config.method === 'delete').map(([config]) => config.path);
+    const stored = () => JSON.parse(safeStorage.decryptString(fs.readFileSync(linksFile)));
 
     test('creates a link once per profile and reuses it on later launches', async () => {
         const { alerts } = setup();
@@ -229,7 +237,8 @@ describe('client-alerts', () => {
         expect(await ipcMain.invoke('alerts:status', ['default'])).toEqual({
             signedIn: false,
             available: false,
-            enabled: { default: true }
+            enabled: { default: true },
+            labels: { default: 'default' }
         });
     });
 
@@ -255,19 +264,103 @@ describe('client-alerts', () => {
         expect(await ipcMain.invoke('alerts:status', ['default', 'Main'])).toEqual({
             signedIn: true,
             available: true,
-            enabled: { default: true, Main: true }
+            enabled: { default: true, Main: true },
+            labels: { default: 'default', Main: 'Main' }
         });
 
-        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', false)).toEqual({ enabled: false });
+        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', false)).toEqual({ enabled: false, label: 'Main' });
         expect(await alerts.tokenForProfile('Main')).toBeNull();
         expect(auth.request).not.toHaveBeenCalled();
         expect((await ipcMain.invoke('alerts:status', ['default', 'Main'])).enabled).toEqual({ default: true, Main: false });
 
-        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', true)).toEqual({ enabled: true });
+        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', true)).toEqual({ enabled: true, label: 'Main' });
         expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
     });
 
-    test('the renderer only gets booleans', async () => {
+    test('switching alerts off revokes the link and drops the token', async () => {
+        const { alerts, ipcMain } = setup();
+        await alerts.tokenForProfile('Main');
+        await alerts.tokenForProfile('Ironman');
+
+        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', false)).toEqual({ enabled: false, label: 'Main' });
+
+        expect(deletes()).toEqual([`/api/alerts/client-links/${FIRST_ID}`]);
+        expect(serverLinks).toEqual([SECOND_ID]);
+        expect(stored().profiles).toEqual({ Ironman: { id: SECOND_ID, token: SECOND_TOKEN, label: 'Ironman' } });
+        expect(stored().revoke).toEqual([]);
+        expect(await alerts.tokenForProfile('Main')).toBeNull();
+        const logged = JSON.stringify([log.info.mock.calls, log.warn.mock.calls, log.error.mock.calls]);
+        expect(logged).not.toContain(FIRST_TOKEN);
+    });
+
+    test('a failed revoke still drops the token and is retried later', async () => {
+        const { alerts, ipcMain } = setup();
+        await alerts.tokenForProfile('Main');
+        const online = auth.request.getMockImplementation();
+        auth.request.mockImplementation(async (config) => {
+            if (config.method === 'delete') throw new Error('ECONNREFUSED');
+            return online(config);
+        });
+
+        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', false)).toEqual({ enabled: false, label: 'Main' });
+
+        expect(deletes()).toHaveLength(1);
+        expect(stored().profiles).toEqual({});
+        expect(stored().revoke).toEqual([FIRST_ID]);
+        expect(await alerts.tokenForProfile('Main')).toBeNull();
+
+        auth.request.mockImplementation(online);
+        await alerts.tokenForProfile('Ironman');
+        await alerts.retryRevokes();
+
+        expect(deletes()).toEqual([`/api/alerts/client-links/${FIRST_ID}`, `/api/alerts/client-links/${FIRST_ID}`]);
+        expect(serverLinks).toEqual([SECOND_ID]);
+        expect(stored().revoke).toEqual([]);
+        expect(stored().profiles.Ironman.token).toBe(SECOND_TOKEN);
+    });
+
+    test('a link already gone on the server is not retried', async () => {
+        const { alerts, ipcMain } = setup();
+        await alerts.tokenForProfile('Main');
+        const online = auth.request.getMockImplementation();
+        auth.request.mockImplementation(async (config) => {
+            if (config.method === 'delete') throw httpError(404);
+            return online(config);
+        });
+
+        await ipcMain.invoke('alerts:set-enabled', 'Main', false);
+        await alerts.retryRevokes();
+
+        expect(deletes()).toHaveLength(1);
+        expect(stored().revoke).toEqual([]);
+    });
+
+    test('switching alerts on again creates a new link at the next launch', async () => {
+        const { alerts, ipcMain } = setup();
+        await alerts.tokenForProfile('Main');
+        await ipcMain.invoke('alerts:set-enabled', 'Main', false);
+
+        await ipcMain.invoke('alerts:set-enabled', 'Main', true);
+        expect(posts()).toHaveLength(1);
+
+        expect(await alerts.tokenForProfile('Main')).toBe(SECOND_TOKEN);
+        expect(posts()).toHaveLength(2);
+        expect(posts()[1][0]).toMatchObject({ path: '/api/alerts/client-links', data: { label: 'Main' } });
+        expect(stored().profiles.Main).toEqual({ id: SECOND_ID, token: SECOND_TOKEN, label: 'Main' });
+    });
+
+    test('status returns the dashboard name of each linked profile', async () => {
+        const { alerts, ipcMain } = setup();
+        await alerts.tokenForProfile('Main');
+        serverLabels[FIRST_ID] = 'Main PC';
+
+        expect((await ipcMain.invoke('alerts:status', ['default', 'Main'])).labels).toEqual({ default: 'default', Main: 'Main PC' });
+
+        auth.request.mockRejectedValue(new Error('ECONNREFUSED'));
+        expect((await ipcMain.invoke('alerts:status', ['default', 'Main'])).labels).toEqual({ default: 'default', Main: 'Main PC' });
+    });
+
+    test('the renderer never gets the token or the link id', async () => {
         const { alerts, ipcMain } = setup();
         await alerts.tokenForProfile('Main');
 

@@ -1659,6 +1659,24 @@ button.hamburger {
     display: block;
 }
 
+.profile-row.has-alerts-hint {
+    flex-wrap: wrap;
+    row-gap: 6px;
+}
+
+.profile-row.has-alerts-hint .profile-main {
+    flex: 1 1 0;
+}
+
+.profile-alerts-hint {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: 12px;
+    color: var(--mb-muted);
+    text-align: right;
+    overflow-wrap: anywhere;
+}
+
 .profile-main {
     min-width: 0;
     display: flex;
