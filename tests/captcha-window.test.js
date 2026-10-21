@@ -16,6 +16,11 @@ class FakeWebContents {
     setWindowOpenHandler(handler) {
         this.openHandler = handler;
     }
+
+    executeJavaScript(code) {
+        this.executed = code;
+        return Promise.resolve();
+    }
 }
 
 class FakeBrowserWindow {
@@ -31,8 +36,9 @@ class FakeBrowserWindow {
         this.listeners[event] = listener;
     }
 
-    loadURL(url) {
+    loadURL(url, options) {
         this.url = url;
+        this.loadOptions = options;
         return FakeBrowserWindow.loadResult;
     }
 
@@ -50,11 +56,21 @@ describe('captcha-window', () => {
     const log = { warn: jest.fn() };
     let shell;
     let open;
+    let browserCheck;
+    let openInBrowser;
 
     beforeEach(() => {
+        log.warn.mockClear();
         FakeBrowserWindow.loadResult = Promise.resolve();
         shell = { openExternal: jest.fn() };
-        open = createCaptchaWindow({ BrowserWindow: FakeBrowserWindow, shell, getParent: () => null, log });
+        browserCheck = null;
+        openInBrowser = jest.fn(() => {
+            let resolve;
+            browserCheck = { promise: new Promise((r) => { resolve = r; }), cancel: jest.fn(() => resolve(null)) };
+            browserCheck.resolve = resolve;
+            return browserCheck;
+        });
+        open = createCaptchaWindow({ BrowserWindow: FakeBrowserWindow, shell, getParent: () => null, log, openInBrowser });
     });
 
     test('resolves with the token the page reports and closes', async () => {
@@ -67,6 +83,44 @@ describe('captcha-window', () => {
         expect(win.url).toBe('https://microbot.cloud/api/captcha');
         expect(win.isDestroyed()).toBe(true);
         expect(win.options.webPreferences).toMatchObject({ sandbox: true, contextIsolation: true, nodeIntegration: false });
+    });
+
+    test('logs Turnstile errors from the page', () => {
+        open('https://microbot.cloud/api/captcha');
+        const contents = FakeBrowserWindow.last.webContents;
+
+        contents.emit('console-message', {}, 2, '[Cloudflare Turnstile] Error: 600010.');
+        contents.emit('console-message', {}, 1, 'unrelated noise');
+
+        expect(log.warn).toHaveBeenCalledTimes(1);
+        expect(log.warn).toHaveBeenCalledWith('Captcha page: [Cloudflare Turnstile] Error: 600010.');
+    });
+
+    test('continues in the browser when Cloudflare fails the check in the launcher', async () => {
+        const pending = open('https://microbot.cloud/api/captcha');
+        const win = FakeBrowserWindow.last;
+
+        win.webContents.emit('did-navigate-in-page', {}, 'https://microbot.cloud/api/captcha#error=600010');
+
+        expect(openInBrowser).toHaveBeenCalledWith('https://microbot.cloud/api/captcha');
+        expect(win.isDestroyed()).toBe(false);
+        expect(win.webContents.executed).toContain('Finish the check in the browser');
+
+        browserCheck.resolve('browser-token');
+
+        await expect(pending).resolves.toBe('browser-token');
+        expect(win.isDestroyed()).toBe(true);
+    });
+
+    test('closing the window cancels the browser check', async () => {
+        const pending = open('https://microbot.cloud/api/captcha');
+        const win = FakeBrowserWindow.last;
+        win.webContents.emit('did-navigate-in-page', {}, 'https://microbot.cloud/api/captcha#error=600010');
+
+        win.close();
+
+        await expect(pending).resolves.toBeNull();
+        expect(browserCheck.cancel).toHaveBeenCalled();
     });
 
     test('resolves with null when the user closes the window', async () => {

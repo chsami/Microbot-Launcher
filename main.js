@@ -67,7 +67,12 @@ async function loadLibraries() {
                         BrowserWindow,
                         shell,
                         getParent: () => mainWindow,
-                        log
+                        log,
+                        openInBrowser: require(path.join(__dirname, 'libs', 'captcha-browser.js'))({
+                            http: require('http'),
+                            shell,
+                            log
+                        })
                     })
                 });
             }
