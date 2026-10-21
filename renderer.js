@@ -470,14 +470,8 @@ function setupAuthUI() {
     $('auth-account-info')?.addEventListener('click', showAccountInfo);
     $('account-info-close')?.addEventListener('click', hideAccountInfo);
     $('account-info-create')?.addEventListener('click', showCreateAccountFromInfo);
-    $('account-info-modal')?.addEventListener('click', (event) => {
-        if (event.target === event.currentTarget) hideAccountInfo();
-    });
     $('auth-resend')?.addEventListener('click', handleResendVerification);
     $('auth-forgot')?.addEventListener('click', handleForgotPassword);
-    $('auth-modal')?.addEventListener('click', (event) => {
-        if (event.target === event.currentTarget && authModalDismissible()) hideAuthModal();
-    });
     setActiveAuthTab('signin');
 }
 
