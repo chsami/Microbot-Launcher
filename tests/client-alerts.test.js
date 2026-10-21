@@ -138,6 +138,58 @@ describe('client-alerts', () => {
         expect(JSON.parse(safeStorage.decryptString(fs.readFileSync(linksFile))).profiles).toEqual({});
     });
 
+    test('replacing a revoked link keeps a link another profile saved meanwhile', async () => {
+        const { alerts } = setup();
+        await alerts.tokenForProfile('Main');
+        serverLinks = [];
+        created.push({ id: '33333333-3333-3333-3333-333333333333', token: `mbc_${'C'.repeat(43)}` });
+        let releaseCheck;
+        auth.request.mockImplementationOnce(async () => {
+            await new Promise((resolve) => {
+                releaseCheck = resolve;
+            });
+            return { data: [] };
+        });
+
+        const main = alerts.tokenForProfile('Main');
+        await new Promise((resolve) => setImmediate(resolve));
+        const ironman = await alerts.tokenForProfile('Ironman');
+        releaseCheck();
+        await main;
+
+        const stored = JSON.parse(safeStorage.decryptString(fs.readFileSync(linksFile))).profiles;
+        expect(stored.Ironman.token).toBe(ironman);
+        expect(Object.keys(stored).sort()).toEqual(['Ironman', 'Main']);
+    });
+
+    test('a slow API does not hold the launch and the stored link is used', async () => {
+        const { alerts } = setup({ launchBudgetMs: 20 });
+        await alerts.tokenForProfile('Main');
+        auth.request.mockImplementation(() => new Promise(() => {}));
+
+        expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
+        expect(await alerts.tokenForProfile('Ironman')).toBeNull();
+    });
+
+    test('a link created after the launch budget is saved for the next launch', async () => {
+        const { alerts } = setup({ launchBudgetMs: 20 });
+        let releaseCreate;
+        auth.request.mockImplementationOnce(async (config) => {
+            await new Promise((resolve) => {
+                releaseCreate = resolve;
+            });
+            serverLinks.push(FIRST_ID);
+            return { data: { id: FIRST_ID, label: config.data.label, token: FIRST_TOKEN, createdAt: '2026-10-21T10:00:00Z' } };
+        });
+
+        expect(await alerts.tokenForProfile('Main')).toBeNull();
+        releaseCreate();
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
+        expect(posts()).toHaveLength(1);
+    });
+
     test('an expired sign-in launches without a token', async () => {
         const { alerts } = setup();
         await alerts.tokenForProfile('Main');

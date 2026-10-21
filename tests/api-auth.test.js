@@ -333,6 +333,31 @@ describe('api-auth', () => {
             expect(axios.request.mock.calls[1][0].headers).toEqual({ Authorization: 'Bearer access-2' });
         });
 
+        test('concurrent expired requests share one refresh', async () => {
+            const { auth } = await signIn();
+            let finishRefresh;
+            axios.post.mockImplementationOnce(() => new Promise((resolve) => {
+                finishRefresh = () => resolve({ data: { token: 'access-2', refreshToken: 'refresh-2' } });
+            }));
+            axios.request
+                .mockRejectedValueOnce(httpError(401))
+                .mockRejectedValueOnce(httpError(401))
+                .mockResolvedValue({ data: { ok: true } });
+
+            const first = auth.request({ method: 'get', path: '/api/alerts/client-links' });
+            const second = auth.request({ method: 'get', path: '/api/alerts/client-links' });
+            await flush();
+            finishRefresh();
+
+            await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+            const refreshCalls = axios.post.mock.calls.filter(([url]) => url.endsWith('/refresh-token'));
+            expect(refreshCalls).toHaveLength(1);
+            expect(axios.request.mock.calls.slice(2).map(([config]) => config.headers)).toEqual([
+                { Authorization: 'Bearer access-2' },
+                { Authorization: 'Bearer access-2' }
+            ]);
+        });
+
         test('reject with 401 when the session cannot be refreshed', async () => {
             const { ipcMain, auth } = await signIn();
             axios.post.mockRejectedValueOnce(httpError(400, 'Invalid or expired refresh token'));

@@ -1,11 +1,13 @@
 const LINKS_PATH = '/api/alerts/client-links';
 const REQUEST_TIMEOUT_MS = 8000;
+const LAUNCH_BUDGET_MS = 5000;
 const LABEL_MAX = 60;
 const DEFAULT_PROFILE = 'default';
 const TOKEN_PATTERN = /^mbc_[A-Za-z0-9_-]{43}$/;
 
 module.exports = function setupClientAlerts(deps) {
     const { ipcMain, log, fs, safeStorage, auth, linksFile, settingsFile } = deps;
+    const launchBudgetMs = deps.launchBudgetMs || LAUNCH_BUDGET_MS;
 
     const pending = new Map();
 
@@ -98,8 +100,9 @@ module.exports = function setupClientAlerts(deps) {
             log.info(`Alert link for profile "${profile}" was revoked; creating a new one.`);
         }
         if (stored) {
-            delete links[profile];
-            writeLinks(email, links);
+            const current = readLinks(email);
+            delete current[profile];
+            writeLinks(email, current);
         }
         const created = await createLink(profile);
         writeLinks(email, { ...readLinks(email), [profile]: created });
@@ -132,7 +135,23 @@ module.exports = function setupClientAlerts(deps) {
                     .finally(() => pending.delete(key))
             );
         }
-        return pending.get(key);
+        return withinBudget(pending.get(key), () => storedToken(email, profile));
+    };
+
+    const storedToken = (email, profile) => {
+        const stored = readLinks(email)[profile];
+        return stored && TOKEN_PATTERN.test(String(stored.token)) ? stored.token : null;
+    };
+
+    const withinBudget = (work, fallback) => {
+        let timer = null;
+        const deadline = new Promise((resolve) => {
+            timer = setTimeout(() => {
+                log.warn('The Microbot API is slow to answer; launching with the alert link saved on this PC, if any.');
+                resolve(fallback());
+            }, launchBudgetMs);
+        });
+        return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
     };
 
     ipcMain.handle('alerts:status', async (_event, names) => {
