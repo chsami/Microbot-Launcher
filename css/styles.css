@@ -263,38 +263,126 @@ webview#website {
     text-decoration: underline;
 }
 
-.user-session {
+.account-card {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-left: auto;
-    margin-right: 12px;
-    grid-column: 3;
-    -webkit-app-region: no-drag;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 4px 0 20px;
+    padding: 12px 14px;
+    background: #1a1511;
+    border: 1px solid var(--mb-line);
+    border-radius: 8px;
 }
 
-.user-session.hidden {
+.account-card.hidden {
     display: none;
 }
 
-.session-email {
-    font-size: 14px;
-    color: #d6cfc2;
+.account-avatar {
+    flex: none;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: #2a2119;
+    border: 1px solid #4a3a2a;
+    color: var(--mb-muted);
+    font-family: var(--mb-display);
+    font-size: 17px;
+    font-weight: 700;
 }
 
-.session-action {
+.account-card.signed-in .account-avatar {
+    background: linear-gradient(135deg, #ffc35c, #e89a22);
+    border-color: transparent;
+    color: #1a1714;
+}
+
+.account-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.account-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #f1ebe0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.account-hint {
+    font-size: 12px;
+    color: var(--mb-muted);
+}
+
+.account-actions {
+    flex: none;
+    display: flex;
+    gap: 6px;
+}
+
+.account-action {
     background: #2a2119;
     border: 1px solid #4a3a2a;
     color: #f1ebe0;
     border-radius: 6px;
-    padding: 6px 12px;
+    padding: 7px 12px;
     cursor: pointer;
+    font-family: var(--mb-body);
     font-size: 13px;
+    font-weight: 600;
     transition: background 0.2s ease;
 }
 
-.session-action:hover {
+.account-action:hover {
     background: #3a2e22;
+}
+
+.account-action.primary {
+    background: transparent;
+    border-color: var(--mb-gold);
+    color: var(--mb-gold);
+}
+
+.account-action.primary:hover {
+    background: rgba(255, 177, 59, 0.12);
+}
+
+.auth-card {
+    position: relative;
+}
+
+.auth-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: var(--mb-muted);
+    cursor: pointer;
+}
+
+.auth-close:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+}
+
+.auth-close.auth-hidden {
+    display: none;
 }
 
 h2 {
@@ -1702,7 +1790,7 @@ button.hamburger {
 
 .auth-cancel.auth-hidden,
 .auth-link.auth-hidden,
-.session-action.hidden {
+.account-action.hidden {
     display: none;
 }
 

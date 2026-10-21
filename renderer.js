@@ -127,6 +127,9 @@ function hideChangePasswordModal() {
     setAuthError('', 'change-password-error');
 }
 
+const ACCOUNT_ICON =
+    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>';
+
 function updateSessionEmail(email) {
     currentSessionEmail = email || '';
     const sessionContainer = $('user-session');
@@ -134,7 +137,16 @@ function updateSessionEmail(email) {
     if (!sessionContainer || !emailLabel) return;
     const signedIn = Boolean(currentSessionEmail);
     toggleClass(sessionContainer, 'hidden', !authAvailable() || (mockAuthEnabled && !signedIn));
-    emailLabel.textContent = currentSessionEmail;
+    toggleClass(sessionContainer, 'signed-in', signedIn);
+    emailLabel.textContent = signedIn ? currentSessionEmail : 'Not signed in';
+    emailLabel.title = signedIn ? currentSessionEmail : '';
+    const hint = $('session-hint');
+    if (hint) hint.textContent = signedIn ? 'Microbot account' : 'Sign in or create a free account';
+    const avatar = $('account-avatar');
+    if (avatar) {
+        if (signedIn) avatar.textContent = currentSessionEmail.charAt(0).toUpperCase();
+        else avatar.innerHTML = ACCOUNT_ICON;
+    }
     toggleClass($('signin-btn'), 'hidden', signedIn);
     toggleClass($('signout-btn'), 'hidden', !signedIn);
     toggleClass($('change-password-btn'), 'hidden', !signedIn || !mockAuthEnabled);
