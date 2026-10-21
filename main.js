@@ -62,7 +62,13 @@ async function loadLibraries() {
                     axios,
                     fs,
                     safeStorage,
-                    sessionFile: path.join(microbotDir, 'session.dat')
+                    sessionFile: path.join(microbotDir, 'session.dat'),
+                    captcha: require(path.join(__dirname, 'libs', 'captcha-window.js'))({
+                        BrowserWindow,
+                        shell,
+                        getParent: () => mainWindow,
+                        log
+                    })
                 });
             }
         } catch (authError) {

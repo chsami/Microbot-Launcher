@@ -197,8 +197,97 @@ describe('api-auth', () => {
         expect(await ipcMain.invoke('auth:request-password-reset', { email: 'A@b.co' })).toEqual({ success: true });
         expect((await ipcMain.invoke('auth:request-password-reset', { email: '' })).error).toBe('Enter your email first.');
 
-        expect(axios.post).toHaveBeenCalledWith('https://api.test/api/auth/resend-verification', { email: 'a@b.co' }, expect.any(Object));
-        expect(axios.post).toHaveBeenCalledWith('https://api.test/api/auth/request-password-reset', { email: 'a@b.co' }, expect.any(Object));
+        expect(axios.post).toHaveBeenCalledWith('https://api.test/api/auth/resend-verification', { email: 'a@b.co', captchaToken: null }, expect.any(Object));
+        expect(axios.post).toHaveBeenCalledWith('https://api.test/api/auth/request-password-reset', { email: 'a@b.co', captchaToken: null }, expect.any(Object));
+    });
+
+    describe('human check', () => {
+        let captcha;
+
+        const setupWithCaptcha = () => {
+            const ipcMain = new FakeIpcMain();
+            setupApiAuth({ ipcMain, log, axios, fs, safeStorage, sessionFile, baseUrl: 'https://api.test', captcha });
+            return ipcMain;
+        };
+
+        beforeEach(() => {
+            captcha = jest.fn().mockResolvedValue('turnstile-token');
+            axios.get = jest.fn().mockResolvedValue({ data: { siteKey: 'site-key' } });
+            axios.post.mockResolvedValue({ data: {} });
+        });
+
+        test('sign up sends the token from the captcha window', async () => {
+            const ipcMain = setupWithCaptcha();
+
+            const result = await ipcMain.invoke('auth:signup', { email: 'new@example.com', password: 'secret123' });
+
+            expect(result.success).toBe(true);
+            expect(captcha).toHaveBeenCalledWith('https://api.test/api/captcha');
+            expect(axios.post).toHaveBeenCalledWith(
+                'https://api.test/api/auth/register',
+                { email: 'new@example.com', password: 'secret123', captchaToken: 'turnstile-token' },
+                expect.any(Object)
+            );
+        });
+
+        test('resend and password reset also send the token', async () => {
+            const ipcMain = setupWithCaptcha();
+
+            await ipcMain.invoke('auth:resend-verification', { email: 'a@b.co' });
+            await ipcMain.invoke('auth:request-password-reset', { email: 'a@b.co' });
+
+            expect(captcha).toHaveBeenCalledTimes(2);
+            expect(axios.post.mock.calls.map(([, body]) => body.captchaToken)).toEqual(['turnstile-token', 'turnstile-token']);
+        });
+
+        test('closing the captcha window cancels without calling the API', async () => {
+            captcha.mockResolvedValue(null);
+            const ipcMain = setupWithCaptcha();
+
+            const result = await ipcMain.invoke('auth:signup', { email: 'new@example.com', password: 'secret123' });
+
+            expect(result.error).toBe('Complete the human check to continue.');
+            expect(axios.post).not.toHaveBeenCalled();
+        });
+
+        test('no window opens when the server has no captcha configured', async () => {
+            axios.get.mockResolvedValue({ data: { siteKey: null } });
+            const ipcMain = setupWithCaptcha();
+
+            await ipcMain.invoke('auth:signup', { email: 'new@example.com', password: 'secret123' });
+
+            expect(captcha).not.toHaveBeenCalled();
+            expect(axios.post.mock.calls[0][1].captchaToken).toBeNull();
+        });
+
+        test('an older server without the captcha endpoint still works', async () => {
+            axios.get.mockRejectedValue(httpError(404));
+            const ipcMain = setupWithCaptcha();
+
+            const result = await ipcMain.invoke('auth:signup', { email: 'new@example.com', password: 'secret123' });
+
+            expect(result.success).toBe(true);
+            expect(captcha).not.toHaveBeenCalled();
+        });
+
+        test('an unreachable server is reported before opening the window', async () => {
+            axios.get.mockRejectedValue(new Error('ENOTFOUND'));
+            const ipcMain = setupWithCaptcha();
+
+            const result = await ipcMain.invoke('auth:signup', { email: 'new@example.com', password: 'secret123' });
+
+            expect(result.error).toMatch(/Can't reach Microbot servers/);
+            expect(captcha).not.toHaveBeenCalled();
+        });
+
+        test('a rejected token shows the server message', async () => {
+            axios.post.mockRejectedValue(httpError(400, 'The human check failed. Please try again.'));
+            const ipcMain = setupWithCaptcha();
+
+            const result = await ipcMain.invoke('auth:signup', { email: 'new@example.com', password: 'secret123' });
+
+            expect(result.error).toBe('The human check failed. Please try again.');
+        });
     });
 
     test('nothing is written to disk when encryption is unavailable', async () => {

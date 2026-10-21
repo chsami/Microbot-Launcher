@@ -11,6 +11,19 @@ module.exports = function setupApiAuth(deps) {
     const post = (endpoint, body) =>
         axios.post(`${baseUrl}/api/auth/${endpoint}`, body, { timeout: REQUEST_TIMEOUT_MS });
 
+    const solveCaptcha = async () => {
+        if (!deps.captcha) return { token: null };
+        try {
+            const { data } = await axios.get(`${baseUrl}/api/captcha/config`, { timeout: REQUEST_TIMEOUT_MS });
+            if (!data?.siteKey) return { token: null };
+        } catch (error) {
+            if (error?.response?.status === 404) return { token: null };
+            return { error: describeError(error, log, 'Could not start the human check.') };
+        }
+        const token = await deps.captcha(`${baseUrl}/api/captcha`);
+        return token ? { token } : { error: 'Complete the human check to continue.' };
+    };
+
     const canPersist = () => {
         try {
             return Boolean(safeStorage?.isEncryptionAvailable());
@@ -108,8 +121,10 @@ module.exports = function setupApiAuth(deps) {
         if (!email || !password) {
             return { error: 'Enter your email and a password.' };
         }
+        const captcha = await solveCaptcha();
+        if (captcha.error) return { error: captcha.error };
         try {
-            const { data } = await post('register', { email, password });
+            const { data } = await post('register', { email, password, captchaToken: captcha.token });
             return {
                 success: true,
                 pendingVerification: true,
@@ -127,8 +142,10 @@ module.exports = function setupApiAuth(deps) {
     ipcMain.handle('auth:resend-verification', async (_event, payload) => {
         const { email } = credentials(payload);
         if (!email) return { error: 'Enter your email first.' };
+        const captcha = await solveCaptcha();
+        if (captcha.error) return { error: captcha.error };
         try {
-            await post('resend-verification', { email });
+            await post('resend-verification', { email, captchaToken: captcha.token });
             return { success: true };
         } catch (error) {
             return { error: describeError(error, log, 'Could not send the verification email.') };
@@ -138,8 +155,10 @@ module.exports = function setupApiAuth(deps) {
     ipcMain.handle('auth:request-password-reset', async (_event, payload) => {
         const { email } = credentials(payload);
         if (!email) return { error: 'Enter your email first.' };
+        const captcha = await solveCaptcha();
+        if (captcha.error) return { error: captcha.error };
         try {
-            await post('request-password-reset', { email });
+            await post('request-password-reset', { email, captchaToken: captcha.token });
             return { success: true };
         } catch (error) {
             return { error: describeError(error, log, 'Could not send the reset email.') };
