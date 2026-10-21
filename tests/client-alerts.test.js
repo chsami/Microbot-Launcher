@@ -91,6 +91,9 @@ describe('client-alerts', () => {
 
         expect(posts()).toHaveLength(1);
         expect(posts()[0][0]).toMatchObject({ path: '/api/alerts/client-links', data: { label: 'Main' } });
+        const gets = auth.request.mock.calls.filter(([config]) => config.method === 'get');
+        expect(gets.length).toBeGreaterThan(0);
+        gets.forEach(([config]) => expect(config.path).toBe('/api/alerts/client-links?includeHidden=true'));
     });
 
     test('each profile gets its own link and the default profile is labelled default', async () => {

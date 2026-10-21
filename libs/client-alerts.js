@@ -1,4 +1,5 @@
 const LINKS_PATH = '/api/alerts/client-links';
+const LIST_PATH = `${LINKS_PATH}?includeHidden=true`;
 const REQUEST_TIMEOUT_MS = 8000;
 const STATUS_TIMEOUT_MS = 3000;
 const LAUNCH_BUDGET_MS = 5000;
@@ -76,7 +77,7 @@ module.exports = function setupClientAlerts(deps) {
 
     const linkStillActive = async (stored) => {
         try {
-            const { data } = await auth.request({ method: 'get', path: LINKS_PATH, timeout: REQUEST_TIMEOUT_MS });
+            const { data } = await auth.request({ method: 'get', path: LIST_PATH, timeout: REQUEST_TIMEOUT_MS });
             if (!Array.isArray(data)) return true;
             const id = String(stored.id).toLowerCase();
             return data.some((link) => String(link?.id).toLowerCase() === id);
@@ -175,7 +176,7 @@ module.exports = function setupClientAlerts(deps) {
         const linked = profiles.filter((profile) => stored[profile]?.id);
         if (!linked.length || !auth) return labels;
         try {
-            const { data } = await auth.request({ method: 'get', path: LINKS_PATH, timeout: STATUS_TIMEOUT_MS });
+            const { data } = await auth.request({ method: 'get', path: LIST_PATH, timeout: STATUS_TIMEOUT_MS });
             if (!Array.isArray(data)) return labels;
             const byId = new Map(data.map((link) => [String(link?.id).toLowerCase(), link?.label]));
             const changed = {};
