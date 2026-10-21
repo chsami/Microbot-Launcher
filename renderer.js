@@ -55,6 +55,82 @@ function setAuthError(message, elementId = 'auth-error', isSuccess = false) {
     toggleClass(element, 'success', Boolean(isSuccess && message));
 }
 
+const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MAX_BYTES = 72;
+const EYE_ICON =
+    '<svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+const EYE_OFF_ICON =
+    '<svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 5.1A10.9 10.9 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.6 3.6M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"></path><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"></path><path d="M2 2l20 20"></path></svg>';
+
+function passwordLengthProblem(password) {
+    if (password.length < PASSWORD_MIN_LENGTH) return 'short';
+    if (new TextEncoder().encode(password).length > PASSWORD_MAX_BYTES) return 'long';
+    return null;
+}
+
+function setPasswordVisible(input, button, visible) {
+    input.type = visible ? 'text' : 'password';
+    button.innerHTML = visible ? EYE_OFF_ICON : EYE_ICON;
+    const label = visible ? 'Hide password' : 'Show password';
+    button.setAttribute('aria-label', label);
+    button.setAttribute('aria-pressed', visible ? 'true' : 'false');
+    button.title = label;
+}
+
+function setupPasswordToggles() {
+    document.querySelectorAll('.auth-form input[type="password"]').forEach((input) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'password-field';
+        input.parentNode.insertBefore(wrapper, input);
+        wrapper.appendChild(input);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'password-toggle';
+        wrapper.appendChild(button);
+        setPasswordVisible(input, button, false);
+        button.addEventListener('click', () => {
+            setPasswordVisible(input, button, input.type === 'password');
+            input.focus();
+        });
+        input.form?.addEventListener('reset', () => setPasswordVisible(input, button, false));
+    });
+}
+
+function setHint(element, text, state) {
+    if (!element) return;
+    element.textContent = text;
+    toggleClass(element, 'is-error', state === 'error');
+    toggleClass(element, 'is-ok', state === 'ok');
+}
+
+function updateSignupPasswordChecks() {
+    const passwordInput = $('signup-password');
+    const confirmInput = $('signup-confirm-password');
+    if (!passwordInput || !confirmInput) return;
+    const password = passwordInput.value;
+    const confirmPassword = confirmInput.value;
+    const problem = password ? passwordLengthProblem(password) : null;
+    const hint = $('signup-password-hint');
+    if (!password) {
+        setHint(hint, 'At least 8 characters.', null);
+    } else if (problem === 'short') {
+        const missing = PASSWORD_MIN_LENGTH - password.length;
+        setHint(hint, `${missing} more character${missing === 1 ? '' : 's'} needed (at least 8).`, 'error');
+    } else if (problem === 'long') {
+        setHint(hint, 'Too long. Use at most 72 characters.', 'error');
+    } else {
+        setHint(hint, 'Password length looks good.', 'ok');
+    }
+    passwordInput.setAttribute('aria-invalid', problem ? 'true' : 'false');
+
+    const confirmHint = $('signup-confirm-hint');
+    const mismatch = Boolean(confirmPassword) && confirmPassword !== password;
+    if (!confirmPassword) setHint(confirmHint, '', null);
+    else if (mismatch) setHint(confirmHint, "Passwords don't match yet.", 'error');
+    else setHint(confirmHint, 'Passwords match.', 'ok');
+    confirmInput.setAttribute('aria-invalid', mismatch ? 'true' : 'false');
+}
+
 function setActiveAuthTab(target) {
     const signinTab = $('auth-tab-signin');
     const signupTab = $('auth-tab-signup');
@@ -273,8 +349,11 @@ async function handleSignUp(event) {
         setAuthError('Email and password are required');
         return;
     }
-    if (password.length < 8) {
-        setAuthError('Password must be at least 8 characters.');
+    const lengthProblem = passwordLengthProblem(password);
+    if (lengthProblem) {
+        setAuthError(
+            lengthProblem === 'short' ? 'Password must be at least 8 characters.' : 'Password must be at most 72 characters.'
+        );
         return;
     }
     const confirmPassword = $('signup-confirm-password')?.value || '';
@@ -375,6 +454,10 @@ function setupAuthUI() {
     authUiReady = true;
     $('signin-form')?.addEventListener('submit', handleSignIn);
     $('signup-form')?.addEventListener('submit', handleSignUp);
+    setupPasswordToggles();
+    $('signup-password')?.addEventListener('input', updateSignupPasswordChecks);
+    $('signup-confirm-password')?.addEventListener('input', updateSignupPasswordChecks);
+    $('signup-form')?.addEventListener('reset', () => setTimeout(updateSignupPasswordChecks, 0));
     $('auth-tab-signin')?.addEventListener('click', () => setActiveAuthTab('signin'));
     $('auth-tab-signup')?.addEventListener('click', () => setActiveAuthTab('signup'));
     $('signout-btn')?.addEventListener('click', handleSignOut);

@@ -1846,6 +1846,49 @@ button.hamburger {
     color: var(--mb-muted);
 }
 
+.auth-hint:empty {
+    display: none;
+}
+
+.auth-hint.is-error {
+    color: #ff7a6e;
+}
+
+.auth-hint.is-ok {
+    color: #9fd98a;
+}
+
+.password-field {
+    position: relative;
+}
+
+.auth-form .password-field input {
+    padding-right: 44px;
+}
+
+.password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: var(--mb-muted);
+    cursor: pointer;
+}
+
+.password-toggle:hover,
+.password-toggle:focus-visible {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.06);
+}
+
 .auth-error:empty {
     display: none;
 }

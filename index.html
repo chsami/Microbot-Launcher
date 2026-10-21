@@ -48,10 +48,11 @@
                 <label for="signup-password">Password</label>
                 <input id="signup-password" name="password" type="password" autocomplete="new-password" minlength="8"
                     required aria-describedby="signup-password-hint" />
-                <p id="signup-password-hint" class="auth-hint">At least 8 characters.</p>
+                <p id="signup-password-hint" class="auth-hint" aria-live="polite">At least 8 characters.</p>
                 <label for="signup-confirm-password">Confirm password</label>
                 <input id="signup-confirm-password" name="confirm-password" type="password"
-                    autocomplete="new-password" minlength="8" required />
+                    autocomplete="new-password" minlength="8" required aria-describedby="signup-confirm-hint" />
+                <p id="signup-confirm-hint" class="auth-hint" aria-live="polite"></p>
                 <button id="signup-submit" type="submit" class="auth-submit">Create Account</button>
             </form>
             <p id="auth-error" class="auth-error" role="alert" aria-live="polite"></p>
