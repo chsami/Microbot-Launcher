@@ -360,6 +360,64 @@ describe('client-alerts', () => {
         expect((await ipcMain.invoke('alerts:status', ['default', 'Main'])).labels).toEqual({ default: 'default', Main: 'Main PC' });
     });
 
+    test('status shows the profile name once the linked client is gone from the dashboard', async () => {
+        const { alerts, ipcMain } = setup();
+        await alerts.tokenForProfile('Main');
+        serverLabels[FIRST_ID] = 'Main PC';
+        await ipcMain.invoke('alerts:status', ['Main']);
+        serverLinks = [];
+
+        expect((await ipcMain.invoke('alerts:status', ['Main'])).labels).toEqual({ Main: 'Main' });
+        expect(await alerts.tokenForProfile('Main')).toBe(SECOND_TOKEN);
+        expect(posts()[1][0]).toMatchObject({ data: { label: 'Main' } });
+    });
+
+    test('switching alerts off while the link is being created revokes the new link', async () => {
+        const { alerts, ipcMain } = setup();
+        let releaseCreate;
+        auth.request.mockImplementationOnce(async (config) => {
+            await new Promise((resolve) => {
+                releaseCreate = resolve;
+            });
+            serverLinks.push(FIRST_ID);
+            return { data: { id: FIRST_ID, label: config.data.label, token: FIRST_TOKEN, createdAt: '2026-10-21T10:00:00Z' } };
+        });
+
+        const launch = alerts.tokenForProfile('Main');
+        await new Promise((resolve) => setImmediate(resolve));
+        await ipcMain.invoke('alerts:set-enabled', 'Main', false);
+        releaseCreate();
+
+        expect(await launch).toBeNull();
+        await alerts.retryRevokes();
+        expect(deletes()).toEqual([`/api/alerts/client-links/${FIRST_ID}`]);
+        expect(serverLinks).toEqual([]);
+        expect(stored().profiles).toEqual({});
+        expect(stored().revoke).toEqual([]);
+    });
+
+    test('switching alerts off while the link is being checked does not hand out its token', async () => {
+        const { alerts, ipcMain } = setup();
+        await alerts.tokenForProfile('Main');
+        let releaseCheck;
+        const online = auth.request.getMockImplementation();
+        auth.request.mockImplementationOnce(async (config) => {
+            await new Promise((resolve) => {
+                releaseCheck = resolve;
+            });
+            return online(config);
+        });
+
+        const launch = alerts.tokenForProfile('Main');
+        await new Promise((resolve) => setImmediate(resolve));
+        await ipcMain.invoke('alerts:set-enabled', 'Main', false);
+        releaseCheck();
+
+        expect(await launch).toBeNull();
+        expect(deletes()).toEqual([`/api/alerts/client-links/${FIRST_ID}`]);
+        expect(stored().profiles).toEqual({});
+    });
+
     test('the renderer never gets the token or the link id', async () => {
         const { alerts, ipcMain } = setup();
         await alerts.tokenForProfile('Main');

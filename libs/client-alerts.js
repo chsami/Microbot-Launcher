@@ -104,7 +104,9 @@ module.exports = function setupClientAlerts(deps) {
         const links = readLinks(email);
         const stored = links[profile];
         if (stored && TOKEN_PATTERN.test(String(stored.token))) {
-            if (await linkStillActive(stored)) return stored.token;
+            const active = await linkStillActive(stored);
+            if (!isEnabled(profile)) return null;
+            if (active) return stored.token;
             log.info(`Alert link for profile "${profile}" was revoked; creating a new one.`);
         }
         if (stored) {
@@ -113,6 +115,12 @@ module.exports = function setupClientAlerts(deps) {
             writeLinks(email, current);
         }
         const created = await createLink(profile);
+        if (!isEnabled(profile)) {
+            queueRevoke(email, String(created.id));
+            retryRevokes();
+            log.info(`Alerts were turned off for profile "${profile}" while it was being linked; revoking the new link.`);
+            return null;
+        }
         writeLinks(email, { ...readLinks(email), [profile]: created });
         log.info(`Linked profile "${profile}" for bot alerts.`);
         return created.token;
@@ -140,6 +148,11 @@ module.exports = function setupClientAlerts(deps) {
         return revoking;
     };
 
+    const queueRevoke = (email, id) => {
+        const store = readStore(email);
+        if (!store.revoke.includes(id)) writeStore(email, { ...store, revoke: [...store.revoke, id] });
+    };
+
     const unlinkProfile = (profile) => {
         const email = signedInEmail();
         if (!email || !canPersist()) return;
@@ -147,9 +160,8 @@ module.exports = function setupClientAlerts(deps) {
         const stored = store.profiles[profile];
         if (!stored) return;
         delete store.profiles[profile];
-        const id = stored.id ? String(stored.id) : null;
-        const revoke = id && !store.revoke.includes(id) ? [...store.revoke, id] : store.revoke;
-        writeStore(email, { profiles: store.profiles, revoke });
+        writeStore(email, store);
+        if (stored.id) queueRevoke(email, String(stored.id));
         log.info(`Unlinked profile "${profile}" from bot alerts.`);
     };
 
@@ -168,7 +180,12 @@ module.exports = function setupClientAlerts(deps) {
             const byId = new Map(data.map((link) => [String(link?.id).toLowerCase(), link?.label]));
             const changed = {};
             linked.forEach((profile) => {
-                const label = byId.get(String(stored[profile].id).toLowerCase());
+                const id = String(stored[profile].id).toLowerCase();
+                if (!byId.has(id)) {
+                    labels[profile] = defaultLabel(profile);
+                    return;
+                }
+                const label = byId.get(id);
                 if (typeof label !== 'string' || !label) return;
                 labels[profile] = label;
                 if (label !== stored[profile].label) changed[profile] = label;
