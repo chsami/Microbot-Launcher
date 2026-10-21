@@ -162,7 +162,7 @@
 
     const alertsLabel = (name) => {
         const label = state.alerts.labels[name];
-        return typeof label === 'string' && label ? label : name;
+        return typeof label === 'string' && label ? label : 'Microbot client';
     };
 
     const buildAlertsHint = (name) => {

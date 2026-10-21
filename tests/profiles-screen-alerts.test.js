@@ -137,9 +137,9 @@ describe('profiles screen alert name hint', () => {
                     signedIn: true,
                     available: true,
                     enabled: { default: true, Main: true, Ironman: true },
-                    labels: { default: 'default', Main: 'Main PC' }
+                    labels: { default: 'Microbot client', Main: 'Main PC' }
                 }),
-                setEnabled: jest.fn().mockResolvedValue({ enabled: false, label: 'Main' })
+                setEnabled: jest.fn().mockResolvedValue({ enabled: false, label: 'Microbot client' })
             }
         };
     });
@@ -150,13 +150,13 @@ describe('profiles screen alert name hint', () => {
         await screen.open();
 
         expect(screen.hints()).toEqual([
-            'Shows up as "default" in alerts. Rename it on the dashboard.',
-            'Shows up as "Ironman" in alerts. Rename it on the dashboard.',
+            'Shows up as "Microbot client" in alerts. Rename it on the dashboard.',
+            'Shows up as "Microbot client" in alerts. Rename it on the dashboard.',
             'Shows up as "Main PC" in alerts. Rename it on the dashboard.'
         ]);
     });
 
-    test('switching alerts off hides the hint and on again shows the profile name', async () => {
+    test('switching alerts off hides the hint and on again shows the name its alerts use', async () => {
         const screen = createScreen(electron);
         await screen.open();
 
@@ -164,15 +164,15 @@ describe('profiles screen alert name hint', () => {
 
         expect(electron.alerts.setEnabled).toHaveBeenCalledWith('Main', false);
         expect(screen.hints()).toEqual([
-            'Shows up as "default" in alerts. Rename it on the dashboard.',
-            'Shows up as "Ironman" in alerts. Rename it on the dashboard.'
+            'Shows up as "Microbot client" in alerts. Rename it on the dashboard.',
+            'Shows up as "Microbot client" in alerts. Rename it on the dashboard.'
         ]);
 
-        electron.alerts.setEnabled.mockResolvedValue({ enabled: true, label: 'Main' });
+        electron.alerts.setEnabled.mockResolvedValue({ enabled: true, label: 'Microbot client 3' });
         await screen.click(screen.toggle('Main'));
 
         expect(electron.alerts.setEnabled).toHaveBeenLastCalledWith('Main', true);
-        expect(screen.hints()).toContain('Shows up as "Main" in alerts. Rename it on the dashboard.');
+        expect(screen.hints()).toContain('Shows up as "Microbot client 3" in alerts. Rename it on the dashboard.');
     });
 
     test('signed out shows no hint', async () => {

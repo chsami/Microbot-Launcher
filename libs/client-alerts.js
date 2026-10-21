@@ -3,7 +3,7 @@ const LIST_PATH = `${LINKS_PATH}?includeHidden=true`;
 const REQUEST_TIMEOUT_MS = 8000;
 const STATUS_TIMEOUT_MS = 3000;
 const LAUNCH_BUDGET_MS = 5000;
-const LABEL_MAX = 60;
+const DEFAULT_LABEL = 'Microbot client';
 const DEFAULT_PROFILE = 'default';
 const TOKEN_PATTERN = /^mbc_[A-Za-z0-9_-]{43}$/;
 
@@ -88,17 +88,26 @@ module.exports = function setupClientAlerts(deps) {
         }
     };
 
-    const createLink = async (profile) => {
+    const nextLabel = (email) => {
+        const used = new Set(Object.values(readLinks(email)).map((link) => link?.label));
+        if (!used.has(DEFAULT_LABEL)) return DEFAULT_LABEL;
+        let number = 2;
+        while (used.has(`${DEFAULT_LABEL} ${number}`)) number += 1;
+        return `${DEFAULT_LABEL} ${number}`;
+    };
+
+    const createLink = async (email) => {
+        const label = nextLabel(email);
         const { data } = await auth.request({
             method: 'post',
             path: LINKS_PATH,
-            data: { label: defaultLabel(profile) },
+            data: { label },
             timeout: REQUEST_TIMEOUT_MS
         });
         if (!data?.id || !TOKEN_PATTERN.test(String(data?.token))) {
             throw new Error('The API returned an invalid alert link');
         }
-        return { id: data.id, token: data.token, label: typeof data.label === 'string' ? data.label : defaultLabel(profile) };
+        return { id: data.id, token: data.token, label: typeof data.label === 'string' ? data.label : label };
     };
 
     const resolveToken = async (profile, email) => {
@@ -115,7 +124,7 @@ module.exports = function setupClientAlerts(deps) {
             delete current[profile];
             writeLinks(email, current);
         }
-        const created = await createLink(profile);
+        const created = await createLink(email);
         if (!isEnabled(profile)) {
             queueRevoke(email, String(created.id));
             retryRevokes();
@@ -282,8 +291,8 @@ module.exports = function setupClientAlerts(deps) {
     return { tokenForProfile, retryRevokes };
 };
 
-function defaultLabel(profile) {
-    return profile.slice(0, LABEL_MAX);
+function defaultLabel() {
+    return DEFAULT_LABEL;
 }
 
 function profileName(value) {

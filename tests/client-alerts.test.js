@@ -90,19 +90,19 @@ describe('client-alerts', () => {
         expect(await setup().alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
 
         expect(posts()).toHaveLength(1);
-        expect(posts()[0][0]).toMatchObject({ path: '/api/alerts/client-links', data: { label: 'Main' } });
+        expect(posts()[0][0]).toMatchObject({ path: '/api/alerts/client-links', data: { label: 'Microbot client' } });
         const gets = auth.request.mock.calls.filter(([config]) => config.method === 'get');
         expect(gets.length).toBeGreaterThan(0);
         gets.forEach(([config]) => expect(config.path).toBe('/api/alerts/client-links?includeHidden=true'));
     });
 
-    test('each profile gets its own link and the default profile is labelled default', async () => {
+    test('each profile gets its own link with a neutral numbered name', async () => {
         const { alerts } = setup();
 
         expect(await alerts.tokenForProfile(undefined)).toBe(FIRST_TOKEN);
         expect(await alerts.tokenForProfile('Ironman')).toBe(SECOND_TOKEN);
 
-        expect(posts().map(([config]) => config.data.label)).toEqual(['default', 'Ironman']);
+        expect(posts().map(([config]) => config.data.label)).toEqual(['Microbot client', 'Microbot client 2']);
     });
 
     test('two launches at once create a single link', async () => {
@@ -241,7 +241,7 @@ describe('client-alerts', () => {
             signedIn: false,
             available: false,
             enabled: { default: true },
-            labels: { default: 'default' }
+            labels: { default: 'Microbot client' }
         });
     });
 
@@ -268,15 +268,15 @@ describe('client-alerts', () => {
             signedIn: true,
             available: true,
             enabled: { default: true, Main: true },
-            labels: { default: 'default', Main: 'Main' }
+            labels: { default: 'Microbot client', Main: 'Microbot client' }
         });
 
-        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', false)).toEqual({ enabled: false, label: 'Main' });
+        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', false)).toEqual({ enabled: false, label: 'Microbot client' });
         expect(await alerts.tokenForProfile('Main')).toBeNull();
         expect(auth.request).not.toHaveBeenCalled();
         expect((await ipcMain.invoke('alerts:status', ['default', 'Main'])).enabled).toEqual({ default: true, Main: false });
 
-        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', true)).toEqual({ enabled: true, label: 'Main' });
+        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', true)).toEqual({ enabled: true, label: 'Microbot client' });
         expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
     });
 
@@ -285,11 +285,11 @@ describe('client-alerts', () => {
         await alerts.tokenForProfile('Main');
         await alerts.tokenForProfile('Ironman');
 
-        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', false)).toEqual({ enabled: false, label: 'Main' });
+        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', false)).toEqual({ enabled: false, label: 'Microbot client' });
 
         expect(deletes()).toEqual([`/api/alerts/client-links/${FIRST_ID}`]);
         expect(serverLinks).toEqual([SECOND_ID]);
-        expect(stored().profiles).toEqual({ Ironman: { id: SECOND_ID, token: SECOND_TOKEN, label: 'Ironman' } });
+        expect(stored().profiles).toEqual({ Ironman: { id: SECOND_ID, token: SECOND_TOKEN, label: 'Microbot client 2' } });
         expect(stored().revoke).toEqual([]);
         expect(await alerts.tokenForProfile('Main')).toBeNull();
         const logged = JSON.stringify([log.info.mock.calls, log.warn.mock.calls, log.error.mock.calls]);
@@ -305,7 +305,7 @@ describe('client-alerts', () => {
             return online(config);
         });
 
-        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', false)).toEqual({ enabled: false, label: 'Main' });
+        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', false)).toEqual({ enabled: false, label: 'Microbot client' });
 
         expect(deletes()).toHaveLength(1);
         expect(stored().profiles).toEqual({});
@@ -348,8 +348,8 @@ describe('client-alerts', () => {
 
         expect(await alerts.tokenForProfile('Main')).toBe(SECOND_TOKEN);
         expect(posts()).toHaveLength(2);
-        expect(posts()[1][0]).toMatchObject({ path: '/api/alerts/client-links', data: { label: 'Main' } });
-        expect(stored().profiles.Main).toEqual({ id: SECOND_ID, token: SECOND_TOKEN, label: 'Main' });
+        expect(posts()[1][0]).toMatchObject({ path: '/api/alerts/client-links', data: { label: 'Microbot client' } });
+        expect(stored().profiles.Main).toEqual({ id: SECOND_ID, token: SECOND_TOKEN, label: 'Microbot client' });
     });
 
     test('status returns the dashboard name of each linked profile', async () => {
@@ -357,22 +357,22 @@ describe('client-alerts', () => {
         await alerts.tokenForProfile('Main');
         serverLabels[FIRST_ID] = 'Main PC';
 
-        expect((await ipcMain.invoke('alerts:status', ['default', 'Main'])).labels).toEqual({ default: 'default', Main: 'Main PC' });
+        expect((await ipcMain.invoke('alerts:status', ['default', 'Main'])).labels).toEqual({ default: 'Microbot client', Main: 'Main PC' });
 
         auth.request.mockRejectedValue(new Error('ECONNREFUSED'));
-        expect((await ipcMain.invoke('alerts:status', ['default', 'Main'])).labels).toEqual({ default: 'default', Main: 'Main PC' });
+        expect((await ipcMain.invoke('alerts:status', ['default', 'Main'])).labels).toEqual({ default: 'Microbot client', Main: 'Main PC' });
     });
 
-    test('status shows the profile name once the linked client is gone from the dashboard', async () => {
+    test('status shows the default name once the linked client is gone from the dashboard', async () => {
         const { alerts, ipcMain } = setup();
         await alerts.tokenForProfile('Main');
         serverLabels[FIRST_ID] = 'Main PC';
         await ipcMain.invoke('alerts:status', ['Main']);
         serverLinks = [];
 
-        expect((await ipcMain.invoke('alerts:status', ['Main'])).labels).toEqual({ Main: 'Main' });
+        expect((await ipcMain.invoke('alerts:status', ['Main'])).labels).toEqual({ Main: 'Microbot client' });
         expect(await alerts.tokenForProfile('Main')).toBe(SECOND_TOKEN);
-        expect(posts()[1][0]).toMatchObject({ data: { label: 'Main' } });
+        expect(posts()[1][0]).toMatchObject({ data: { label: 'Microbot client' } });
     });
 
     test('switching alerts off while the link is being created revokes the new link', async () => {
