@@ -50,6 +50,7 @@
     "files": [
       "main.js",
       "renderer.js",
+      "profiles-screen.js",
       "preload.js",
       "package.json",
       "!**/*.map",
