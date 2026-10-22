@@ -1,13 +1,13 @@
 const http = require('http');
 const createBrowserCaptcha = require('../libs/captcha-browser');
 
-const get = (url) =>
+const get = (url, method = 'GET') =>
     new Promise((resolve, reject) => {
-        http.get(url, (res) => {
+        http.request(url, { method }, (res) => {
             let body = '';
             res.on('data', (chunk) => (body += chunk));
             res.on('end', () => resolve({ status: res.statusCode, body }));
-        }).on('error', reject);
+        }).on('error', reject).end();
     });
 
 describe('captcha-browser', () => {
@@ -27,15 +27,35 @@ describe('captcha-browser', () => {
         const target = new URL(await opened);
         const returnUrl = target.searchParams.get('return');
         expect(target.origin + target.pathname).toBe('https://microbot.cloud/api/captcha');
-        expect(returnUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/captcha$/);
+        expect(returnUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/captcha\/[A-Za-z0-9_-]{32}$/);
 
-        const ignored = await get(`${returnUrl.replace('/captcha', '/other')}?token=x`);
+        const origin = new URL(returnUrl).origin;
+        const ignored = await Promise.all([
+            get(`${origin}/other?token=x`),
+            get(`${origin}/captcha?token=forged`),
+            get(`${origin}/captcha/${'A'.repeat(32)}?token=forged`),
+            get(`${returnUrl}?token=forged`, 'POST'),
+        ]);
         const response = await get(`${returnUrl}?token=abc%2B1`);
 
-        expect(ignored.status).toBe(404);
+        expect(ignored.map((r) => r.status)).toEqual([404, 404, 404, 404]);
         expect(response.status).toBe(200);
         expect(response.body).toContain("You're verified");
         await expect(check.promise).resolves.toBe('abc+1');
+    });
+
+    test('each check gets its own return path', async () => {
+        const first = createBrowserCaptcha({ http, shell, log })('https://microbot.cloud/api/captcha');
+        const firstPath = new URL(new URL(await opened).searchParams.get('return')).pathname;
+        first.cancel();
+        opened = new Promise((resolve) => {
+            shell.openExternal = jest.fn((url) => { resolve(url); return Promise.resolve(); });
+        });
+        const second = createBrowserCaptcha({ http, shell, log })('https://microbot.cloud/api/captcha');
+        const secondPath = new URL(new URL(await opened).searchParams.get('return')).pathname;
+        second.cancel();
+
+        expect(firstPath).not.toBe(secondPath);
     });
 
     test('cancel resolves with null and stops listening', async () => {

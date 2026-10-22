@@ -1,3 +1,5 @@
+const crypto = require('crypto');
+
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
 const DONE_PAGE = `<!doctype html>
@@ -11,12 +13,13 @@ const DONE_PAGE = `<!doctype html>
 module.exports = function createBrowserCaptcha({ http, shell, log, timeoutMs = DEFAULT_TIMEOUT_MS }) {
     return (pageUrl) => {
         let finish = () => {};
+        const callbackPath = `/captcha/${crypto.randomBytes(24).toString('base64url')}`;
         const promise = new Promise((resolve) => {
             let done = false;
             let timer = null;
             const server = http.createServer((req, res) => {
                 const url = new URL(req.url, 'http://127.0.0.1');
-                const token = url.pathname === '/captcha' ? url.searchParams.get('token') : null;
+                const token = req.method === 'GET' && url.pathname === callbackPath ? url.searchParams.get('token') : null;
                 if (!token) {
                     res.writeHead(404);
                     res.end();
@@ -41,7 +44,7 @@ module.exports = function createBrowserCaptcha({ http, shell, log, timeoutMs = D
             });
             server.listen(0, '127.0.0.1', () => {
                 if (done) return;
-                const returnUrl = `http://127.0.0.1:${server.address().port}/captcha`;
+                const returnUrl = `http://127.0.0.1:${server.address().port}${callbackPath}`;
                 const target = new URL(pageUrl);
                 target.searchParams.set('return', returnUrl);
                 timer = setTimeout(() => finish(null), timeoutMs);
