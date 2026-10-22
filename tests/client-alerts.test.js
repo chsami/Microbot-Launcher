@@ -511,8 +511,7 @@ describe('jar-executor alert token', () => {
         expect(alerts.tokenForProfile).toHaveBeenCalledWith('Main');
         expect(harness.launches).toHaveLength(1);
         const [{ args, options }] = harness.launches;
-        expect(options.env.MICROBOT_CLIENT_TOKEN).toBe(FIRST_TOKEN);
-        expect(options.env.PATH).toBe(process.env.PATH);
+        expect(options.env).toEqual({ ...process.env, MICROBOT_CLIENT_TOKEN: FIRST_TOKEN });
         expect(args.join(' ')).not.toContain(FIRST_TOKEN);
         const logged = JSON.stringify([harness.log.info.mock.calls, harness.log.warn.mock.calls, harness.log.error.mock.calls]);
         expect(logged).not.toContain(FIRST_TOKEN);
