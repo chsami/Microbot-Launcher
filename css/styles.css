@@ -504,6 +504,31 @@ h2 {
     overflow-y: auto;
 }
 
+/* Don't add scrollbar-width/scrollbar-color here: Chromium then ignores these rules. */
+.sidebar::-webkit-scrollbar {
+    width: 10px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* Transparent border keeps a 10px grab area around a slimmer visible thumb. */
+.sidebar::-webkit-scrollbar-thumb {
+    background-color: #3a2e22;
+    border: 2px solid transparent;
+    border-radius: 5px;
+    background-clip: padding-box;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background-color: var(--mb-gold-soft);
+}
+
+.sidebar::-webkit-scrollbar-thumb:active {
+    background-color: var(--mb-gold);
+}
+
 .game-logo {
     display: flex;
     align-items: center;
