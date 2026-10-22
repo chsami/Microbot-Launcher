@@ -51,6 +51,7 @@
       "main.js",
       "renderer.js",
       "profiles-screen.js",
+      "setup-guide.js",
       "preload.js",
       "package.json",
       "!**/*.map",

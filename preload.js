@@ -69,6 +69,7 @@ contextBridge.exposeInMainWorld('electron', {
         ),
     openLocation: (locationKey) =>
         ipcRenderer.invoke('open-location', locationKey),
+    openHelpLink: (linkKey) => ipcRenderer.invoke('open-help-link', linkKey),
     cleanUnusedClients: (latestVersion) =>
         ipcRenderer.invoke('cleanup-unused-clients-jar', latestVersion),
     updateClientJarTTL: (version) =>

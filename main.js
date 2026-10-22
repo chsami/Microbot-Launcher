@@ -134,7 +134,7 @@ async function createWindow() {
             'extra-ipc-handlers.js'
         ));
         if (typeof extraHandlers === 'function') {
-            await extraHandlers(app, ipcMain, mainWindow, log, openLocation);
+            await extraHandlers(app, ipcMain, mainWindow, log, openLocation, (url) => shell.openExternal(url));
         } else {
             log.error('extra-ipc-handlers does not export a function');
         }
