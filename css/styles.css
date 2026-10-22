@@ -244,6 +244,16 @@ webview#website {
     line-height: 1.4;
 }
 
+.hwid-spoof-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 14px;
+    color: #c4b9a6;
+    cursor: pointer;
+}
+
 .proxy-info-dismiss {
     display: flex;
     align-items: center;
