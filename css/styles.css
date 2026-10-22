@@ -1336,7 +1336,7 @@ button.hamburger {
     border-radius: 6px;
     padding: 4px 0;
     font-size: 13px;
-    z-index: 5000;
+    z-index: 6100;
     -webkit-app-region: no-drag;
     animation: menuFadeIn 120ms ease;
 }
@@ -2045,12 +2045,6 @@ button.hamburger {
     box-sizing: border-box;
 }
 
-@media (max-width: 1000px) {
-    .guide-stage {
-        right: 0;
-    }
-}
-
 .guide-card {
     position: relative;
     width: min(640px, 100%);
@@ -2635,6 +2629,37 @@ button.hamburger {
 
     50% {
         box-shadow: 0 0 0 7px rgba(255, 177, 59, 0.12), 0 0 28px rgba(255, 177, 59, 0.6);
+    }
+}
+
+@media (max-width: 1000px) {
+    .guide-stage {
+        padding: 12px;
+    }
+
+    .guide-eyebrow {
+        padding: 16px 18px 0;
+    }
+
+    .guide-stepper {
+        padding: 12px 10px 14px;
+    }
+
+    .guide-stepper-label {
+        display: none;
+    }
+
+    .guide-body {
+        padding: 16px 18px;
+    }
+
+    .guide-footer {
+        flex-wrap: wrap;
+        padding: 12px 18px;
+    }
+
+    .guide-cards {
+        grid-template-columns: 1fr;
     }
 }
 

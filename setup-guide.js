@@ -50,8 +50,9 @@
         paused: false,
         focus: null,
         frame: 0,
+        refresh: 0,
         returnFocus: null,
-        accountCount: 0,
+        stopPointer: null,
     };
 
     let steps = [];
@@ -149,7 +150,6 @@
             Promise.resolve(window.electron.auth?.status?.()).catch(() => null),
         ]);
         const jagex = jagexStatus(accounts);
-        state.accountCount = jagex.count;
         setStatus('guide-jagex-status', jagex);
         document.querySelectorAll('[data-action="jagex-login"]').forEach((button) => {
             button.textContent = jagex.count > 0 ? 'Add another Jagex account' : 'Log in with Jagex now';
@@ -172,6 +172,7 @@
 
     const renderStepper = () => {
         const stepper = $('guide-stepper');
+        const hadFocus = stepper.contains(document.activeElement);
         stepper.replaceChildren(
             ...steps.map((step, index) => {
                 const item = document.createElement('li');
@@ -199,6 +200,7 @@
                 return item;
             })
         );
+        if (hadFocus) stepper.querySelector('[aria-current="step"]')?.focus();
     };
 
     const render = () => {
@@ -254,22 +256,37 @@
         if (event.key === 'ArrowLeft' && state.index > 0) go(state.index - 1);
     };
 
+    const refreshTargets = () => {
+        refreshShowButtons();
+        if (currentStep()?.querySelector('.guide-active')) return;
+        const target = stepDefault();
+        if (target !== state.focus) spotlight(target);
+    };
+
     const showOverlay = () => {
+        stopPointer();
         $('guide-resume').classList.add('guide-hidden');
-        $('guide-ring').classList.remove('pointing');
         $('setup-guide').classList.remove('guide-hidden');
         syncSidebarWidth();
         document.addEventListener('keydown', onKeydown, true);
+        clearInterval(state.refresh);
+        state.refresh = setInterval(refreshTargets, 500);
     };
 
     const hideOverlay = () => {
         $('setup-guide').classList.add('guide-hidden');
         document.removeEventListener('keydown', onKeydown, true);
+        clearInterval(state.refresh);
+        state.refresh = 0;
     };
 
+    const readProperties = () =>
+        typeof window.withProperties === 'function'
+            ? window.withProperties((properties) => properties)
+            : window.electron.readProperties();
+
     const syncHideCheckbox = async () => {
-        const properties = await window.electron.readProperties();
-        $('guide-hide').checked = !shouldAutoShow(properties);
+        $('guide-hide').checked = !shouldAutoShow(await readProperties());
     };
 
     const saveHidden = async (hidden) => {
@@ -297,8 +314,8 @@
         state.open = false;
         state.paused = false;
         hideOverlay();
+        stopPointer();
         $('guide-resume').classList.add('guide-hidden');
-        $('guide-ring').classList.remove('pointing');
         spotlight(null);
         const returnFocus = state.returnFocus;
         state.returnFocus = null;
@@ -315,17 +332,27 @@
         spotlight(null);
     };
 
+    const stopPointer = () => {
+        state.stopPointer?.abort();
+        state.stopPointer = null;
+        $('guide-ring').classList.remove('pointing');
+    };
+
     const clearPointer = () => {
         if (state.open) return;
-        $('guide-ring').classList.remove('pointing');
+        stopPointer();
         spotlight(null);
     };
 
     const pointAt = (element) => {
         pause();
+        stopPointer();
         $('guide-ring').classList.add('pointing');
         spotlight(element);
-        document.addEventListener('pointerdown', clearPointer, { capture: true, once: true });
+        const controller = new AbortController();
+        state.stopPointer = controller;
+        document.addEventListener('pointerdown', clearPointer, { capture: true, signal: controller.signal });
+        window.addEventListener('blur', clearPointer, { signal: controller.signal });
     };
 
     const jagexLogin = async () => {
@@ -338,11 +365,10 @@
         }
         const button = resolveTarget('add-accounts play');
         if (!button || typeof window.runJagexLogin !== 'function') return;
-        const before = state.accountCount;
         pointAt(button);
         await window.runJagexLogin(button);
-        const accounts = await Promise.resolve(window.electron.readAccounts()).catch(() => null);
-        if (state.paused && jagexStatus(accounts).count > before) open(state.index);
+        clearPointer();
+        if (state.paused) open(state.index);
     };
 
     const showAuth = (tab) => {
@@ -387,6 +413,10 @@
         spotlight(target || stepDefault());
     };
 
+    const logSaveError = (error) => {
+        window.electron.logError?.(`Failed to save the setup guide setting: ${error?.message || error}`);
+    };
+
     const init = () => {
         steps = Array.from(document.querySelectorAll('#setup-guide .guide-step'));
         if (steps.length === 0) return;
@@ -395,17 +425,20 @@
         $('guide-close')?.addEventListener('click', close);
         $('guide-back')?.addEventListener('click', () => go(state.index - 1));
         $('guide-next')?.addEventListener('click', () => {
-            if (state.index === steps.length - 1) close();
-            else go(state.index + 1);
+            if (state.index < steps.length - 1) {
+                go(state.index + 1);
+                return;
+            }
+            $('guide-hide').checked = true;
+            saveHidden(true).catch(logSaveError);
+            close();
         });
         $('guide-stepper')?.addEventListener('click', (event) => {
             const button = event.target.closest('.guide-stepper-item');
             if (button) go(Number(button.dataset.index));
         });
         $('guide-hide')?.addEventListener('change', (event) => {
-            saveHidden(event.target.checked).catch((error) => {
-                window.electron.logError?.(`Failed to save the setup guide setting: ${error?.message || error}`);
-            });
+            saveHidden(event.target.checked).catch(logSaveError);
         });
         $('guide-resume-open')?.addEventListener('click', () => open(state.index));
         $('guide-resume-dismiss')?.addEventListener('click', close);
