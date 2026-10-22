@@ -41,7 +41,8 @@ describe('ensureHwidAgentJar', () => {
     });
 
     test('downloads and writes the jar when missing', async () => {
-        const axios = jest.fn().mockResolvedValue({ data: Buffer.from('agent') });
+        const jar = Buffer.from('PK\x03\x04agent', 'latin1');
+        const axios = jest.fn().mockResolvedValue({ data: jar });
         const log = createLog();
 
         const result = await ensureHwidAgentJar({ axios, fs, log, microbotDir, filestorage: FILESTORAGE, version: VERSION });
@@ -49,8 +50,38 @@ describe('ensureHwidAgentJar', () => {
         expect(axios).toHaveBeenCalledWith(
             expect.objectContaining({ url: `${FILESTORAGE}/releases/microbot/stable/hwid-agent-${VERSION}.jar` })
         );
-        expect(fs.readFileSync(result)).toEqual(Buffer.from('agent'));
+        expect(fs.readFileSync(result)).toEqual(jar);
+        expect(fs.readdirSync(microbotDir)).toEqual([`hwid-agent-${VERSION}.jar`]);
         expect(log.info).toHaveBeenCalled();
+    });
+
+    test('refuses a download that is not a jar', async () => {
+        const axios = jest.fn().mockResolvedValue({ data: Buffer.from('<html>error</html>') });
+        const log = createLog();
+
+        const result = await ensureHwidAgentJar({ axios, fs, log, microbotDir, filestorage: FILESTORAGE, version: VERSION });
+
+        expect(result).toBeNull();
+        expect(fs.readdirSync(microbotDir)).toEqual([]);
+        expect(log.warn).toHaveBeenCalled();
+    });
+
+    test('leaves no jar behind when writing fails', async () => {
+        const axios = jest.fn().mockResolvedValue({ data: Buffer.from('PK\x03\x04agent', 'latin1') });
+        const log = createLog();
+        const failingFs = {
+            ...fs,
+            writeFileSync: (file, data) => {
+                fs.writeFileSync(file, data.subarray(0, 2));
+                throw new Error('ENOSPC: no space left on device');
+            }
+        };
+
+        const result = await ensureHwidAgentJar({ axios, fs: failingFs, log, microbotDir, filestorage: FILESTORAGE, version: VERSION });
+
+        expect(result).toBeNull();
+        expect(fs.readdirSync(microbotDir)).toEqual([]);
+        expect(hwidAgentJarPath({ fs, microbotDir, version: VERSION })).toBeNull();
     });
 
     test('returns null and logs a warning on download failure', async () => {

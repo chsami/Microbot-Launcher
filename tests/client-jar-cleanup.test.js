@@ -148,7 +148,7 @@ describe('client jar cleanup and listing with an isolated home', () => {
                 microbotDir,
                 packageJson: { version: '1.0.0' },
                 path,
-                log: { info: jest.fn(), error: jest.fn() },
+                log: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
                 dialog: {},
                 fs,
                 projectDir: path.join(__dirname, '..'),

@@ -11,15 +11,26 @@ async function ensureHwidAgentJar({ axios, fs, log, microbotDir, filestorage, ve
     const jarPath = path.join(microbotDir, candidate);
     if (fs.existsSync(jarPath)) return jarPath;
     const url = `${filestorage}/releases/microbot/stable/${candidate}`;
+    const partialPath = `${jarPath}.part`;
     try {
         const response = await axios({ method: 'get', url, responseType: 'arraybuffer' });
-        fs.writeFileSync(jarPath, response.data);
+        const data = Buffer.from(response.data);
+        if (!isZip(data)) throw new Error('downloaded file is not a jar');
+        fs.writeFileSync(partialPath, data);
+        fs.renameSync(partialPath, jarPath);
         log.info(`Downloaded HWID agent ${candidate}`);
         return jarPath;
     } catch (error) {
+        try {
+            fs.rmSync(partialPath, { force: true });
+        } catch (_) {}
         log.warn(`HWID agent not available (${version}): ${error.message}`);
         return null;
     }
+}
+
+function isZip(data) {
+    return data.length >= 4 && data[0] === 0x50 && data[1] === 0x4b && data[2] === 0x03 && data[3] === 0x04;
 }
 
 function hwidAgentJarPath({ fs, microbotDir, version }) {
