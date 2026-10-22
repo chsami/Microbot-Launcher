@@ -16,8 +16,15 @@
 <body>
     <div id="auth-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true">
         <div class="auth-card">
+            <button id="auth-dismiss" class="auth-close auth-hidden" type="button" aria-label="Close">
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18M6 6l12 12"></path>
+                </svg>
+            </button>
             <h1 class="auth-title">Microbot Launcher</h1>
-            <p class="auth-subtitle">Sign in to continue</p>
+            <p id="auth-subtitle" class="auth-subtitle">Sign in to continue</p>
+            <button id="auth-account-info" class="auth-link auth-link-center" type="button">What is a Microbot account?</button>
             <div class="auth-tabs" role="tablist">
                 <button id="auth-tab-signin" class="auth-tab active" data-target="signin" role="tab"
                     aria-selected="true">
@@ -32,6 +39,7 @@
                 <input id="signin-email" name="email" type="email" autocomplete="username" required />
                 <label for="signin-password">Password</label>
                 <input id="signin-password" name="password" type="password" autocomplete="current-password" required />
+                <button id="auth-forgot" class="auth-link auth-hidden" type="button">Forgot password?</button>
                 <button id="signin-submit" type="submit" class="auth-submit">Sign In</button>
             </form>
             <form id="signup-form" class="auth-form auth-hidden" novalidate>
@@ -39,13 +47,45 @@
                 <input id="signup-email" name="email" type="email" autocomplete="email" required />
                 <label for="signup-password">Password</label>
                 <input id="signup-password" name="password" type="password" autocomplete="new-password" minlength="8"
-                    required />
+                    required aria-describedby="signup-password-hint" />
+                <p id="signup-password-hint" class="auth-hint" aria-live="polite">At least 8 characters.</p>
+                <label for="signup-confirm-password">Confirm password</label>
+                <input id="signup-confirm-password" name="confirm-password" type="password"
+                    autocomplete="new-password" minlength="8" required aria-describedby="signup-confirm-hint" />
+                <p id="signup-confirm-hint" class="auth-hint" aria-live="polite"></p>
                 <button id="signup-submit" type="submit" class="auth-submit">Create Account</button>
             </form>
             <p id="auth-error" class="auth-error" role="alert" aria-live="polite"></p>
+            <button id="auth-resend" class="auth-cancel auth-hidden" type="button">Resend verification email</button>
         </div>
     </div>
 
+    <div id="account-info-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
+        aria-labelledby="account-info-title">
+        <div class="auth-card account-info-card">
+            <button id="account-info-close" class="auth-close" type="button" aria-label="Close">
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18M6 6l12 12"></path>
+                </svg>
+            </button>
+            <h1 id="account-info-title" class="auth-title">Microbot account</h1>
+            <p class="auth-subtitle">Your account for Microbot itself: this launcher and the Microbot dashboard.</p>
+            <dl class="account-info-list">
+                <dt>Is it my RuneScape or Jagex account?</dt>
+                <dd>No. It's a separate account with its own email and password, so don't reuse your Jagex password.
+                    Signing in doesn't share your game accounts with Microbot.</dd>
+                <dt>What do I get?</dt>
+                <dd>One sign-in for the launcher and the dashboard at dashboard.microbot.cloud. Coming soon: back up your
+                    profiles and use them on another PC.</dd>
+                <dt>Do I need one?</dt>
+                <dd>No. The launcher and the client work without an account. Signing in is optional.</dd>
+                <dt>What do you store?</dt>
+                <dd>Your email address and your password in hashed form. Nothing else is needed.</dd>
+            </dl>
+            <button id="account-info-create" class="auth-submit" type="button">Create a free account</button>
+        </div>
+    </div>
     <div id="change-password-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
         aria-labelledby="change-password-title">
         <div class="auth-card">
@@ -104,6 +144,58 @@
             <button id="proxy-manager-close" class="auth-cancel" type="button">Done</button>
         </div>
     </div>
+    <div id="profiles-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
+        aria-labelledby="profiles-title" aria-describedby="profiles-summary">
+        <div class="auth-card profiles-card">
+            <header class="profiles-header">
+                <div>
+                    <h1 id="profiles-title" class="auth-title">Profiles</h1>
+                    <p id="profiles-summary" class="profiles-summary"></p>
+                </div>
+                <button id="profiles-new" class="profiles-new-button" type="button">New profile</button>
+            </header>
+
+            <section class="profiles-cloud" aria-labelledby="profiles-cloud-title">
+                <div class="profiles-cloud-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M7 18a4.5 4.5 0 0 1-.9-8.9A6 6 0 0 1 17.7 8 4.5 4.5 0 0 1 17 18H7z"></path>
+                    </svg>
+                </div>
+                <div class="profiles-cloud-text">
+                    <h2 id="profiles-cloud-title">Back up your profiles</h2>
+                    <p id="profiles-cloud-text">Sign in to keep your profiles in the cloud and use them on any PC.</p>
+                </div>
+                <button id="profiles-sign-in" class="profiles-cloud-button" type="button">Sign in</button>
+            </section>
+
+            <p id="profiles-preview-note" class="profiles-note">
+                Preview: changes on this screen are not saved yet.
+            </p>
+
+            <div class="profiles-search">
+                <input id="profiles-search" type="search" placeholder="Search profiles" autocomplete="off"
+                    aria-label="Search profiles">
+            </div>
+
+            <form id="profiles-new-form" class="profiles-new-form auth-hidden" novalidate>
+                <label for="profiles-new-input">Profile name</label>
+                <div class="profiles-inline-row">
+                    <input id="profiles-new-input" type="text" maxlength="32" autocomplete="off" spellcheck="false"
+                        placeholder="For example: Ironman" />
+                    <button type="submit" class="profiles-inline-primary">Create</button>
+                    <button type="button" id="profiles-new-cancel" class="profiles-inline-secondary">Cancel</button>
+                </div>
+            </form>
+
+            <ul id="profiles-list" class="profiles-list" aria-label="Profiles"></ul>
+            <p id="profiles-empty" class="profiles-empty auth-hidden">
+                No profiles match your search.
+            </p>
+            <p id="profiles-error" class="auth-error" role="alert" aria-live="polite"></p>
+            <button id="profiles-close" class="auth-cancel" type="button">Done</button>
+        </div>
+    </div>
     <div id="loader-container">
         <h1>Download and Unpack Progress</h1>
         <div id="loader">
@@ -141,11 +233,6 @@
                 </svg>
             </button>
             <span class="titlebar-title">Microbot Launcher - 0.0.0.0</span>
-            <div id="user-session" class="user-session" aria-live="polite">
-                <span id="session-email" class="session-email"></span>
-                <button id="change-password-btn" class="session-action" type="button">Change Password</button>
-                <button id="signout-btn" class="session-action" type="button">Sign Out</button>
-            </div>
             <div class="titlebar-controls">
                 <button class="titlebar-button" id="minimize-btn">
                     <svg width="20px" height="20px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"
@@ -197,6 +284,28 @@
                         src="https://files.microbot.cloud/assets/microbot-launcher/images/microbot_transparent.png"
                         width="100" height="100">
                 </div>
+                <section id="user-session" class="account-card hidden" aria-live="polite">
+                    <div id="account-avatar" class="account-avatar" aria-hidden="true"></div>
+                    <div class="account-text">
+                        <span class="account-name-row">
+                            <span id="session-email" class="account-name"></span>
+                            <button id="account-info-btn" class="account-info-button" type="button"
+                                title="What is a Microbot account?" aria-label="What is a Microbot account?">
+                                <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <path d="M12 16v-4M12 8h.01"></path>
+                                </svg>
+                            </button>
+                        </span>
+                        <span id="session-hint" class="account-hint"></span>
+                    </div>
+                    <div class="account-actions">
+                        <button id="signin-btn" class="account-action primary hidden" type="button">Sign in</button>
+                        <button id="change-password-btn" class="account-action hidden" type="button">Change password</button>
+                        <button id="signout-btn" class="account-action hidden" type="button">Sign out</button>
+                    </div>
+                </section>
                 <div class="play-buttons">
                     <button id="play-no-jagex-account" class="play-button loadingButton">
                         Play Normal Account
@@ -227,9 +336,19 @@
                     <select id="character" class="account-select-hidden" aria-hidden="true" tabindex="-1"></select>
 
                     <label for="profile">Profile</label>
-                    <select id="profile">
-                        <option value="default">Default</option>
-                    </select>
+                    <div class="profile-select-row">
+                        <select id="profile">
+                            <option value="default">Default</option>
+                        </select>
+                        <button id="manage-profiles" class="refresh-accounts-btn" type="button"
+                            title="Create, rename, duplicate and back up your profiles" aria-label="Manage profiles">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 3l9 5-9 5-9-5 9-5z"></path>
+                                <path d="M3 13l9 5 9-5"></path>
+                            </svg>
+                        </button>
+                    </div>
                     <label for="client-ram">Client RAM</label>
                     <select id="client-ram">
                         <option value="256m">256 MB</option>
@@ -275,6 +394,7 @@
         script.src = `renderer.js?cache-bust=${Date.now()}`;
         document.head.appendChild(script);
     </script>
+    <script src="profiles-screen.js"></script>
 
 
 </body>

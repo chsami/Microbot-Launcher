@@ -80,7 +80,16 @@ contextBridge.exposeInMainWorld('electron', {
         signout: () => ipcRenderer.invoke('auth:signout'),
         changePassword: (payload) =>
             ipcRenderer.invoke('auth:changepw', payload),
+        resendVerification: (payload) =>
+            ipcRenderer.invoke('auth:resend-verification', payload),
+        requestPasswordReset: (payload) =>
+            ipcRenderer.invoke('auth:request-password-reset', payload),
         status: () => ipcRenderer.invoke('auth:status')
+    },
+    alerts: {
+        status: (profiles) => ipcRenderer.invoke('alerts:status', profiles),
+        setEnabled: (profile, enabled) =>
+            ipcRenderer.invoke('alerts:set-enabled', profile, enabled)
     },
     ipcRenderer: {
         send: (channel, data) => ipcRenderer.send(channel, data),

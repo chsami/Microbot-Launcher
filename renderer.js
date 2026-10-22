@@ -2,6 +2,7 @@ let accounts = [];
 let restoringSelectedAccount = false;
 let iii = null;
 let lastAccountsReadError = null;
+let accountInfoReturnFocus = null;
 let latestClientVersion = null;
 let cleanupAccountsDropdownListeners = null;
 
@@ -9,7 +10,12 @@ const DEFAULT_CLIENT_RAM = '1g';
 let launcherInitialized = false;
 let authUiReady = false;
 let mockAuthEnabled = false;
+let apiAuthEnabled = false;
 let currentSessionEmail = '';
+
+function authAvailable() {
+    return mockAuthEnabled || apiAuthEnabled;
+}
 
 function $(id) {
     return document.getElementById(id);
@@ -50,6 +56,82 @@ function setAuthError(message, elementId = 'auth-error', isSuccess = false) {
     toggleClass(element, 'success', Boolean(isSuccess && message));
 }
 
+const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MAX_BYTES = 72;
+const EYE_ICON =
+    '<svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+const EYE_OFF_ICON =
+    '<svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 5.1A10.9 10.9 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.6 3.6M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"></path><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"></path><path d="M2 2l20 20"></path></svg>';
+
+function passwordLengthProblem(password) {
+    if (password.length < PASSWORD_MIN_LENGTH) return 'short';
+    if (new TextEncoder().encode(password).length > PASSWORD_MAX_BYTES) return 'long';
+    return null;
+}
+
+function setPasswordVisible(input, button, visible) {
+    input.type = visible ? 'text' : 'password';
+    button.innerHTML = visible ? EYE_OFF_ICON : EYE_ICON;
+    const label = visible ? 'Hide password' : 'Show password';
+    button.setAttribute('aria-label', label);
+    button.setAttribute('aria-pressed', visible ? 'true' : 'false');
+    button.title = label;
+}
+
+function setupPasswordToggles() {
+    document.querySelectorAll('.auth-form input[type="password"]').forEach((input) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'password-field';
+        input.parentNode.insertBefore(wrapper, input);
+        wrapper.appendChild(input);
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'password-toggle';
+        wrapper.appendChild(button);
+        setPasswordVisible(input, button, false);
+        button.addEventListener('click', () => {
+            setPasswordVisible(input, button, input.type === 'password');
+            input.focus();
+        });
+        input.form?.addEventListener('reset', () => setPasswordVisible(input, button, false));
+    });
+}
+
+function setHint(element, text, state) {
+    if (!element) return;
+    element.textContent = text;
+    toggleClass(element, 'is-error', state === 'error');
+    toggleClass(element, 'is-ok', state === 'ok');
+}
+
+function updateSignupPasswordChecks() {
+    const passwordInput = $('signup-password');
+    const confirmInput = $('signup-confirm-password');
+    if (!passwordInput || !confirmInput) return;
+    const password = passwordInput.value;
+    const confirmPassword = confirmInput.value;
+    const problem = password ? passwordLengthProblem(password) : null;
+    const hint = $('signup-password-hint');
+    if (!password) {
+        setHint(hint, 'At least 8 characters.', null);
+    } else if (problem === 'short') {
+        const missing = PASSWORD_MIN_LENGTH - password.length;
+        setHint(hint, `${missing} more character${missing === 1 ? '' : 's'} needed (at least 8).`, 'error');
+    } else if (problem === 'long') {
+        setHint(hint, 'Too long. Use at most 72 characters.', 'error');
+    } else {
+        setHint(hint, 'Password length looks good.', 'ok');
+    }
+    passwordInput.setAttribute('aria-invalid', problem ? 'true' : 'false');
+
+    const confirmHint = $('signup-confirm-hint');
+    const mismatch = Boolean(confirmPassword) && confirmPassword !== password;
+    if (!confirmPassword) setHint(confirmHint, '', null);
+    else if (mismatch) setHint(confirmHint, "Passwords don't match yet.", 'error');
+    else setHint(confirmHint, 'Passwords match.', 'ok');
+    confirmInput.setAttribute('aria-invalid', mismatch ? 'true' : 'false');
+}
+
 function setActiveAuthTab(target) {
     const signinTab = $('auth-tab-signin');
     const signupTab = $('auth-tab-signup');
@@ -63,7 +145,22 @@ function setActiveAuthTab(target) {
     if (signupTab) signupTab.setAttribute('aria-selected', isSignin ? 'false' : 'true');
     toggleClass(signinForm, 'auth-hidden', !isSignin);
     toggleClass(signupForm, 'auth-hidden', isSignin);
+    const subtitle = $('auth-subtitle');
+    if (subtitle) {
+        subtitle.textContent = isSignin ? 'Sign in to your Microbot account' : 'Create your Microbot account';
+    }
+    toggleClass($('auth-resend'), 'auth-hidden', true);
     setAuthError('');
+}
+
+function authModalDismissible() {
+    return !mockAuthEnabled;
+}
+
+function onAuthModalKeydown(event) {
+    if (event.key === 'Escape' && authModalDismissible()) {
+        hideAuthModal();
+    }
 }
 
 function showAuthModal() {
@@ -73,13 +170,49 @@ function showAuthModal() {
     $('signin-form')?.reset();
     $('signup-form')?.reset();
     setActiveAuthTab('signin');
+    toggleClass($('auth-forgot'), 'auth-hidden', !apiAuthEnabled);
+    toggleClass($('auth-dismiss'), 'auth-hidden', !authModalDismissible());
+    document.addEventListener('keydown', onAuthModalKeydown);
+    setTimeout(() => $('signin-email')?.focus(), 0);
 }
 
 function hideAuthModal() {
     const modal = $('auth-modal');
     if (!modal) return;
     modal.classList.add('auth-hidden');
+    document.removeEventListener('keydown', onAuthModalKeydown);
     setAuthError('');
+}
+
+function onAccountInfoKeydown(event) {
+    if (event.key !== 'Escape') return;
+    event.stopImmediatePropagation();
+    hideAccountInfo();
+}
+
+function showAccountInfo() {
+    const modal = $('account-info-modal');
+    if (!modal) return;
+    toggleClass($('account-info-create'), 'auth-hidden', Boolean(currentSessionEmail) || !authAvailable());
+    accountInfoReturnFocus = document.activeElement;
+    modal.classList.remove('auth-hidden');
+    window.addEventListener('keydown', onAccountInfoKeydown, true);
+    setTimeout(() => $('account-info-close')?.focus(), 0);
+}
+
+function hideAccountInfo() {
+    $('account-info-modal')?.classList.add('auth-hidden');
+    window.removeEventListener('keydown', onAccountInfoKeydown, true);
+    const returnFocus = accountInfoReturnFocus;
+    accountInfoReturnFocus = null;
+    if (returnFocus?.isConnected) returnFocus.focus();
+}
+
+function showCreateAccountFromInfo() {
+    hideAccountInfo();
+    if ($('auth-modal')?.classList.contains('auth-hidden')) showAuthModal();
+    setActiveAuthTab('signup');
+    setTimeout(() => $('signup-email')?.focus(), 0);
 }
 
 function showChangePasswordModal() {
@@ -102,23 +235,83 @@ function hideChangePasswordModal() {
     setAuthError('', 'change-password-error');
 }
 
+const ACCOUNT_ICON =
+    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>';
+
 function updateSessionEmail(email) {
     currentSessionEmail = email || '';
     const sessionContainer = $('user-session');
     const emailLabel = $('session-email');
     if (!sessionContainer || !emailLabel) return;
-    if (!mockAuthEnabled || !currentSessionEmail) {
-        sessionContainer.classList.add('hidden');
-        emailLabel.textContent = '';
-    } else {
-        emailLabel.textContent = currentSessionEmail;
-        sessionContainer.classList.remove('hidden');
+    const signedIn = Boolean(currentSessionEmail);
+    toggleClass(sessionContainer, 'hidden', !authAvailable() || (mockAuthEnabled && !signedIn));
+    toggleClass(sessionContainer, 'signed-in', signedIn);
+    emailLabel.textContent = signedIn ? currentSessionEmail : 'Not signed in';
+    emailLabel.title = signedIn ? currentSessionEmail : '';
+    const hint = $('session-hint');
+    if (hint) hint.textContent = signedIn ? 'Microbot account' : 'Sign in or create a free account';
+    const avatar = $('account-avatar');
+    if (avatar) {
+        if (signedIn) avatar.textContent = currentSessionEmail.charAt(0).toUpperCase();
+        else avatar.innerHTML = ACCOUNT_ICON;
+    }
+    toggleClass($('signin-btn'), 'hidden', signedIn);
+    toggleClass($('signout-btn'), 'hidden', !signedIn);
+    toggleClass($('change-password-btn'), 'hidden', !signedIn || !mockAuthEnabled);
+}
+
+function signinEmail() {
+    return $('signin-email')?.value?.trim() || '';
+}
+
+async function handleResendVerification() {
+    const email = signinEmail();
+    const button = $('auth-resend');
+    setButtonLoading(button, true, 'Sending...');
+    try {
+        const result = await window.electron.auth.resendVerification({ email });
+        if (result?.success) {
+            setAuthError(`We sent a new verification link to ${email}.`, 'auth-error', true);
+        } else {
+            setAuthError(result?.error || 'Could not send the verification email.');
+        }
+    } catch (error) {
+        setAuthError(error?.message || 'Could not send the verification email.');
+    } finally {
+        setButtonLoading(button, false);
+    }
+}
+
+async function handleForgotPassword() {
+    const email = signinEmail();
+    if (!email) {
+        setAuthError('Enter your email above, then click "Forgot password?" again.');
+        $('signin-email')?.focus();
+        return;
+    }
+    const button = $('auth-forgot');
+    setButtonLoading(button, true, 'Sending...');
+    try {
+        const result = await window.electron.auth.requestPasswordReset({ email });
+        if (result?.success) {
+            setAuthError(
+                `If an account exists for ${email}, we sent a password reset link. It expires in 15 minutes.`,
+                'auth-error',
+                true
+            );
+        } else {
+            setAuthError(result?.error || 'Could not send the reset email.');
+        }
+    } catch (error) {
+        setAuthError(error?.message || 'Could not send the reset email.');
+    } finally {
+        setButtonLoading(button, false);
     }
 }
 
 async function handleSignIn(event) {
     event.preventDefault();
-    if (!mockAuthEnabled) {
+    if (!authAvailable()) {
         hideAuthModal();
         await ensureLauncherInitialized();
         return;
@@ -130,6 +323,7 @@ async function handleSignIn(event) {
         return;
     }
     setAuthError('');
+    toggleClass($('auth-resend'), 'auth-hidden', true);
     const button = $('signin-submit');
     setButtonLoading(button, true, 'Signing In...');
     try {
@@ -138,6 +332,7 @@ async function handleSignIn(event) {
             await refreshAuthStatus();
         } else {
             setAuthError(result?.error || 'Unable to sign in');
+            toggleClass($('auth-resend'), 'auth-hidden', result?.code !== 'unverified');
         }
     } catch (error) {
         setAuthError(error?.message || 'Unable to sign in');
@@ -148,7 +343,7 @@ async function handleSignIn(event) {
 
 async function handleSignUp(event) {
     event.preventDefault();
-    if (!mockAuthEnabled) {
+    if (!authAvailable()) {
         hideAuthModal();
         await ensureLauncherInitialized();
         return;
@@ -159,8 +354,16 @@ async function handleSignUp(event) {
         setAuthError('Email and password are required');
         return;
     }
-    if (password.length < 8) {
-        setAuthError('Password must be at least 8 characters.');
+    const lengthProblem = passwordLengthProblem(password);
+    if (lengthProblem) {
+        setAuthError(
+            lengthProblem === 'short' ? 'Password must be at least 8 characters.' : 'Password must be at most 72 characters.'
+        );
+        return;
+    }
+    const confirmPassword = $('signup-confirm-password')?.value || '';
+    if (password !== confirmPassword) {
+        setAuthError('Passwords do not match.');
         return;
     }
     setAuthError('');
@@ -168,7 +371,20 @@ async function handleSignUp(event) {
     setButtonLoading(button, true, 'Creating Account...');
     try {
         const result = await window.electron.auth.signup({ email, password });
-        if (result?.success) {
+        if (result?.pendingVerification) {
+            setActiveAuthTab('signin');
+            $('signup-form')?.reset();
+            const signinEmailInput = $('signin-email');
+            if (signinEmailInput) signinEmailInput.value = email;
+            setAuthError(
+                result.verificationEmailSent
+                    ? `Account created. We sent a verification link to ${email}. Verify your email, then sign in here.`
+                    : `Account created, but we couldn't send the verification email. Click "Resend verification email" below.`,
+                'auth-error',
+                result.verificationEmailSent
+            );
+            toggleClass($('auth-resend'), 'auth-hidden', false);
+        } else if (result?.success) {
             await refreshAuthStatus();
         } else {
             setAuthError(result?.error || 'Unable to create account');
@@ -181,7 +397,7 @@ async function handleSignUp(event) {
 }
 
 async function handleSignOut() {
-    if (!mockAuthEnabled) return;
+    if (!authAvailable()) return;
     const button = $('signout-btn');
     setButtonLoading(button, true, 'Signing Out...');
     try {
@@ -243,12 +459,24 @@ function setupAuthUI() {
     authUiReady = true;
     $('signin-form')?.addEventListener('submit', handleSignIn);
     $('signup-form')?.addEventListener('submit', handleSignUp);
+    setupPasswordToggles();
+    $('signup-password')?.addEventListener('input', updateSignupPasswordChecks);
+    $('signup-confirm-password')?.addEventListener('input', updateSignupPasswordChecks);
+    $('signup-form')?.addEventListener('reset', () => setTimeout(updateSignupPasswordChecks, 0));
     $('auth-tab-signin')?.addEventListener('click', () => setActiveAuthTab('signin'));
     $('auth-tab-signup')?.addEventListener('click', () => setActiveAuthTab('signup'));
     $('signout-btn')?.addEventListener('click', handleSignOut);
     $('change-password-btn')?.addEventListener('click', showChangePasswordModal);
     $('change-password-cancel')?.addEventListener('click', hideChangePasswordModal);
     $('change-password-form')?.addEventListener('submit', handleChangePassword);
+    $('signin-btn')?.addEventListener('click', showAuthModal);
+    $('auth-dismiss')?.addEventListener('click', hideAuthModal);
+    $('account-info-btn')?.addEventListener('click', showAccountInfo);
+    $('auth-account-info')?.addEventListener('click', showAccountInfo);
+    $('account-info-close')?.addEventListener('click', hideAccountInfo);
+    $('account-info-create')?.addEventListener('click', showCreateAccountFromInfo);
+    $('auth-resend')?.addEventListener('click', handleResendVerification);
+    $('auth-forgot')?.addEventListener('click', handleForgotPassword);
     setActiveAuthTab('signin');
 }
 
@@ -257,26 +485,22 @@ async function refreshAuthStatus() {
     try {
         status = await window.electron.auth.status();
     } catch (error) {
-        status = { authenticated: true, mock: false };
+        status = { authenticated: false, mock: false, api: false };
     }
 
     mockAuthEnabled = Boolean(status?.mock);
-    if (!mockAuthEnabled) {
-        hideAuthModal();
-        hideChangePasswordModal();
-        updateSessionEmail(status?.user?.email || '');
-        await ensureLauncherInitialized();
+    apiAuthEnabled = Boolean(status?.api);
+
+    if (mockAuthEnabled && !status?.authenticated) {
+        showAuthModal();
+        updateSessionEmail('');
         return;
     }
 
-    if (status?.authenticated) {
-        hideAuthModal();
-        updateSessionEmail(status?.user?.email || '');
-        await ensureLauncherInitialized();
-    } else {
-        showAuthModal();
-        updateSessionEmail('');
-    }
+    hideAuthModal();
+    if (!status?.authenticated) hideChangePasswordModal();
+    updateSessionEmail(status?.authenticated ? status?.user?.email || '' : '');
+    await ensureLauncherInitialized();
 }
 
 async function ensureLauncherInitialized() {
