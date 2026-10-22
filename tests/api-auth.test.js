@@ -290,6 +290,96 @@ describe('api-auth', () => {
         });
     });
 
+    describe('authorized requests', () => {
+        const signIn = async () => {
+            axios.post.mockResolvedValueOnce({ data: { token: 'access', refreshToken: 'refresh' } });
+            const ipcMain = new FakeIpcMain();
+            const auth = setupApiAuth({ ipcMain, log, axios, fs, safeStorage, sessionFile, baseUrl: 'https://api.test/' });
+            await ipcMain.invoke('auth:signin', { email: 'a@b.co', password: 'secret123' });
+            return { ipcMain, auth };
+        };
+
+        beforeEach(() => {
+            axios.request = jest.fn();
+        });
+
+        test('send the access token as a bearer header', async () => {
+            const { auth } = await signIn();
+            axios.request.mockResolvedValue({ data: [] });
+
+            await auth.request({ method: 'get', path: '/api/alerts/client-links' });
+
+            expect(auth.email()).toBe('a@b.co');
+            expect(axios.request).toHaveBeenCalledWith(expect.objectContaining({
+                method: 'get',
+                url: 'https://api.test/api/alerts/client-links',
+                headers: { Authorization: 'Bearer access' }
+            }));
+        });
+
+        test('refresh an expired access token once and retry', async () => {
+            const { auth } = await signIn();
+            axios.post.mockResolvedValueOnce({ data: { token: 'access-2', refreshToken: 'refresh-2' } });
+            axios.request.mockRejectedValueOnce(httpError(401)).mockResolvedValueOnce({ data: { ok: true } });
+
+            const { data } = await auth.request({ method: 'post', path: '/api/alerts/client-links', data: { label: 'Main' } });
+
+            expect(data).toEqual({ ok: true });
+            expect(axios.post).toHaveBeenLastCalledWith(
+                'https://api.test/api/auth/refresh-token',
+                { accessToken: 'access', refreshToken: 'refresh' },
+                expect.any(Object)
+            );
+            expect(axios.request.mock.calls[1][0].headers).toEqual({ Authorization: 'Bearer access-2' });
+        });
+
+        test('concurrent expired requests share one refresh', async () => {
+            const { auth } = await signIn();
+            let finishRefresh;
+            axios.post.mockImplementationOnce(() => new Promise((resolve) => {
+                finishRefresh = () => resolve({ data: { token: 'access-2', refreshToken: 'refresh-2' } });
+            }));
+            axios.request
+                .mockRejectedValueOnce(httpError(401))
+                .mockRejectedValueOnce(httpError(401))
+                .mockResolvedValue({ data: { ok: true } });
+
+            const first = auth.request({ method: 'get', path: '/api/alerts/client-links' });
+            const second = auth.request({ method: 'get', path: '/api/alerts/client-links' });
+            await flush();
+            finishRefresh();
+
+            await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+            const refreshCalls = axios.post.mock.calls.filter(([url]) => url.endsWith('/refresh-token'));
+            expect(refreshCalls).toHaveLength(1);
+            expect(axios.request.mock.calls.slice(2).map(([config]) => config.headers)).toEqual([
+                { Authorization: 'Bearer access-2' },
+                { Authorization: 'Bearer access-2' }
+            ]);
+        });
+
+        test('reject with 401 when the session cannot be refreshed', async () => {
+            const { ipcMain, auth } = await signIn();
+            axios.post.mockRejectedValueOnce(httpError(400, 'Invalid or expired refresh token'));
+            axios.request.mockRejectedValue(httpError(401));
+
+            await expect(auth.request({ method: 'get', path: '/api/alerts/client-links' })).rejects.toMatchObject({
+                response: { status: 401 }
+            });
+            expect((await ipcMain.invoke('auth:status')).authenticated).toBe(false);
+            expect(auth.email()).toBeNull();
+        });
+
+        test('reject with 401 when signed out', async () => {
+            const auth = setupApiAuth({ ipcMain: new FakeIpcMain(), log, axios, fs, safeStorage, sessionFile, baseUrl: 'https://api.test' });
+
+            await expect(auth.request({ method: 'get', path: '/api/alerts/client-links' })).rejects.toMatchObject({
+                response: { status: 401 }
+            });
+            expect(axios.request).not.toHaveBeenCalled();
+        });
+    });
+
     test('nothing is written to disk when encryption is unavailable', async () => {
         axios.post.mockResolvedValue({ data: { token: 'access', refreshToken: 'refresh' } });
         const ipcMain = new FakeIpcMain();

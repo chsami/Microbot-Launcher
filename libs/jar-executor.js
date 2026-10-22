@@ -9,6 +9,7 @@ module.exports = async function (deps) {
     let managedJavaReady = null;
     const { toProxyUri } = require(path.join(__dirname, 'login-proxy.js'));
     const STARTUP_WINDOW_MS = deps.startupWindowMs || 20000;
+    const CLIENT_TOKEN_ENV = 'MICROBOT_CLIENT_TOKEN';
     const MAX_CAPTURED_STDERR = 64 * 1024;
 
     const cliRamValue = extractRamValue(process.argv);
@@ -81,7 +82,13 @@ module.exports = async function (deps) {
                     );
                 }
 
-                checkJavaAndRunJar(commandArgs, accountSecrets(account), progressFor(event));
+                const token = await alertToken(account && account.profile);
+                checkJavaAndRunJar(
+                    commandArgs,
+                    withToken(accountSecrets(account), token),
+                    progressFor(event),
+                    clientEnv(token)
+                );
                 return { success: true };
             } catch (error) {
                 log.error(error.message);
@@ -113,6 +120,7 @@ module.exports = async function (deps) {
                 return { error: err.message };
             }
 
+            let preferredProfile = null;
             if (
                 fs.existsSync(
                     path.join(microbotDir, 'non-jagex-preferred-profile.json')
@@ -130,6 +138,7 @@ module.exports = async function (deps) {
                     );
                     if (profileData?.profile && profileData.profile !== 'default') {
                         commandArgs.push(`-profile=${profileData.profile}`);
+                        preferredProfile = profileData.profile;
                     }
                 } catch (error) {
                     log.error(
@@ -147,10 +156,29 @@ module.exports = async function (deps) {
                 );
             }
 
-            checkJavaAndRunJar(commandArgs, [], progressFor(event));
+            const token = await alertToken(preferredProfile);
+            checkJavaAndRunJar(commandArgs, withToken([], token), progressFor(event), clientEnv(token));
             return { success: true };
         }
     );
+
+    async function alertToken(profile) {
+        if (!deps.alerts) return null;
+        try {
+            return await deps.alerts.tokenForProfile(profile);
+        } catch (error) {
+            log.warn(`Could not prepare bot alerts: ${error.message}`);
+            return null;
+        }
+    }
+
+    function clientEnv(token) {
+        return token ? { ...process.env, [CLIENT_TOKEN_ENV]: token } : null;
+    }
+
+    function withToken(secrets, token) {
+        return token ? [...secrets, token] : secrets;
+    }
 
     function probeJava(callback, command = 'java') {
         let called = false;
@@ -294,7 +322,7 @@ module.exports = async function (deps) {
             .catch((err) => log.error(`Failed to show launch problem: ${err.message}`));
     }
 
-    function executeJar(executable, commandArgs, runtime, secrets) {
+    function executeJar(executable, commandArgs, runtime, secrets, env) {
         const loggedArgs = commandArgs.map((arg) => arg.replace(/^(-(?:profile|proxy)=).*/s, '$1***'));
         log.info(`${executable} ${javaRuntime.redactText(loggedArgs.join(' '), { homeDir: homeDirectories() })}`);
 
@@ -323,7 +351,8 @@ module.exports = async function (deps) {
         try {
             jarProcess = spawn(executable, commandArgs, {
                 detached: true,
-                ...extraArgs
+                ...extraArgs,
+                ...(env ? { env } : {})
             });
 
             /**
@@ -385,18 +414,18 @@ module.exports = async function (deps) {
         }
     }
 
-    function checkJavaAndRunJar(commandArgs, secrets = [], progress = () => {}) {
+    function checkJavaAndRunJar(commandArgs, secrets = [], progress = () => {}, env = null) {
         probeJava((result) => {
             if (!needsManagedJava(result)) {
-                launchWithRuntime(result, commandArgs, secrets);
+                launchWithRuntime(result, commandArgs, secrets, env);
                 return;
             }
             probeManagedJava((managed) => {
                 if (!needsManagedJava(managed)) {
-                    launchWithRuntime(managed, commandArgs, secrets);
+                    launchWithRuntime(managed, commandArgs, secrets, env);
                     return;
                 }
-                offerManagedInstall(commandArgs, secrets, progress);
+                offerManagedInstall(commandArgs, secrets, progress, env);
             });
         });
     }
@@ -420,7 +449,7 @@ module.exports = async function (deps) {
         return new Promise((resolve) => probeJava(resolve, command));
     }
 
-    function launchWithRuntime({ runtime, problem }, commandArgs, secrets) {
+    function launchWithRuntime({ runtime, problem }, commandArgs, secrets, env) {
         if (problem) {
             showLaunchProblem(problem, { stderr: problem.stderr, secrets });
             return;
@@ -451,7 +480,7 @@ module.exports = async function (deps) {
         }
         const executable = javaRuntime.launcherExecutable(runtime, process.platform, fs.existsSync);
         log.info('Java runtime is compatible, running the JAR...');
-        executeJar(executable, launchArgs, runtime, secrets);
+        executeJar(executable, launchArgs, runtime, secrets, env);
     }
 
     function obtainManagedJava(progress) {
@@ -463,9 +492,9 @@ module.exports = async function (deps) {
         return managedJavaReady;
     }
 
-    function offerManagedInstall(commandArgs, secrets, progress) {
+    function offerManagedInstall(commandArgs, secrets, progress, env) {
         obtainManagedJava(progress).then((result) => {
-            if (result) launchWithRuntime(result, commandArgs, secrets);
+            if (result) launchWithRuntime(result, commandArgs, secrets, env);
         });
     }
 

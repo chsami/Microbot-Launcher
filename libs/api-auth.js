@@ -57,7 +57,18 @@ module.exports = function setupApiAuth(deps) {
         return null;
     };
 
-    const refresh = async () => {
+    let refreshing = null;
+
+    const refresh = () => {
+        if (!refreshing) {
+            refreshing = refreshSession().finally(() => {
+                refreshing = null;
+            });
+        }
+        return refreshing;
+    };
+
+    const refreshSession = async () => {
         const current = session;
         if (!current) return;
         try {
@@ -181,7 +192,43 @@ module.exports = function setupApiAuth(deps) {
     ipcMain.handle('auth:changepw', async () => ({
         error: 'Use "Forgot password?" on the sign-in screen to change your password.'
     }));
+
+    const send = (config, current) =>
+        axios.request({
+            method: config.method,
+            url: `${baseUrl}${config.path}`,
+            data: config.data,
+            timeout: config.timeout || REQUEST_TIMEOUT_MS,
+            headers: { Authorization: `Bearer ${current.accessToken}` }
+        });
+
+    const request = async (config) => {
+        restore();
+        if (refreshing) await refreshing;
+        const current = session;
+        if (!current) throw signedOutError();
+        try {
+            return await send(config, current);
+        } catch (error) {
+            if (error?.response?.status !== 401) throw error;
+        }
+        if (session === current) await refresh();
+        if (!session) throw signedOutError();
+        return send(config, session);
+    };
+
+    return {
+        email: () => {
+            restore();
+            return session?.email || null;
+        },
+        request
+    };
 };
+
+function signedOutError() {
+    return Object.assign(new Error('Not signed in'), { response: { status: 401 } });
+}
 
 function credentials(payload) {
     return {
