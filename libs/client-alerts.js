@@ -64,8 +64,10 @@ module.exports = function setupClientAlerts(deps) {
     };
 
     const writeStore = (email, { profiles, revoke }) => {
+        if (!canPersist()) return;
         try {
-            fs.writeFileSync(linksFile, safeStorage.encryptString(JSON.stringify({ email, profiles, revoke })));
+            fs.writeFileSync(linksFile, safeStorage.encryptString(JSON.stringify({ email, profiles, revoke })), { mode: 0o600 });
+            fs.chmodSync(linksFile, 0o600);
         } catch (error) {
             log.warn(`Could not save alert links: ${error?.message || error}`);
         }

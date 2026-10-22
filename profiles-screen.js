@@ -149,6 +149,7 @@
             'aria-checked': on ? 'true' : 'false',
             'data-action': 'alerts',
             'data-name': name,
+            'aria-label': `Alerts for ${displayName(name)}`,
             title: on ? `Turn off alerts for ${displayName(name)}` : `Turn on alerts for ${displayName(name)}`,
         });
         const knob = document.createElement('span');
@@ -289,13 +290,19 @@
         };
     };
 
+    const alertsBusy = new Set();
+
     const toggleAlerts = async (name) => {
+        if (alertsBusy.has(name)) return;
+        alertsBusy.add(name);
         const enabled = !alertsOn(name);
         let result = null;
         try {
             result = await window.electron.alerts.setEnabled(name, enabled);
         } catch (error) {
             result = { error: 'Could not save the alert setting.' };
+        } finally {
+            alertsBusy.delete(name);
         }
         if (typeof result?.enabled === 'boolean') state.alerts.enabled[name] = result.enabled;
         if (typeof result?.label === 'string') state.alerts.labels[name] = result.label;
