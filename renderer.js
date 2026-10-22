@@ -2,6 +2,7 @@ let accounts = [];
 let restoringSelectedAccount = false;
 let iii = null;
 let lastAccountsReadError = null;
+let accountInfoReturnFocus = null;
 let latestClientVersion = null;
 let cleanupAccountsDropdownListeners = null;
 
@@ -193,6 +194,7 @@ function showAccountInfo() {
     const modal = $('account-info-modal');
     if (!modal) return;
     toggleClass($('account-info-create'), 'auth-hidden', Boolean(currentSessionEmail) || !authAvailable());
+    accountInfoReturnFocus = document.activeElement;
     modal.classList.remove('auth-hidden');
     window.addEventListener('keydown', onAccountInfoKeydown, true);
     setTimeout(() => $('account-info-close')?.focus(), 0);
@@ -201,6 +203,9 @@ function showAccountInfo() {
 function hideAccountInfo() {
     $('account-info-modal')?.classList.add('auth-hidden');
     window.removeEventListener('keydown', onAccountInfoKeydown, true);
+    const returnFocus = accountInfoReturnFocus;
+    accountInfoReturnFocus = null;
+    if (returnFocus?.isConnected) returnFocus.focus();
 }
 
 function showCreateAccountFromInfo() {

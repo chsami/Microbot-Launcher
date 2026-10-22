@@ -16,7 +16,8 @@ module.exports = function setupClientAlerts(deps) {
 
     const canPersist = () => {
         try {
-            return Boolean(safeStorage?.isEncryptionAvailable());
+            if (!safeStorage?.isEncryptionAvailable()) return false;
+            return safeStorage.getSelectedStorageBackend?.() !== 'basic_text';
         } catch (error) {
             return false;
         }

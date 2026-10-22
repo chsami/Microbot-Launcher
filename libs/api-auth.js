@@ -26,7 +26,8 @@ module.exports = function setupApiAuth(deps) {
 
     const canPersist = () => {
         try {
-            return Boolean(safeStorage?.isEncryptionAvailable());
+            if (!safeStorage?.isEncryptionAvailable()) return false;
+            return safeStorage.getSelectedStorageBackend?.() !== 'basic_text';
         } catch (error) {
             return false;
         }
@@ -81,7 +82,8 @@ module.exports = function setupApiAuth(deps) {
             }
         } catch (error) {
             if (session !== current) return;
-            if (error?.response && error.response.status < 500) {
+            const status = error?.response?.status;
+            if (status && status < 500 && status !== 408 && status !== 429) {
                 log.info('Stored sign-in session expired; signing out.');
                 writeSession(null);
             } else {

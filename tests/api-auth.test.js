@@ -167,6 +167,18 @@ describe('api-auth', () => {
         expect(fs.existsSync(sessionFile)).toBe(true);
     });
 
+    test.each([408, 429])('a saved session survives a %i on refresh', async (status) => {
+        fs.writeFileSync(sessionFile, safeStorage.encryptString(JSON.stringify({ email: 'a@b.co', accessToken: 'old', refreshToken: 'old-r' })));
+        axios.post.mockRejectedValue(httpError(status, 'Try again later'));
+        const ipcMain = setup();
+
+        await ipcMain.invoke('auth:status');
+        await flush();
+
+        expect((await ipcMain.invoke('auth:status')).authenticated).toBe(true);
+        expect(fs.existsSync(sessionFile)).toBe(true);
+    });
+
     test('sign out removes the saved session', async () => {
         axios.post.mockResolvedValue({ data: { token: 'access', refreshToken: 'refresh' } });
         const ipcMain = setup();
@@ -378,6 +390,25 @@ describe('api-auth', () => {
             });
             expect(axios.request).not.toHaveBeenCalled();
         });
+    });
+
+    test('nothing is written to disk when Linux has no secret store', async () => {
+        axios.post.mockResolvedValue({ data: { token: 'access', refreshToken: 'refresh' } });
+        const ipcMain = new FakeIpcMain();
+        setupApiAuth({
+            ipcMain,
+            log,
+            axios,
+            fs,
+            safeStorage: { ...safeStorage, getSelectedStorageBackend: () => 'basic_text' },
+            sessionFile,
+            baseUrl: 'https://api.test'
+        });
+
+        await ipcMain.invoke('auth:signin', { email: 'a@b.co', password: 'secret123' });
+
+        expect(fs.existsSync(sessionFile)).toBe(false);
+        expect((await ipcMain.invoke('auth:status')).authenticated).toBe(true);
     });
 
     test('nothing is written to disk when encryption is unavailable', async () => {

@@ -79,13 +79,14 @@
 
     const copyName = (base, names) => {
         const taken = new Set(names.map((name) => name.toLowerCase()));
-        let candidate = `${base} copy`;
+        const withSuffix = (suffix) => `${base.slice(0, NAME_MAX - suffix.length).trim()}${suffix}`;
+        let candidate = withSuffix(' copy');
         let index = 2;
         while (taken.has(candidate.toLowerCase())) {
-            candidate = `${base} copy ${index}`;
+            candidate = withSuffix(` copy ${index}`);
             index += 1;
         }
-        return candidate.slice(0, NAME_MAX).trim();
+        return candidate;
     };
 
     const sortNames = (names) => [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
