@@ -954,6 +954,8 @@ async function initializeLauncher() {
     });
 
     loadLandingPageWebview();
+
+    await window.maybeShowSetupGuide?.();
 }
 
 window.addEventListener('load', async () => {
@@ -1933,6 +1935,11 @@ function setupHamburgerMenu() {
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') hideMenu();
+    });
+
+    menu.querySelector('[data-action="setup-guide"]')?.addEventListener('click', () => {
+        hideMenu();
+        window.openSetupGuide?.();
     });
 
     menu.querySelectorAll('.submenu-item').forEach((item) => {

@@ -109,6 +109,7 @@ async function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1280,
         height: process.env.DEBUG !== 'true' ? 750 : 800,
+        minWidth: 900,
         show: false, // Don't show the main window immediately
         title: 'Microbot Launcher',
         autoHideMenuBar: process.env.DEBUG !== 'true',
@@ -134,7 +135,7 @@ async function createWindow() {
             'extra-ipc-handlers.js'
         ));
         if (typeof extraHandlers === 'function') {
-            await extraHandlers(app, ipcMain, mainWindow, log, openLocation);
+            await extraHandlers(app, ipcMain, mainWindow, log, openLocation, (url) => shell.openExternal(url));
         } else {
             log.error('extra-ipc-handlers does not export a function');
         }

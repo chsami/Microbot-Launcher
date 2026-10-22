@@ -1,6 +1,13 @@
-module.exports = async function (app, ipcMain, window, log, openLocation) {
+const HELP_LINKS = {
+    discord: 'https://discord.gg/zaGrfqFEWE'
+};
+
+module.exports = async function (app, ipcMain, window, log, openLocation, openExternal) {
     if (typeof openLocation !== 'function') {
         throw new Error('missing required dependency: openLocation');
+    }
+    if (typeof openExternal !== 'function') {
+        throw new Error('missing required dependency: openExternal');
     }
     ipcMain.handle('minimize-window', async () => {
         try {
@@ -58,4 +65,19 @@ module.exports = async function (app, ipcMain, window, log, openLocation) {
             return { error: err?.message || String(err) };
         }
     });
+
+    ipcMain.handle('open-help-link', async (_event, linkKey) => {
+        if (typeof linkKey !== 'string' || !Object.hasOwn(HELP_LINKS, linkKey)) {
+            return { error: 'Unknown help link' };
+        }
+        try {
+            await openExternal(HELP_LINKS[linkKey]);
+            return { success: true };
+        } catch (err) {
+            log?.error('open-help-link failed', err);
+            return { error: err?.message || String(err) };
+        }
+    });
 };
+
+module.exports.HELP_LINKS = HELP_LINKS;

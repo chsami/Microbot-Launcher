@@ -125,6 +125,175 @@
             <button id="proxy-login-info-ok" class="auth-submit" type="button">Got it</button>
         </div>
     </div>
+    <div id="setup-guide" class="setup-guide guide-hidden" role="dialog" aria-modal="true"
+        aria-labelledby="guide-eyebrow">
+        <div class="guide-stage">
+            <div id="guide-card" class="guide-card" tabindex="-1">
+                <button id="guide-close" class="auth-close" type="button" aria-label="Close the setup guide">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18M6 6l12 12"></path>
+                    </svg>
+                </button>
+                <p id="guide-eyebrow" class="guide-eyebrow">Setup guide</p>
+                <ol id="guide-stepper" class="guide-stepper" aria-label="Guide steps"></ol>
+
+                <div class="guide-body">
+                    <section class="guide-step" data-title="Welcome">
+                        <h1 class="guide-title">Welcome to Microbot</h1>
+                        <p class="guide-lead">You can be playing in a few minutes. First, find out which account you
+                            have. You don't need all three.</p>
+                        <div class="guide-cards">
+                            <article class="guide-type">
+                                <span class="guide-badge">Most players</span>
+                                <h2>Jagex account</h2>
+                                <p>You log in on account.jagex.com or with the Jagex Launcher, usually with an
+                                    authenticator code. New accounts are Jagex accounts.</p>
+                            </article>
+                            <article class="guide-type">
+                                <span class="guide-badge muted">Older accounts</span>
+                                <h2>Normal account</h2>
+                                <p>An older account you still log in to by typing your username or email and
+                                    password on the game's login screen.</p>
+                            </article>
+                            <article class="guide-type">
+                                <span class="guide-badge muted">Optional</span>
+                                <h2>Microbot account</h2>
+                                <p>Your account for this launcher and the Microbot dashboard. It is not a game
+                                    account and you don't need it to play.</p>
+                            </article>
+                        </div>
+                        <p class="guide-tip"><strong>Not sure?</strong> If the game's login screen tells you to use the
+                            Jagex Launcher, you have a Jagex account.</p>
+                    </section>
+
+                    <section class="guide-step" data-title="Jagex account" data-target="add-accounts play">
+                        <h1 class="guide-title">Add your Jagex account</h1>
+                        <div class="guide-status-row">
+                            <p id="guide-jagex-status" class="guide-status" data-status="jagex"></p>
+                            <button class="guide-action" type="button" data-action="jagex-login">Log in with Jagex
+                                now</button>
+                        </div>
+                        <ol class="guide-list">
+                            <li data-target="proxy-ip"><strong>Using a proxy? Pick it first.</strong> The Jagex login
+                                then goes through the same proxy as the game. Skip this if you don't use one.</li>
+                            <li data-target="add-accounts play"><strong>Click Login Jagex Account.</strong> If you
+                                already added characters, click Add accounts instead.</li>
+                            <li><strong>Log in on the Jagex page.</strong> It opens in your browser, or in a separate
+                                private window if you use a proxy. Enter your email, password and authenticator code
+                                there. Microbot never sees your password.</li>
+                            <li data-target="accounts-dropdown-container"><strong>Come back to the launcher.</strong>
+                                When the login finishes, every character on that Jagex account shows up in the Jagex
+                                Account list.</li>
+                            <li data-target="play"><strong>Pick a character and click Play With Jagex Account.</strong>
+                            </li>
+                        </ol>
+                        <ul class="guide-notes">
+                            <li>Have more Jagex accounts? Log in once per account with Add accounts.</li>
+                            <li data-target="refresh-accounts">Changed a display name or added a character? Click
+                                the refresh button next to the list.</li>
+                            <li>Login stuck? Click Cancel login and try again.</li>
+                        </ul>
+                    </section>
+
+                    <section class="guide-step" data-title="Normal account" data-target="play-no-jagex-account">
+                        <h1 class="guide-title">Play with a normal account</h1>
+                        <p class="guide-lead">You don't add normal accounts to the launcher. You log in inside the
+                            game, like you always did.</p>
+                        <ol class="guide-list">
+                            <li data-target="play-no-jagex-account"><strong>Click Play Normal Account.</strong> The
+                                client opens on the game's login screen.</li>
+                            <li><strong>Log in on that screen</strong> with your username or email and password.</li>
+                        </ol>
+                        <ul class="guide-notes">
+                            <li>Play Normal Account also opens the client without logging in, for example to set up
+                                plugins first.</li>
+                            <li>Once an account is moved to a Jagex account, it can't go back. Use the Jagex account
+                                steps for it from then on.</li>
+                        </ul>
+                    </section>
+
+                    <section class="guide-step" data-title="Microbot account" data-target="user-session">
+                        <h1 class="guide-title">Do I need a Microbot account?</h1>
+                        <p class="guide-lead"><strong>No.</strong> The launcher and the client work without one.</p>
+                        <p id="guide-microbot-status" class="guide-status" data-status="microbot"></p>
+                        <dl class="account-info-list">
+                            <dt>What is it for?</dt>
+                            <dd>One sign-in for this launcher and the dashboard at dashboard.microbot.cloud. Coming
+                                soon: back up your profiles and use them on another PC.</dd>
+                            <dt>Is it my Jagex account?</dt>
+                            <dd>No. It has its own email and password. Don't reuse your Jagex password.</dd>
+                            <dt>Does Microbot see my game accounts?</dt>
+                            <dd>No. Signing in doesn't share your game accounts with Microbot.</dd>
+                        </dl>
+                        <div class="guide-actions" data-requires="microbot-auth">
+                            <button class="guide-action" type="button" data-action="microbot-signup">Create a free
+                                account</button>
+                            <button class="guide-action secondary" type="button" data-action="microbot-signin">Sign
+                                in</button>
+                        </div>
+                    </section>
+
+                    <section class="guide-step" data-title="Before you play" data-target="client">
+                        <h1 class="guide-title">Check these before you play</h1>
+                        <ol class="guide-list">
+                            <li data-target="client"><strong>Version.</strong> Keep the newest one. Older versions
+                                stop working after game updates.</li>
+                            <li data-target="profile"><strong>Profile.</strong> Holds your plugin settings. Each Jagex
+                                character remembers its own profile, so you can keep a separate setup per account.</li>
+                            <li data-target="client-ram"><strong>Client RAM.</strong> 1 or 2 GB is enough for one
+                                client. Raise it if the client lags or closes with an out of memory error.</li>
+                            <li data-target="proxy-ip"><strong>Proxy.</strong> Optional, SOCKS5 only. Characters you
+                                added through a proxy switch back to it when you select them.</li>
+                        </ol>
+                    </section>
+
+                    <section class="guide-step" data-title="Stay safe" data-target="menu-btn">
+                        <h1 class="guide-title">Stay safe and get help</h1>
+                        <ul class="guide-list guide-safety">
+                            <li><strong>Nobody from Microbot will ask for your password or authenticator codes.</strong>
+                                Not in Discord, not in a DM.</li>
+                            <li><strong>Only download Microbot from themicrobot.com.</strong> Copies from other places
+                                can steal your accounts.</li>
+                            <li><strong>Botting breaks the game's rules.</strong> Any account you bot on can be banned,
+                                so don't bot on an account you can't afford to lose.</li>
+                            <li data-target="menu-btn"><strong>Something not working?</strong> Open the menu at the top
+                                left, then Open, then Launcher Logs or Client Logs. Share them on Discord when you ask
+                                for help.</li>
+                            <li data-target="menu-btn"><strong>Want this guide again?</strong> It's in the same menu
+                                under Setup guide.</li>
+                        </ul>
+                        <div class="guide-actions">
+                            <button class="guide-action" type="button" data-action="discord">Join the Discord</button>
+                            <button class="guide-action secondary" type="button" data-action="logs">Open launcher
+                                logs</button>
+                        </div>
+                    </section>
+                </div>
+
+                <footer class="guide-footer">
+                    <label class="guide-dismiss">
+                        <input id="guide-hide" type="checkbox" />
+                        Don't show this again on startup
+                    </label>
+                    <div class="guide-nav">
+                        <button id="guide-back" class="guide-secondary" type="button">Back</button>
+                        <button id="guide-next" class="guide-primary" type="button">Next</button>
+                    </div>
+                </footer>
+            </div>
+        </div>
+    </div>
+    <div id="guide-ring" class="guide-ring guide-hidden" aria-hidden="true"></div>
+    <div id="guide-resume" class="guide-resume guide-hidden">
+        <button id="guide-resume-open" class="guide-resume-open" type="button">Back to the setup guide</button>
+        <button id="guide-resume-dismiss" class="guide-resume-dismiss" type="button" aria-label="Close the setup guide">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 6 6 18M6 6l12 12"></path>
+            </svg>
+        </button>
+    </div>
     <div id="proxy-manager-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
         aria-labelledby="proxy-manager-title">
         <div class="auth-card proxy-manager-card">
@@ -377,6 +546,8 @@
         <!-- Custom popup menu -->
         <div id="app-menu" class="app-menu hidden" aria-hidden="true">
             <ul class="menu-root">
+                <li class="menu-item" data-action="setup-guide">Setup guide</li>
+                <li class="separator" role="separator"></li>
                 <li class="menu-item has-sub" data-action="open-folder-root">
                     <span class="menu-label">Open ▸</span>
                     <ul class="submenu">
@@ -395,6 +566,7 @@
         document.head.appendChild(script);
     </script>
     <script src="profiles-screen.js"></script>
+    <script src="setup-guide.js"></script>
 
 
 </body>
