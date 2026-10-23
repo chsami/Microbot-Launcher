@@ -7,9 +7,6 @@
     <meta name="description" content="Microbot Launcher - Download, update, and manage your Microbot client easily.">
     <meta name="keywords" content="Microbot, Launcher, Download, Update, Jagex, Account, Game, Proxy">
     <title>Microbot Launcher</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Montserrat:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="css/styles.css">
 </head>
 
@@ -335,8 +332,8 @@
                     </svg>
                 </div>
                 <div class="profiles-cloud-text">
-                    <h2 id="profiles-cloud-title">Back up your profiles</h2>
-                    <p id="profiles-cloud-text">Sign in to keep your profiles in the cloud and use them on any PC.</p>
+                    <h2 id="profiles-cloud-title">Bot alerts</h2>
+                    <p id="profiles-cloud-text">Sign in to hear on Discord or by email when a bot stops. Profile backup is coming soon.</p>
                 </div>
                 <button id="profiles-sign-in" class="profiles-cloud-button" type="button">Sign in</button>
             </section>
@@ -369,7 +366,7 @@
         </div>
     </div>
     <div id="loader-container">
-        <h1>Download and Unpack Progress</h1>
+        <h1>Downloading the Microbot client</h1>
         <div id="loader">
             <div id="progress-bar">0%</div>
         </div>
@@ -393,6 +390,17 @@
         </div>
     </div>
 
+    <div id="toast" class="toast" role="alert" hidden>
+        <span id="toast-text" class="toast-text"></span>
+        <button id="toast-logs" class="toast-action" type="button">Open logs</button>
+        <button id="toast-close" class="toast-close" type="button" aria-label="Dismiss">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 6 6 18M6 6l12 12"></path>
+            </svg>
+        </button>
+    </div>
+
     <div id="main-container" class="container">
         <div class="titlebar">
             <button id="menu-btn" class="titlebar-button hamburger" title="Menu" aria-label="Application Menu">
@@ -403,38 +411,26 @@
                     <line x1="3" y1="18" x2="21" y2="18"></line>
                 </svg>
             </button>
-            <span class="titlebar-title">Microbot Launcher - 0.0.0.0</span>
+            <span class="titlebar-title"></span>
             <div class="titlebar-controls">
-                <button class="titlebar-button" id="minimize-btn">
+                <button class="titlebar-button" id="minimize-btn" aria-label="Minimize">
                     <svg width="20px" height="20px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"
                         fill="#ffffff" stroke="#ffffff">
-                        <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                        <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
-                        <g id="SVGRepo_iconCarrier">
-                            <path d="M14 8v1H3V8h11z"></path>
-                        </g>
+                        <path d="M14 8v1H3V8h11z"></path>
                     </svg>
                 </button>
-                <button class="titlebar-button" id="maximize-btn">
+                <button class="titlebar-button" id="maximize-btn" aria-label="Maximize">
                     <svg width="20px" height="20px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"
                         fill="#ffffff" stroke="#ffffff">
-                        <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                        <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
-                        <g id="SVGRepo_iconCarrier">
-                            <path d="M3 3v10h10V3H3zm9 9H4V4h8v8z"></path>
-                        </g>
+                        <path d="M3 3v10h10V3H3zm9 9H4V4h8v8z"></path>
                     </svg>
                 </button>
-                <button class="titlebar-button" id="close-btn">
+                <button class="titlebar-button" id="close-btn" aria-label="Close">
                     <svg width="20px" height="20px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"
                         fill="#ffffff" stroke="#ffffff">
-                        <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                        <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
-                        <g id="SVGRepo_iconCarrier">
-                            <path fill-rule="evenodd" clip-rule="evenodd"
-                                d="M7.116 8l-4.558 4.558.884.884L8 8.884l4.558 4.558.884-.884L8.884 8l4.558-4.558-.884-.884L8 7.116 3.442 2.558l-.884.884L7.116 8z">
-                            </path>
-                        </g>
+                        <path fill-rule="evenodd" clip-rule="evenodd"
+                            d="M7.116 8l-4.558 4.558.884.884L8 8.884l4.558 4.558.884-.884L8.884 8l4.558-4.558-.884-.884L8 7.116 3.442 2.558l-.884.884L7.116 8z">
+                        </path>
                     </svg>
                 </button>
             </div>
@@ -462,8 +458,7 @@
                 <div id="launcher-update-banner" class="launcher-update-banner" role="status" hidden>
                     <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                        <path d="M12 9v4M12 17h.01"></path>
+                        <path d="M12 4v11M7 10l5 5 5-5M5 20h14"></path>
                     </svg>
                     <span id="launcher-update-text" class="launcher-update-text"></span>
                     <button id="launcher-update-btn" class="launcher-update-btn" type="button"></button>
@@ -491,18 +486,18 @@
                     </div>
                 </section>
                 <div class="play-buttons">
-                    <button id="play-no-jagex-account" class="play-button loadingButton">
-                        Play Normal Account
-                    </button>
                     <button id="play" class="play-button loadingButton">
                         Login Jagex Account
+                    </button>
+                    <button id="play-no-jagex-account" class="play-button loadingButton">
+                        Play Normal Account
                     </button>
                 </div>
                 <button id="add-accounts" class="add-accounts loadingButton">
                     Add accounts
                 </button>
                 <button id="logout" class="logout-button loadingButton">
-                    Remove All Accounts
+                    Remove all accounts
                 </button>
                 <div class="game-info">
                     <label for="client">Version</label>
@@ -547,15 +542,15 @@
                         <option value="6g">6 GB</option>
                         <option value="8g">8 GB</option>
                     </select>
-                    <label id="hwid-spoof-row" class="hwid-spoof-toggle" for="hwid-spoof"
-                        title="Send a random per-account random.dat seed at login instead of this computer's, and keep the real random.dat file untouched. Applies from the next client launch.">
-                        <span class="hwid-spoof-text">
-                            <span class="hwid-spoof-name">Spoof hardware IDs</span>
-                            <span class="hwid-spoof-hint">Per-account random.dat seed</span>
-                        </span>
-                        <input id="hwid-spoof" class="hwid-spoof-input" type="checkbox" role="switch" checked />
-                        <span class="hwid-spoof-switch" aria-hidden="true"></span>
-                    </label>
+                    <div id="hwid-spoof-row">
+                        <label for="hwid-spoof">Spoof hardware IDs</label>
+                        <label class="hwid-spoof-toggle" for="hwid-spoof"
+                            title="At login the game client sends an ID from this PC's random.dat file, which can link every account you play here. When on, each account sends its own ID instead and your real random.dat is left untouched. Keep one setting per account: switching sends both IDs for that account. Applies from the next client launch.">
+                            <span class="hwid-spoof-state" aria-hidden="true"></span>
+                            <input id="hwid-spoof" class="hwid-spoof-input" type="checkbox" role="switch" checked />
+                            <span class="hwid-spoof-switch" aria-hidden="true"></span>
+                        </label>
+                    </div>
                 </div>
                 <div class="proxy-section">
                     <label for="proxy-ip">Proxy (optional, SOCKS5 only)</label>
@@ -581,7 +576,7 @@
                 <li class="menu-item" data-action="setup-guide">Setup guide</li>
                 <li class="separator" role="separator"></li>
                 <li class="menu-item has-sub" data-action="open-folder-root">
-                    <span class="menu-label">Open ▸</span>
+                    <span class="menu-label">Open</span>
                     <ul class="submenu">
                         <li class="submenu-item" data-location="microbot-folder">Microbot Folder</li>
                         <li class="submenu-item" data-location="runelite-folder">Runelite Folder</li>

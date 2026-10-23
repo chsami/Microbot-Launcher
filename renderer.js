@@ -570,7 +570,9 @@ async function openClient() {
             window.electron.errorAlert(err?.message || String(err));
         }
     } else {
-        alert('Account not found. Please restart your client.');
+        showErrorToast('That account is no longer in the list. Pick it again or log in again.', {
+            logs: false
+        });
     }
 }
 
@@ -870,26 +872,35 @@ async function handleJagexAccountLogic(properties) {
     }, 1000);
 }
 
-window.onerror = function myErrorHandler(errorMsg) {
-    alert(`Error occurred: ${errorMsg}`);
-    window.electron.logError(errorMsg);
-    return false;
-};
-window.addEventListener('error', function (e) {
-    if (e.error) {
-        alert(`Error occurred: ${e.error.stack}`);
-        window.electron.logError(e.error.stack);
-    } else if (e.reason) {
-        alert(`Error occurred: ${e.reason.stack}`);
-        window.electron.logError(e.reason.stack);
-    }
-    return false;
+// The stack goes to the launcher log; the user gets a plain message and a way to that log.
+function showErrorToast(message, { logs = true } = {}) {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    document.getElementById('toast-logs').hidden = !logs;
+    toast.hidden = false;
+    // Set the text after unhiding so role="alert" announces it.
+    document.getElementById('toast-text').textContent = message;
+}
+
+document.getElementById('toast-close')?.addEventListener('click', () => {
+    document.getElementById('toast').hidden = true;
+});
+document.getElementById('toast-logs')?.addEventListener('click', () => {
+    window.electron.openLocation('launcher-logs');
+});
+
+const UNEXPECTED_ERROR = 'Something went wrong. The details are in the launcher logs.';
+
+// One handler: window.onerror fired for the same errors and logged each one twice.
+window.addEventListener('error', (e) => {
+    showErrorToast(UNEXPECTED_ERROR);
+    window.electron.logError(e.error?.stack || e.message);
 });
 
 window.addEventListener('unhandledrejection', (e) => {
     e.preventDefault();
-    alert(`Error occurred: ${e.reason.stack}`);
-    window.electron.logError(e.reason.stack);
+    showErrorToast(UNEXPECTED_ERROR);
+    window.electron.logError(e.reason?.stack || String(e.reason));
 });
 
 async function initializeLauncher() {
@@ -902,7 +913,7 @@ async function initializeLauncher() {
     const microbotLauncherVersion = await window.electron.launcherVersion();
 
     document.querySelector('.titlebar-title').innerText =
-        'Microbot Launcher - ' + microbotLauncherVersion;
+        'v' + microbotLauncherVersion;
 
     if (properties['client'] === '0.0.0') {
         document.getElementById('loader-container').style.display = 'block';
@@ -1421,7 +1432,11 @@ async function handleAccountDelete(accountId) {
 }
 
 async function removeAccountsHandler() {
-    const userConfirmed = confirm('Are you sure you want to proceed?');
+    const count = accounts.length;
+    const userConfirmed = confirm(
+        `Remove ${count === 1 ? 'your Jagex character' : `all ${count} Jagex characters`} from this launcher? ` +
+            'Your game accounts are not affected, and you can add them again by logging in.'
+    );
     if (!userConfirmed) return;
 
     // Remove accounts via the Electron API
@@ -1449,7 +1464,6 @@ function setupLogoutButton() {
 async function setupSidebarLayout(amountOfAccounts) {
     const selectedAccount = document.getElementById('character')?.value;
     const playJagexButton = document.getElementById('play');
-    const playButtonsDiv = document.querySelector('.play-buttons');
     const logoutButton = document.getElementById('logout');
     const addAccountsButton = document.getElementById('add-accounts');
     const characterSelectLabel = document.querySelector(
@@ -1462,7 +1476,6 @@ async function setupSidebarLayout(amountOfAccounts) {
     if (amountOfAccounts > 0) {
         playJagexButton.innerHTML = 'Play With Jagex Account';
         logoutButton.style.display = 'block';
-        playButtonsDiv.style.display = 'flex';
         if (characterSelectLabel) {
             characterSelectLabel.style.display = 'block';
         }
@@ -1491,7 +1504,6 @@ async function setupSidebarLayout(amountOfAccounts) {
         // Reset UI for no accounts state
         playJagexButton.innerHTML = 'Login Jagex Account';
         logoutButton.style.display = 'none';
-        playButtonsDiv.style.display = 'block';
         if (characterSelectLabel) {
             characterSelectLabel.style.display = 'none';
         }
