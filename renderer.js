@@ -534,6 +534,7 @@ async function openClient() {
 
     const proxy = getProxyValues();
     const ramPreference = getClientRamPreference();
+    const hwidSpoof = getHwidSpoofPreference();
 
     document.getElementById('loader-container').style.display = 'none';
 
@@ -559,7 +560,8 @@ async function openClient() {
                 version,
                 proxy,
                 selectedAccount,
-                ramPreference
+                ramPreference,
+                hwidSpoof
             );
             if (launchResult?.error) {
                 window.electron.errorAlert(launchResult.error);
@@ -1546,6 +1548,7 @@ function playNoJagexAccount() {
 
         const proxy = getProxyValues();
         const ramPreference = getClientRamPreference();
+        const hwidSpoof = getHwidSpoofPreference();
         const selectedVersion = document.getElementById('client').value;
 
         // Check if a valid client version is selected
@@ -1575,7 +1578,8 @@ function playNoJagexAccount() {
                 const playResult = await window.electron.playNoJagexAccount(
                     version,
                     proxy,
-                    ramPreference
+                    ramPreference,
+                    hwidSpoof
                 );
                 if (playResult?.error) {
                     window.electron.errorAlert(playResult.error);
@@ -1691,6 +1695,11 @@ function reminderMeLaterBtn() {
 function getProxyValues() {
     // Get the value of the proxy IP
     return { proxyIp: document.getElementById('proxy-ip')?.value || '' };
+}
+
+function getHwidSpoofPreference() {
+    const checkbox = document.getElementById('hwid-spoof');
+    return checkbox ? checkbox.checked : true;
 }
 
 function getClientRamPreference() {
@@ -1891,6 +1900,7 @@ async function initUI(properties) {
     document.querySelector('.game-info').style = 'display:block';
 
     await setupRamInput();
+    await setupHwidSpoofInput();
     await setupProxyInput();
 
     setupRefreshAccountsButton();
@@ -2209,6 +2219,22 @@ async function checkForOutdatedLaunch() {
  * Also setup Proxy IP input field for change events so we can save to a cookie
  * and persist the value between sessions.
  */
+async function setupHwidSpoofInput() {
+    const checkbox = document.getElementById('hwid-spoof');
+    if (!checkbox) {
+        return;
+    }
+
+    const properties = await window.electron.readProperties();
+    checkbox.checked = properties['hwid_spoof'] !== 'false';
+
+    checkbox.addEventListener('change', async () => {
+        const latestProperties = await window.electron.readProperties();
+        latestProperties['hwid_spoof'] = checkbox.checked ? 'true' : 'false';
+        await window.electron.writeProperties(latestProperties);
+    });
+}
+
 async function setupRamInput() {
     const ramSelect = document.getElementById('client-ram');
     if (!ramSelect) {
