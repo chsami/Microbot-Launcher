@@ -580,6 +580,48 @@ window.electron.ipcRenderer.receive('progress', (event, data) => {
     }
 });
 
+let launcherUpdateState = null;
+let launcherUpdateVersion = '';
+
+window.electron.ipcRenderer.receive('launcher-update', (event, status) => {
+    const banner = document.getElementById('launcher-update-banner');
+    if (!banner) {
+        return;
+    }
+    // A failed background check (offline, no feed) stays silent; only failures after the banner appeared show.
+    if (status.state === 'error' && !launcherUpdateState) {
+        return;
+    }
+    launcherUpdateState = status.state;
+    launcherUpdateVersion = status.version || launcherUpdateVersion;
+    const percent = status.percent ?? 0;
+    const [text, button] = {
+        available: [`Launcher out of date (v${status.current})`, `Update to v${launcherUpdateVersion}`],
+        downloading: [`Downloading v${launcherUpdateVersion}… ${percent}%`, 'Downloading'],
+        ready: [`v${launcherUpdateVersion} is ready to install`, 'Restart now'],
+        error: ['Launcher update failed', 'Retry']
+    }[status.state];
+    banner.hidden = false;
+    banner.dataset.state = status.state;
+    // Hold screen-reader announcements until the download settles instead of reading every percent.
+    banner.setAttribute('aria-busy', status.state === 'downloading');
+    banner.style.setProperty('--progress', `${status.state === 'downloading' ? percent : 0}%`);
+    document.getElementById('launcher-update-text').textContent = text;
+    const btn = document.getElementById('launcher-update-btn');
+    btn.textContent = button;
+    btn.disabled = status.state === 'downloading';
+});
+
+document.getElementById('launcher-update-btn')?.addEventListener('click', () => {
+    if (launcherUpdateState === 'ready') {
+        window.electron.ipcRenderer.invoke('launcher-update:install').catch(() => {});
+    } else {
+        launcherUpdateState = 'downloading';
+        // Failures reach the banner through the 'error' status event.
+        window.electron.ipcRenderer.invoke('launcher-update:download').catch(() => {});
+    }
+});
+
 function updateProgress(percent, status) {
     const progressBar = document.getElementById('progress-bar');
     const statusText = document.getElementById('status');
