@@ -534,6 +534,7 @@ async function openClient() {
 
     const proxy = getProxyValues();
     const ramPreference = getClientRamPreference();
+    const hwidSpoof = getHwidSpoofPreference();
 
     document.getElementById('loader-container').style.display = 'none';
 
@@ -559,7 +560,8 @@ async function openClient() {
                 version,
                 proxy,
                 selectedAccount,
-                ramPreference
+                ramPreference,
+                hwidSpoof
             );
             if (launchResult?.error) {
                 window.electron.errorAlert(launchResult.error);
@@ -1546,6 +1548,7 @@ function playNoJagexAccount() {
 
         const proxy = getProxyValues();
         const ramPreference = getClientRamPreference();
+        const hwidSpoof = getHwidSpoofPreference();
         const selectedVersion = document.getElementById('client').value;
 
         // Check if a valid client version is selected
@@ -1575,7 +1578,8 @@ function playNoJagexAccount() {
                 const playResult = await window.electron.playNoJagexAccount(
                     version,
                     proxy,
-                    ramPreference
+                    ramPreference,
+                    hwidSpoof
                 );
                 if (playResult?.error) {
                     window.electron.errorAlert(playResult.error);
@@ -1691,6 +1695,11 @@ function reminderMeLaterBtn() {
 function getProxyValues() {
     // Get the value of the proxy IP
     return { proxyIp: document.getElementById('proxy-ip')?.value || '' };
+}
+
+function getHwidSpoofPreference() {
+    const checkbox = document.getElementById('hwid-spoof');
+    return checkbox ? checkbox.checked : true;
 }
 
 function getClientRamPreference() {
@@ -1891,6 +1900,7 @@ async function initUI(properties) {
     document.querySelector('.game-info').style = 'display:block';
 
     await setupRamInput();
+    await setupHwidSpoofInput();
     await setupProxyInput();
 
     setupRefreshAccountsButton();
@@ -2025,6 +2035,17 @@ function loadLandingPageWebview() {
     if (webview) {
         webview.src = 'https://www.themicrobot.com?source=launcher';
         webview.addEventListener('dom-ready', () => {
+            // Mirrors the .sidebar scrollbar in css/styles.css; auto width/color lets the webkit rules apply.
+            webview
+                .insertCSS(
+                    `html, body { scrollbar-width: auto !important; scrollbar-color: auto !important; }
+                    ::-webkit-scrollbar { width: 10px; height: 10px; }
+                    ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+                    ::-webkit-scrollbar-thumb { background-color: #3a2e22; border: 2px solid transparent; border-radius: 5px; background-clip: padding-box; }
+                    ::-webkit-scrollbar-thumb:hover { background-color: #e9c98f; }
+                    ::-webkit-scrollbar-thumb:active { background-color: #ffb13b; }`
+                )
+                .catch((err) => console.error('insertCSS failed', err));
             try {
                 webview
                     .executeJavaScript(
@@ -2202,6 +2223,22 @@ async function checkForOutdatedLaunch() {
             await downloadClientIfNotExist(latestVersion);
         }
     }
+}
+
+async function setupHwidSpoofInput() {
+    const checkbox = document.getElementById('hwid-spoof');
+    if (!checkbox) {
+        return;
+    }
+
+    const properties = await window.electron.readProperties();
+    checkbox.checked = properties['hwid_spoof'] !== 'false';
+
+    checkbox.addEventListener('change', async () => {
+        const latestProperties = await window.electron.readProperties();
+        latestProperties['hwid_spoof'] = checkbox.checked ? 'true' : 'false';
+        await window.electron.writeProperties(latestProperties);
+    });
 }
 
 /**

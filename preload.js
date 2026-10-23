@@ -14,13 +14,14 @@ contextBridge.exposeInMainWorld('electron', {
     fetchLauncherVersion: () => ipcRenderer.invoke('fetch-launcher-version'), //jagex launcher
     fetchClientVersion: () => ipcRenderer.invoke('fetch-client-version'),
     openLauncher: () => ipcRenderer.invoke('open-launcher'),
-    openClient: (version, proxy, account, ramPreference) =>
+    openClient: (version, proxy, account, ramPreference, hwidSpoof) =>
         ipcRenderer.invoke(
             'open-client',
             version,
             proxy,
             account,
-            ramPreference
+            ramPreference,
+            hwidSpoof
         ),
     readAccounts: () => ipcRenderer.invoke('read-accounts'),
     deleteAccount: (accountId) =>
@@ -36,12 +37,13 @@ contextBridge.exposeInMainWorld('electron', {
     overwriteCredentialProperties: (character) =>
         ipcRenderer.invoke('overwrite-credential-properties', character),
     checkFileChange: () => ipcRenderer.invoke('check-file-change'),
-    playNoJagexAccount: (version, proxy, ramPreference) =>
+    playNoJagexAccount: (version, proxy, ramPreference, hwidSpoof) =>
         ipcRenderer.invoke(
             'play-no-jagex-account',
             version,
             proxy,
-            ramPreference
+            ramPreference,
+            hwidSpoof
         ),
     listJars: () => ipcRenderer.invoke('list-jars'),
     listClientJars: (latestVersion) =>

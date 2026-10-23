@@ -8,6 +8,7 @@ module.exports = async function (deps) {
     };
     let managedJavaReady = null;
     const { toProxyUri } = require(path.join(__dirname, 'login-proxy.js'));
+    const { hwidAgentArgs } = require(path.join(__dirname, 'hwid-agent.js'));
     const STARTUP_WINDOW_MS = deps.startupWindowMs || 20000;
     const CLIENT_TOKEN_ENV = 'MICROBOT_CLIENT_TOKEN';
     const MAX_CAPTURED_STDERR = 64 * 1024;
@@ -53,7 +54,7 @@ module.exports = async function (deps) {
 
     ipcMain.handle(
         'open-client',
-        async (event, version, proxy, account, ramPreference) => {
+        async (event, version, proxy, account, ramPreference, hwidSpoof) => {
             try {
                 const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
                 const memoryConfig = selectMemoryArgs(ramPreference);
@@ -61,6 +62,7 @@ module.exports = async function (deps) {
                     `Launching client with ${memoryConfig.source} memory settings: ${memoryConfig.args.join(' ')}`
                 );
                 const commandArgs = [...memoryConfig.args, ...GC_FLAGS, '-jar', jarPath];
+                commandArgs.unshift(...hwidAgentArgs({ fs, microbotDir, version, enabled: hwidSpoof }));
 
                 // apply proxy args (done differently depending on client version)
                 const err = addProxyArgs(commandArgs, proxy);
@@ -99,7 +101,7 @@ module.exports = async function (deps) {
 
     ipcMain.handle(
         'play-no-jagex-account',
-        async (event, version, proxy, ramPreference) => {
+        async (event, version, proxy, ramPreference, hwidSpoof) => {
             const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
             const memoryConfig = selectMemoryArgs(ramPreference);
             log.info(
@@ -112,6 +114,7 @@ module.exports = async function (deps) {
                 jarPath,
                 '-clean-jagex-launcher'
             ];
+            commandArgs.unshift(...hwidAgentArgs({ fs, microbotDir, version, enabled: hwidSpoof }));
 
             // apply proxy args (done differently depending on client version)
             const err = addProxyArgs(commandArgs, proxy);

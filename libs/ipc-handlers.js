@@ -30,6 +30,7 @@ module.exports = async function (deps) {
         markClientDownloaded,
         isSafeClientVersion
     } = require(path.join(projectDir, 'libs', 'client-jars.js'));
+    const { ensureHwidAgentJar } = require(path.join(projectDir, 'libs', 'hwid-agent.js'));
 
     function invalidVersionResult(version) {
         const message = `Invalid client version: ${JSON.stringify(String(version))}`;
@@ -245,6 +246,7 @@ module.exports = async function (deps) {
             } catch (markError) {
                 log.error(`Failed to record downloaded client ${version}: ${markError.message}`);
             }
+            await ensureHwidAgentJar({ axios, fs, log, microbotDir, filestorage, version });
             event.sender.send('progress', {
                 percent: 100,
                 status: 'Completed!'
@@ -287,6 +289,11 @@ module.exports = async function (deps) {
         try {
             const filePath = path.join(microbotDir, `microbot-${version}.jar`);
             log.info(filePath);
+            if (fs.existsSync(filePath)) {
+                ensureHwidAgentJar({ axios, fs, log, microbotDir, filestorage, version }).catch((error) =>
+                    log.warn(`HWID agent ensure failed (${version}): ${error.message}`)
+                );
+            }
             return fs.existsSync(filePath);
         } catch (error) {
             log.error(`Error checking if client exists: ${error}`);
