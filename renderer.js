@@ -912,7 +912,7 @@ async function initializeLauncher() {
 
     const microbotLauncherVersion = await window.electron.launcherVersion();
 
-    document.querySelector('.titlebar-title').innerText =
+    document.getElementById('titlebar-version').textContent =
         'v' + microbotLauncherVersion;
 
     if (properties['client'] === '0.0.0') {
