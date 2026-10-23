@@ -2225,11 +2225,6 @@ async function checkForOutdatedLaunch() {
     }
 }
 
-/**
- * Check if there is a saved Proxy IP as a cookie and set it to the input field.
- * Also setup Proxy IP input field for change events so we can save to a cookie
- * and persist the value between sessions.
- */
 async function setupHwidSpoofInput() {
     const checkbox = document.getElementById('hwid-spoof');
     if (!checkbox) {
@@ -2246,6 +2241,11 @@ async function setupHwidSpoofInput() {
     });
 }
 
+/**
+ * Check if there is a saved Proxy IP as a cookie and set it to the input field.
+ * Also setup Proxy IP input field for change events so we can save to a cookie
+ * and persist the value between sessions.
+ */
 async function setupRamInput() {
     const ramSelect = document.getElementById('client-ram');
     if (!ramSelect) {
