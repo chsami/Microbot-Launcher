@@ -7,6 +7,10 @@ let latestClientVersion = null;
 let cleanupAccountsDropdownListeners = null;
 
 const DEFAULT_CLIENT_RAM = '1g';
+const NIGHTLY_VERSION = 'nightly';
+const CLIENT_CHANNEL = 'client_channel';
+let clientChannel = 'stable';
+let channelSwitching = false;
 let launcherInitialized = false;
 let authUiReady = false;
 let mockAuthEnabled = false;
@@ -516,22 +520,8 @@ async function ensureLauncherInitialized() {
  */
 
 async function openClient() {
-    const clientValue = document.getElementById('client').value;
-
-    // Check if a valid client version is selected
-    if (
-        !clientValue ||
-        clientValue === '' ||
-        !clientValue.includes('microbot-')
-    ) {
-        window.electron.errorAlert('Please select a valid client version');
-        return;
-    }
-
-    const version = extractVersion(clientValue);
-
-    const result = await downloadClientIfNotExist(version);
-    if (!result.exists) return;
+    const version = await resolveLaunchVersion();
+    if (!version) return;
 
     const proxy = getProxyValues();
     const ramPreference = getClientRamPreference();
@@ -948,6 +938,7 @@ async function initializeLauncher() {
     iii = setInterval(async () => {
         const properties = await window.electron.readProperties();
         await checkForClientUpdate(properties);
+        await refreshNightlyInfo(true);
     }, 5 * 60 * 1000); // 5 minutes
 
     await handleJagexAccountLogic(properties);
@@ -1551,25 +1542,12 @@ function playNoJagexAccount() {
         const proxy = getProxyValues();
         const ramPreference = getClientRamPreference();
         const hwidSpoof = getHwidSpoofPreference();
-        const selectedVersion = document.getElementById('client').value;
-
-        // Check if a valid client version is selected
-        if (
-            !selectedVersion ||
-            selectedVersion === '' ||
-            !selectedVersion.includes('microbot-')
-        ) {
-            window.electron.errorAlert('Please select a valid client version');
-            return;
-        }
-
-        const version = extractVersion(selectedVersion);
 
         const selectedProfile =
             document.getElementById('profile').value || 'default';
         await window.electron.setProfileNoJagexAccount(selectedProfile);
-        const result = await downloadClientIfNotExist(version);
-        if (result?.exists) {
+        const version = await resolveLaunchVersion();
+        if (version) {
             try {
                 const result = await window.electron.updateClientJarTTL(
                     version
@@ -1590,6 +1568,166 @@ function playNoJagexAccount() {
                 window.electron.errorAlert(err?.message || String(err));
             }
         }
+    });
+}
+
+async function resolveLaunchVersion() {
+    if (isNightlyChannel()) {
+        const ready = await prepareNightlyClient(
+            'Check your internet connection, or click Stable under Version to keep playing.'
+        );
+        return ready ? NIGHTLY_VERSION : null;
+    }
+    const selectedVersion = document.getElementById('client').value;
+    if (!selectedVersion || !selectedVersion.includes('microbot-')) {
+        window.electron.errorAlert('Please select a valid client version');
+        return null;
+    }
+    const version = extractVersion(selectedVersion);
+    const result = await downloadClientIfNotExist(version);
+    return result?.exists ? version : null;
+}
+
+function isNightlyChannel() {
+    return clientChannel === 'nightly';
+}
+
+function formatNightlyDate(iso) {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString(undefined, {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function renderChannel() {
+    document.querySelectorAll('.channel-option').forEach((button) => {
+        button.setAttribute('aria-pressed', button.dataset.channel === clientChannel ? 'true' : 'false');
+        button.disabled = channelSwitching;
+    });
+    const clientSelect = document.getElementById('client');
+    if (clientSelect) clientSelect.hidden = isNightlyChannel();
+    const nightlyInfo = document.getElementById('nightly-info');
+    if (nightlyInfo) nightlyInfo.hidden = !isNightlyChannel();
+}
+
+function renderNightlyInfo(status, message) {
+    const box = document.getElementById('nightly-info');
+    const title = document.getElementById('nightly-info-title');
+    const hint = document.getElementById('nightly-info-hint');
+    if (!box || !title || !hint) return;
+    const installed = status?.installed;
+    const builtAt = installed ? formatNightlyDate(installed.builtAt) : '';
+    title.textContent = builtAt ? `Nightly from ${builtAt}` : 'Nightly';
+    box.title = installed ? `Client version ${installed.version}` : '';
+    const updateReady = Boolean(installed && status?.updateAvailable);
+    if (message) {
+        hint.textContent = message;
+    } else if (updateReady) {
+        hint.textContent = 'A newer build is out. It downloads when you press Play.';
+    } else if (installed) {
+        hint.textContent = 'Updates to the newest build when you press Play.';
+    } else {
+        hint.textContent = 'Downloads when you press Play.';
+    }
+    hint.classList.toggle('update', Boolean(message) || updateReady);
+}
+
+async function refreshNightlyInfo(checkRemote = false) {
+    if (!isNightlyChannel()) return;
+    try {
+        const status = await window.electron.nightlyStatus(checkRemote);
+        if (isNightlyChannel()) renderNightlyInfo(status);
+    } catch (error) {
+        window.electron.logError(`Nightly status failed: ${error?.message || error}`);
+    }
+}
+
+async function prepareNightlyClient(failureHint) {
+    const loader = document.getElementById('loader-container');
+    if (loader) loader.style.display = 'block';
+    try {
+        const result = await window.electron.prepareNightly();
+        if (!result || result.error) {
+            window.electron.errorAlert(
+                `${result?.error || 'Could not download the nightly build.'}\n\n${failureHint}`
+            );
+            return false;
+        }
+        if (result.warning) {
+            window.electron.logError(result.warning);
+        }
+        renderNightlyInfo({ installed: result.info }, result.warning);
+        return true;
+    } finally {
+        if (loader) loader.style.display = 'none';
+    }
+}
+
+function confirmNightly() {
+    const modal = document.getElementById('nightly-confirm-modal');
+    const okButton = document.getElementById('nightly-confirm-ok');
+    const cancelButton = document.getElementById('nightly-confirm-cancel');
+    if (!modal || !okButton || !cancelButton) return Promise.resolve(true);
+    modal.classList.remove('auth-hidden');
+    okButton.focus();
+    return new Promise((resolve) => {
+        const close = (confirmed) => {
+            modal.classList.add('auth-hidden');
+            okButton.removeEventListener('click', onConfirm);
+            cancelButton.removeEventListener('click', onCancel);
+            document.removeEventListener('keydown', onKeydown);
+            document.getElementById(`channel-${clientChannel}`)?.focus();
+            resolve(confirmed);
+        };
+        const onConfirm = () => close(true);
+        const onCancel = () => close(false);
+        const onKeydown = (event) => {
+            if (event.key === 'Escape') close(false);
+        };
+        okButton.addEventListener('click', onConfirm);
+        cancelButton.addEventListener('click', onCancel);
+        document.addEventListener('keydown', onKeydown);
+    });
+}
+
+async function selectChannel(channel) {
+    if (channel === clientChannel || channelSwitching) return;
+    if (channel === 'nightly' && !(await confirmNightly())) return;
+    channelSwitching = true;
+    renderChannel();
+    try {
+        if (
+            channel === 'nightly' &&
+            !(await prepareNightlyClient('You are still on Stable. Try again later.'))
+        ) {
+            return;
+        }
+        clientChannel = channel;
+        const properties = await window.electron.readProperties();
+        properties[CLIENT_CHANNEL] = channel;
+        await window.electron.writeProperties(properties);
+        if (channel === 'stable') {
+            await checkForClientUpdate(properties);
+        } else {
+            const updateBanner = document.querySelector('#update-available');
+            if (updateBanner) updateBanner.style = 'display:none';
+        }
+    } finally {
+        channelSwitching = false;
+        renderChannel();
+    }
+}
+
+function setupChannelSwitch(properties) {
+    clientChannel = properties?.[CLIENT_CHANNEL] === 'nightly' ? 'nightly' : 'stable';
+    renderChannel();
+    refreshNightlyInfo(false).then(() => refreshNightlyInfo(true));
+    document.querySelectorAll('.channel-option').forEach((button) => {
+        button.addEventListener('click', () => selectChannel(button.dataset.channel));
     });
 }
 
@@ -1899,6 +2037,7 @@ async function initUI(properties) {
     await updateProfileBasedOnCharacter();
 
     await setVersionPreference(properties);
+    setupChannelSwitch(properties);
     document.querySelector('.game-info').style = 'display:block';
 
     await setupRamInput();
@@ -1996,6 +2135,7 @@ function setupHamburgerMenu() {
  * @param {MicrobotProperties} properties - The properties object containing client information.
  */
 async function checkForClientUpdate(properties) {
+    if (isNightlyChannel()) return;
     const clientVersion = rememberLatestClientVersion(
         await window.electron.fetchClientVersion()
     );
@@ -2218,6 +2358,7 @@ async function shouldPromptForClientDownload(
  * @async
  */
 async function checkForOutdatedLaunch() {
+    if (isNightlyChannel()) return;
     const selectedFile = document.getElementById('client').value;
     const selectedVersion = extractVersion(selectedFile);
     const latestVersion = extractVersion(

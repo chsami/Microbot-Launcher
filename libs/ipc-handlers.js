@@ -31,6 +31,12 @@ module.exports = async function (deps) {
         isSafeClientVersion
     } = require(path.join(projectDir, 'libs', 'client-jars.js'));
     const { ensureHwidAgentJar } = require(path.join(projectDir, 'libs', 'hwid-agent.js'));
+    const { NIGHTLY_VERSION, prepareNightly, nightlyStatus } = require(path.join(
+        projectDir,
+        'libs',
+        'nightly-client.js'
+    ));
+    let nightlyInFlight = null;
 
     function invalidVersionResult(version) {
         const message = `Invalid client version: ${JSON.stringify(String(version))}`;
@@ -261,6 +267,26 @@ module.exports = async function (deps) {
         }
     });
 
+    ipcMain.handle('prepare-nightly', async (event) => {
+        if (!nightlyInFlight) {
+            nightlyInFlight = prepareNightly({
+                axios,
+                fs,
+                log,
+                microbotDir,
+                filestorage,
+                progress: (percent, status) => event.sender.send('progress', { percent, status })
+            }).finally(() => {
+                nightlyInFlight = null;
+            });
+        }
+        return nightlyInFlight;
+    });
+
+    ipcMain.handle('nightly-status', async (event, checkRemote) =>
+        nightlyStatus({ axios, fs, log, microbotDir, filestorage, checkRemote: checkRemote === true })
+    );
+
     ipcMain.handle('fetch-launcher-version', async () => {
         try {
             const response = await axios.get(url + '/api/version/launcher');
@@ -289,7 +315,7 @@ module.exports = async function (deps) {
         try {
             const filePath = path.join(microbotDir, `microbot-${version}.jar`);
             log.info(filePath);
-            if (fs.existsSync(filePath)) {
+            if (version !== NIGHTLY_VERSION && fs.existsSync(filePath)) {
                 ensureHwidAgentJar({ axios, fs, log, microbotDir, filestorage, version }).catch((error) =>
                     log.warn(`HWID agent ensure failed (${version}): ${error.message}`)
                 );

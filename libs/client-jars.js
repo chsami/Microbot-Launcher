@@ -25,7 +25,7 @@ function parseClientJar(file) {
         return null;
     }
     const version = match[1];
-    if (!isSafeClientVersion(version) || /^launcher/i.test(version)) {
+    if (!isSafeClientVersion(version) || /^launcher/i.test(version) || /^nightly$/i.test(version)) {
         return null;
     }
     return {
