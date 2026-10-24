@@ -2,6 +2,10 @@ name: Upload to Hetzner
 
 on:
     workflow_call:
+        inputs:
+            channel:
+                type: string
+                default: latest
 
 jobs:
     upload-to-hetzner:
@@ -19,6 +23,7 @@ jobs:
             - name: Upload to Hetzner
               env:
                   SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+                  RELEASE_DIR: /var/www/files/releases/${{ inputs.channel == 'dev' && 'microbot-launcher-dev' || 'microbot-launcher' }}/
               run: |
                   mkdir -p ~/.ssh
                   echo "$SSH_KEY" > ~/.ssh/id_rsa
@@ -26,11 +31,11 @@ jobs:
                   ssh-keyscan -H 138.201.81.246 >> ~/.ssh/known_hosts
 
                   # Create directories on server if they don't exist
-                  ssh root@138.201.81.246 "mkdir -p /var/www/files/releases/microbot-launcher/"
+                  ssh root@138.201.81.246 "mkdir -p $RELEASE_DIR"
 
                   # Upload Windows files with error handling
                   if ls ./artifacts/microbot-launcher-exe-latest/*.exe 1> /dev/null 2>&1; then
-                    scp -r ./artifacts/microbot-launcher-exe-latest/* root@138.201.81.246:/var/www/files/releases/microbot-launcher/
+                    scp -r ./artifacts/microbot-launcher-exe-latest/* root@138.201.81.246:$RELEASE_DIR
                     echo "✅ Windows files uploaded successfully"
                   else
                     echo "⚠️  Warning: Windows installer not found"
@@ -38,8 +43,8 @@ jobs:
 
                   # Upload Linux AppImage with error handling
                   if ls ./artifacts/microbot-launcher-linux-latest/*.AppImage 1> /dev/null 2>&1; then
-                    scp -r ./artifacts/microbot-launcher-linux-latest/*.AppImage root@138.201.81.246:/var/www/files/releases/microbot-launcher/
-                    scp ./artifacts/microbot-launcher-linux-latest/latest-linux.yml root@138.201.81.246:/var/www/files/releases/microbot-launcher/
+                    scp -r ./artifacts/microbot-launcher-linux-latest/*.AppImage root@138.201.81.246:$RELEASE_DIR
+                    scp ./artifacts/microbot-launcher-linux-latest/latest-linux.yml root@138.201.81.246:$RELEASE_DIR
                     echo "✅ Linux AppImage uploaded successfully"
                   else
                     echo "⚠️  Warning: Linux AppImage not found"
@@ -47,7 +52,7 @@ jobs:
 
                   # Upload macOS DMG with error handling
                   if ls ./artifacts/microbot-launcher-mac-latest/*.dmg 1> /dev/null 2>&1; then
-                    scp -r ./artifacts/microbot-launcher-mac-latest/*.dmg root@138.201.81.246:/var/www/files/releases/microbot-launcher/
+                    scp -r ./artifacts/microbot-launcher-mac-latest/*.dmg root@138.201.81.246:$RELEASE_DIR
                     echo "✅ macOS DMG uploaded successfully"
                   else
                     echo "⚠️  Warning: macOS DMG not found"

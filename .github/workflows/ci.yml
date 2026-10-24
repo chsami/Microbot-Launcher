@@ -8,13 +8,39 @@ permissions:
   contents: write
 
 jobs:
+    check_version:
+        runs-on: ubuntu-latest
+        outputs:
+            released: ${{ steps.tag.outputs.released }}
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Check whether this version is already released
+              id: tag
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  VERSION=$(node -p "require('./package.json').version")
+                  if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+                      echo "::notice::v$VERSION is already released; bump package.json to publish a new launcher."
+                      echo "released=true" >> $GITHUB_OUTPUT
+                  else
+                      echo "released=false" >> $GITHUB_OUTPUT
+                  fi
+
     build_windows:
+        needs: check_version
+        if: needs.check_version.outputs.released == 'false'
         uses: ./.github/workflows/build-windows.yml
 
     build_linux:
+        needs: check_version
+        if: needs.check_version.outputs.released == 'false'
         uses: ./.github/workflows/build-linux.yml
 
     build_mac:
+        needs: check_version
+        if: needs.check_version.outputs.released == 'false'
         uses: ./.github/workflows/build-mac.yml
 
     release:

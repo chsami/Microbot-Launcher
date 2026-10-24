@@ -1,0 +1,37 @@
+name: Main source guard
+
+on:
+    pull_request:
+        branches:
+            - main
+        types: [opened, reopened, edited, synchronize]
+
+permissions:
+    pull-requests: read
+
+jobs:
+    source:
+        name: Source is development
+        runs-on: ubuntu-latest
+        steps:
+            - name: Only development can be merged into main
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  PR: ${{ github.event.pull_request.number }}
+                  HEAD_REF: ${{ github.event.pull_request.head.ref }}
+                  HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+              run: |
+                  if [ "$HEAD_REF" = "development" ] && [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; then
+                      echo "Source is $GITHUB_REPOSITORY:development"
+                      exit 0
+                  fi
+                  for attempt in 1 2 3 4 5 6; do
+                      sleep 10
+                      BASE=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .base.ref)
+                      if [ "$BASE" != "main" ]; then
+                          echo "This pull request now targets $BASE"
+                          exit 0
+                      fi
+                  done
+                  echo "::error::Only $GITHUB_REPOSITORY:development can be merged into main. Change the base branch of this pull request to development."
+                  exit 1
