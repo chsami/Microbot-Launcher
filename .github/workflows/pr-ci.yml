@@ -19,10 +19,10 @@ jobs:
         name: Resolve base
         runs-on: ubuntu-latest
         outputs:
-            ref: ${{ steps.ref.outputs.ref }}
+            base: ${{ steps.base.outputs.base }}
         steps:
-            - name: Pick the commit to test
-              id: ref
+            - name: Wait for a pull request against main to be moved
+              id: base
               env:
                   GH_TOKEN: ${{ github.token }}
                   PR: ${{ github.event.pull_request.number }}
@@ -32,28 +32,16 @@ jobs:
               run: |
                   set -euo pipefail
                   if [ "$BASE" != "main" ] || { [ "$HEAD_REF" = "development" ] && [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; }; then
-                      echo "ref=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+                      echo "base=" >> "$GITHUB_OUTPUT"
                       exit 0
                   fi
                   echo "This pull request targets main and will be moved to development; testing it against the new base."
-                  for attempt in $(seq 1 18); do
+                  for attempt in $(seq 1 12); do
                       sleep 10
-                      PR_JSON=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR")
-                      NEW_BASE=$(jq -r .base.ref <<<"$PR_JSON")
-                      MERGEABLE=$(jq -r .mergeable <<<"$PR_JSON")
-                      MERGE_SHA=$(jq -r .merge_commit_sha <<<"$PR_JSON")
-                      if [ "$NEW_BASE" = "main" ] || [ "$MERGEABLE" = "null" ]; then
-                          continue
-                      fi
-                      if [ "$MERGEABLE" != "true" ]; then
-                          echo "::error::This pull request conflicts with $NEW_BASE. Rebase it onto $NEW_BASE and push again."
-                          exit 1
-                      fi
-                      BASE_SHA=$(gh api "repos/$GITHUB_REPOSITORY/branches/$NEW_BASE" --jq .commit.sha)
-                      PARENT_SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/$MERGE_SHA" --jq '.parents[0].sha')
-                      if [ "$PARENT_SHA" = "$BASE_SHA" ]; then
-                          echo "Testing $MERGE_SHA ($NEW_BASE merged with this pull request)"
-                          echo "ref=$MERGE_SHA" >> "$GITHUB_OUTPUT"
+                      NEW_BASE=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .base.ref)
+                      if [ "$NEW_BASE" != "main" ]; then
+                          echo "Testing against $NEW_BASE"
+                          echo "base=$NEW_BASE" >> "$GITHUB_OUTPUT"
                           exit 0
                       fi
                   done
@@ -71,7 +59,21 @@ jobs:
         steps:
             - uses: actions/checkout@v4
               with:
-                  ref: ${{ needs.resolve.outputs.ref }}
+                  ref: ${{ needs.resolve.outputs.base || github.sha }}
+                  fetch-depth: ${{ needs.resolve.outputs.base && '0' || '1' }}
+
+            - name: Merge the pull request into its new base
+              if: needs.resolve.outputs.base != ''
+              shell: bash
+              env:
+                  PR: ${{ github.event.pull_request.number }}
+                  NEW_BASE: ${{ needs.resolve.outputs.base }}
+              run: |
+                  git fetch --no-tags origin "+refs/pull/$PR/head:refs/remotes/pr/head"
+                  if ! git -c user.name=ci -c user.email=ci@localhost merge --no-edit pr/head; then
+                      echo "::error::This pull request conflicts with $NEW_BASE. Rebase it onto $NEW_BASE and push again."
+                      exit 1
+                  fi
             - uses: actions/setup-node@v4
               with:
                   node-version: 20
@@ -87,7 +89,21 @@ jobs:
         steps:
             - uses: actions/checkout@v4
               with:
-                  ref: ${{ needs.resolve.outputs.ref }}
+                  ref: ${{ needs.resolve.outputs.base || github.sha }}
+                  fetch-depth: ${{ needs.resolve.outputs.base && '0' || '1' }}
+
+            - name: Merge the pull request into its new base
+              if: needs.resolve.outputs.base != ''
+              shell: bash
+              env:
+                  PR: ${{ github.event.pull_request.number }}
+                  NEW_BASE: ${{ needs.resolve.outputs.base }}
+              run: |
+                  git fetch --no-tags origin "+refs/pull/$PR/head:refs/remotes/pr/head"
+                  if ! git -c user.name=ci -c user.email=ci@localhost merge --no-edit pr/head; then
+                      echo "::error::This pull request conflicts with $NEW_BASE. Rebase it onto $NEW_BASE and push again."
+                      exit 1
+                  fi
             - uses: actions/setup-node@v4
               with:
                   node-version: 20
