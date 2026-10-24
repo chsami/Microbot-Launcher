@@ -12,10 +12,57 @@ concurrency:
 
 permissions:
     contents: read
+    pull-requests: read
 
 jobs:
+    resolve:
+        name: Resolve base
+        runs-on: ubuntu-latest
+        outputs:
+            ref: ${{ steps.ref.outputs.ref }}
+        steps:
+            - name: Pick the commit to test
+              id: ref
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  PR: ${{ github.event.pull_request.number }}
+                  BASE: ${{ github.event.pull_request.base.ref }}
+                  HEAD_REF: ${{ github.event.pull_request.head.ref }}
+                  HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+              run: |
+                  set -euo pipefail
+                  if [ "$BASE" != "main" ] || { [ "$HEAD_REF" = "development" ] && [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; }; then
+                      echo "ref=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+                      exit 0
+                  fi
+                  echo "This pull request targets main and will be moved to development; testing it against the new base."
+                  for attempt in $(seq 1 18); do
+                      sleep 10
+                      PR_JSON=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR")
+                      NEW_BASE=$(jq -r .base.ref <<<"$PR_JSON")
+                      MERGEABLE=$(jq -r .mergeable <<<"$PR_JSON")
+                      MERGE_SHA=$(jq -r .merge_commit_sha <<<"$PR_JSON")
+                      if [ "$NEW_BASE" = "main" ] || [ "$MERGEABLE" = "null" ]; then
+                          continue
+                      fi
+                      if [ "$MERGEABLE" != "true" ]; then
+                          echo "::error::This pull request conflicts with $NEW_BASE. Rebase it onto $NEW_BASE and push again."
+                          exit 1
+                      fi
+                      BASE_SHA=$(gh api "repos/$GITHUB_REPOSITORY/branches/$NEW_BASE" --jq .commit.sha)
+                      PARENT_SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/$MERGE_SHA" --jq '.parents[0].sha')
+                      if [ "$PARENT_SHA" = "$BASE_SHA" ]; then
+                          echo "Testing $MERGE_SHA ($NEW_BASE merged with this pull request)"
+                          echo "ref=$MERGE_SHA" >> "$GITHUB_OUTPUT"
+                          exit 0
+                      fi
+                  done
+                  echo "::error::This pull request still targets main. Change its base branch to development."
+                  exit 1
+
     test:
         name: Test (${{ matrix.os }})
+        needs: resolve
         strategy:
             fail-fast: false
             matrix:
@@ -23,6 +70,8 @@ jobs:
         runs-on: ${{ matrix.os }}
         steps:
             - uses: actions/checkout@v4
+              with:
+                  ref: ${{ needs.resolve.outputs.ref }}
             - uses: actions/setup-node@v4
               with:
                   node-version: 20
@@ -33,9 +82,12 @@ jobs:
 
     package:
         name: Package (linux)
+        needs: resolve
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
+              with:
+                  ref: ${{ needs.resolve.outputs.ref }}
             - uses: actions/setup-node@v4
               with:
                   node-version: 20

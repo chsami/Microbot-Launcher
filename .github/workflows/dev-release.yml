@@ -15,16 +15,19 @@ permissions:
 
 jobs:
     build_windows:
+        if: github.ref == 'refs/heads/development'
         uses: ./.github/workflows/build-windows.yml
         with:
             channel: dev
 
     build_linux:
+        if: github.ref == 'refs/heads/development'
         uses: ./.github/workflows/build-linux.yml
         with:
             channel: dev
 
     build_mac:
+        if: github.ref == 'refs/heads/development'
         uses: ./.github/workflows/build-mac.yml
         with:
             channel: dev

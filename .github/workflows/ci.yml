@@ -15,13 +15,23 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
-            - name: Check whether this version is already released
+            - name: Check whether this version is fully released
               id: tag
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
+                  set -euo pipefail
                   VERSION=$(node -p "require('./package.json').version")
-                  if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+                  fetch() {
+                      curl -sS --fail --connect-timeout 10 --max-time 30 --retry 3 --retry-delay 2 --retry-all-errors "$1"
+                  }
+                  FEED=https://files.microbot.cloud/releases/microbot-launcher
+                  WIN=$(fetch "$FEED/latest.yml" | sed -n 's/^version: *//p')
+                  LINUX=$(fetch "$FEED/latest-linux.yml" | sed -n 's/^version: *//p')
+                  API=$(fetch https://microbot.cloud/api/version/launcher | tr -d '"[:space:]')
+                  echo "package.json=$VERSION windows feed=$WIN linux feed=$LINUX api=$API"
+                  if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+                      && [ "$WIN" = "$VERSION" ] && [ "$LINUX" = "$VERSION" ] && [ "$API" = "$VERSION" ]; then
                       echo "::notice::v$VERSION is already released; bump package.json to publish a new launcher."
                       echo "released=true" >> $GITHUB_OUTPUT
                   else

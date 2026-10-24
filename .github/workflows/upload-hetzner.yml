@@ -20,6 +20,19 @@ jobs:
             - name: List downloaded files for debugging
               run: ls -R ./artifacts
 
+            - name: Check the build matches the channel
+              env:
+                  CHANNEL: ${{ inputs.channel }}
+              run: |
+                  set -euo pipefail
+                  VERSION=$(sed -n 's/^version: *//p' ./artifacts/microbot-launcher-exe-latest/latest.yml)
+                  case "$CHANNEL:$VERSION" in
+                      dev:*-dev.*) ;;
+                      latest:*-*) echo "::error::Prerelease $VERSION cannot go to the release feed"; exit 1 ;;
+                      latest:*) ;;
+                      *) echo "::error::Version $VERSION does not belong in the $CHANNEL channel"; exit 1 ;;
+                  esac
+
             - name: Upload to Hetzner
               env:
                   SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
@@ -59,3 +72,20 @@ jobs:
                   fi
 
                   echo "🎉 All uploads to Hetzner completed!"
+
+            - name: Remove old dev builds from Hetzner
+              if: inputs.channel == 'dev'
+              run: |
+                  ssh root@138.201.81.246 'bash -s' <<'EOF'
+                  set -euo pipefail
+                  cd /var/www/files/releases/microbot-launcher-dev/
+                  pattern='[0-9]+\.[0-9]+\.[0-9]+-dev\.[0-9]+'
+                  keep=$(ls -1 | grep -oE "$pattern" | sort -uV | tail -n 3)
+                  ls -1 | while IFS= read -r file; do
+                      version=$(printf '%s\n' "$file" | grep -oE "$pattern" | head -n 1 || true)
+                      if [ -n "$version" ] && ! printf '%s\n' "$keep" | grep -qxF "$version"; then
+                          echo "Deleting $file"
+                          rm -f -- "$file"
+                      fi
+                  done
+                  EOF
