@@ -9,18 +9,20 @@
         return (month === 9 && day >= 20) || (month === 10 && day === 1);
     };
 
+    const msUntilNextDay = (date) => {
+        const next = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+        return next.getTime() - date.getTime() + 1000;
+    };
+
     if (typeof document === 'undefined') {
-        module.exports = { TAGLINE, isHalloweenSeason };
+        module.exports = { TAGLINE, isHalloweenSeason, msUntilNextDay };
         return;
     }
 
-    if (!isHalloweenSeason(new Date())) {
-        return;
-    }
+    let defaultTagline = null;
 
-    const decorate = () => {
-        const logo = document.querySelector('.game-logo');
-        if (!logo || logo.querySelector('.hw-decor')) {
+    const decorate = (logo) => {
+        if (logo.querySelector('.hw-decor')) {
             return;
         }
         document.body.classList.add('is-halloween');
@@ -36,6 +38,7 @@
 
         const tagline = logo.querySelector('.game-logo-tagline');
         if (tagline) {
+            defaultTagline = tagline.textContent;
             tagline.textContent = TAGLINE;
         }
 
@@ -52,9 +55,31 @@
         logo.appendChild(sky);
     };
 
+    const undecorate = (logo) => {
+        document.body.classList.remove('is-halloween');
+        logo.querySelectorAll('.hw-decor').forEach((element) => element.remove());
+        const tagline = logo.querySelector('.game-logo-tagline');
+        if (tagline && defaultTagline !== null) {
+            tagline.textContent = defaultTagline;
+        }
+    };
+
+    const apply = () => {
+        const now = new Date();
+        const logo = document.querySelector('.game-logo');
+        if (logo) {
+            if (isHalloweenSeason(now)) {
+                decorate(logo);
+            } else {
+                undecorate(logo);
+            }
+        }
+        setTimeout(apply, msUntilNextDay(now));
+    };
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', decorate);
+        document.addEventListener('DOMContentLoaded', apply);
     } else {
-        decorate();
+        apply();
     }
 })();
