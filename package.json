@@ -52,6 +52,7 @@
       "renderer.js",
       "profiles-screen.js",
       "setup-guide.js",
+      "halloween.js",
       "preload.js",
       "package.json",
       "!**/*.map",
