@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell, nativeImage, clipboard, safeStorage } = require('electron');
+const { app, BrowserWindow, dialog, shell, nativeImage, clipboard, safeStorage, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
@@ -79,6 +79,19 @@ async function loadLibraries() {
             }
         } catch (authError) {
             log.error('Error setting up auth:', authError);
+        }
+        if (apiAuth) {
+            try {
+                require(path.join(__dirname, 'libs', 'dashboard-session.js'))({
+                    ipcMain,
+                    log,
+                    session,
+                    auth: apiAuth,
+                    getWindow: () => mainWindow
+                });
+            } catch (dashboardError) {
+                log.error('Error setting up the dashboard session:', dashboardError);
+            }
         }
         try {
             deps.alerts = require(path.join(__dirname, 'libs', 'client-alerts.js'))({
