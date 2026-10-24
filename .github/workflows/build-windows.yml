@@ -24,13 +24,14 @@ jobs:
 
             - run: npm ci
 
+            - run: npm test
+
             - name: Prepare dev build
               if: inputs.channel == 'dev'
               run: node scripts/prepare-dev-build.js
               env:
                   DEV_BUILD_NUMBER: ${{ github.run_number }}
 
-            - run: npm test
             - run: npm run release
 
             - name: Get version from package.json
