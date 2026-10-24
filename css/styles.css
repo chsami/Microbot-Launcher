@@ -2927,3 +2927,72 @@ button.hamburger {
 .guide-status-row .guide-action {
     flex: none;
 }
+
+.is-halloween .game-logo {
+    position: relative;
+    overflow: hidden;
+    background: radial-gradient(120px 70px at 44px 50%, rgba(255, 122, 0, .2), transparent 70%),
+        radial-gradient(160px 60px at 100% 0%, rgba(107, 47, 160, .25), transparent 70%), #120e0b;
+}
+
+.is-halloween .game-logo-mark {
+    position: relative;
+}
+
+.game-logo-mark .hw-pumpkin {
+    position: absolute;
+    right: -8px;
+    bottom: -6px;
+    width: 24px;
+    height: 24px;
+    filter: drop-shadow(0 0 5px rgba(255, 140, 0, .7));
+    animation: hw-glow 3s ease-in-out infinite alternate;
+}
+
+.is-halloween .game-logo-tagline {
+    color: #ff9a1f;
+}
+
+.hw-sky {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.hw-bat {
+    position: absolute;
+    width: 30px;
+    filter: drop-shadow(0 0 3px rgba(255, 150, 40, .9)) drop-shadow(0 0 8px rgba(255, 120, 0, .4));
+    animation: hw-flap .32s ease-in-out infinite alternate, hw-hover 4s ease-in-out infinite alternate;
+}
+
+.hw-bat-1 { right: 24px; top: 12px; }
+.hw-bat-2 { right: 70px; top: 34px; width: 22px; animation-duration: .28s, 5s; animation-delay: -.1s, -2s; }
+.hw-bat-3 { right: 112px; top: 10px; width: 17px; animation-duration: .25s, 6s; animation-delay: -.2s, -1s; }
+
+.is-halloween .play-button {
+    background: linear-gradient(135deg, #ffb347, #e8650f);
+    box-shadow: 0 0 14px rgba(255, 122, 0, .35);
+}
+
+@keyframes hw-flap {
+    from { scale: 1 1; }
+    to { scale: 1 .55; }
+}
+
+@keyframes hw-hover {
+    from { translate: 0 -3px; }
+    to { translate: -6px 4px; }
+}
+
+@keyframes hw-glow {
+    from { filter: drop-shadow(0 0 3px rgba(255, 140, 0, .4)); }
+    to { filter: drop-shadow(0 0 8px rgba(255, 160, 0, .9)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hw-bat,
+    .game-logo-mark .hw-pumpkin {
+        animation: none;
+    }
+}
