@@ -2,9 +2,13 @@ name: Build macOS App
 
 on:
     workflow_call:
+        inputs:
+            channel:
+                type: string
+                default: latest
 
 concurrency:
-    group: mac-build-${{ github.ref_name }}
+    group: mac-build-${{ inputs.channel }}-${{ github.ref_name }}
     cancel-in-progress: true
 
 jobs:
@@ -26,6 +30,12 @@ jobs:
 
             - name: Run tests
               run: npm test
+
+            - name: Prepare dev build
+              if: inputs.channel == 'dev'
+              run: node scripts/prepare-dev-build.js
+              env:
+                  DEV_BUILD_NUMBER: ${{ github.run_number }}
 
             - name: Build macOS app (dmg & zip)
               run: npm run mac

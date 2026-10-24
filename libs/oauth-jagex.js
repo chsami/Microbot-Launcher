@@ -7,9 +7,10 @@ const http = require('http');
 const log = require('electron-log');
 const { getAvailableBrowser } = require('./browser-util.js');
 const { toProxyUri, startLoginProxy } = require('./login-proxy.js');
+const { microbotDirName } = require('./dir-module.js');
 
 const userHome = process.env.HOME || process.env.USERPROFILE;
-const ACCOUNTS_DIR = path.join(userHome, '.microbot');
+const ACCOUNTS_DIR = path.join(userHome, microbotDirName);
 const ACCOUNTS_FILE_PATH = path.join(ACCOUNTS_DIR, 'accounts.json');
 
 /**

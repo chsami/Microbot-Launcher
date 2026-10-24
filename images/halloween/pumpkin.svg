@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <radialGradient id="mbPumpkinSkin" cx="45%" cy="38%" r="65%">
+      <stop offset="0" stop-color="#ffb347"/>
+      <stop offset="0.6" stop-color="#f07a12"/>
+      <stop offset="1" stop-color="#b8480a"/>
+    </radialGradient>
+    <radialGradient id="mbPumpkinGlow" cx="50%" cy="50%" r="60%">
+      <stop offset="0" stop-color="#fff6b0"/>
+      <stop offset="1" stop-color="#ffb30f"/>
+    </radialGradient>
+  </defs>
+  <path d="M50 26 C49 18 52 11 60 8" fill="none" stroke="#4f6b1f" stroke-width="7" stroke-linecap="round"/>
+  <path d="M55 15 C62 10 70 12 73 17" fill="none" stroke="#6d8f2a" stroke-width="3" stroke-linecap="round"/>
+  <ellipse cx="29" cy="60" rx="23" ry="31" fill="url(#mbPumpkinSkin)"/>
+  <ellipse cx="71" cy="60" rx="23" ry="31" fill="url(#mbPumpkinSkin)"/>
+  <ellipse cx="50" cy="60" rx="25" ry="34" fill="url(#mbPumpkinSkin)"/>
+  <path d="M38 28 C30 44 30 76 38 93 M62 28 C70 44 70 76 62 93" fill="none" stroke="#a9440a" stroke-width="1.8" opacity="0.7"/>
+  <path d="M27 52 L39 39 L44 54 Z" fill="url(#mbPumpkinGlow)"/>
+  <path d="M73 52 L61 39 L56 54 Z" fill="url(#mbPumpkinGlow)"/>
+  <path d="M50 56 L45.5 65 L54.5 65 Z" fill="url(#mbPumpkinGlow)"/>
+  <path d="M23 68 C33 86 67 86 77 68 L71 71 L67 77 L61 73 L56 80 L50 75 L44 80 L39 73 L33 77 L29 71 Z" fill="url(#mbPumpkinGlow)"/>
+</svg>
