@@ -276,10 +276,11 @@ module.exports = function setupApiAuth(deps) {
     };
 
     const setDashboardTokens = (tokens) => {
-        if (!session || !tokens?.accessToken || !tokens?.refreshToken) return;
+        if (!session || !tokens?.accessToken || !tokens?.refreshToken) return false;
         const stored = session.dashboard;
-        if (stored?.accessToken === tokens.accessToken && stored?.refreshToken === tokens.refreshToken) return;
+        if (stored?.accessToken === tokens.accessToken && stored?.refreshToken === tokens.refreshToken) return false;
         writeSession({ ...session, dashboard: { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken } });
+        return true;
     };
 
     const dashboardSignedOut = async () => {
@@ -298,7 +299,7 @@ module.exports = function setupApiAuth(deps) {
             const status = error?.response?.status;
             if (!status || status >= 500 || status === 408 || status === 429) {
                 log.warn(`Could not check the dashboard session: ${error?.message || error}`);
-                return session === current ? 'expired' : 'none';
+                return session === current ? 'unreachable' : 'none';
             }
         }
         if (session !== current) return 'none';

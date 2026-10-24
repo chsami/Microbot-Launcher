@@ -202,24 +202,98 @@ describe('dashboard session', () => {
         expect(cookies.jar.get('refresh-token')).toBe('dash-refresh-3');
     });
 
-    test('a failed check keeps the dashboard session when the server is unreachable', async () => {
-        await signIn();
-        await ipcMain.invoke('dashboard:open');
-        routes['refresh-token'] = () => {
-            throw new Error('ECONNREFUSED');
+    describe('when the server is unreachable', () => {
+        const dashboardLogsOut = async () => {
+            await cookies.remove('', 'auth-token');
+            await cookies.remove('', 'refresh-token');
+            await settle();
         };
 
-        await cookies.remove('', 'auth-token');
-        await cookies.remove('', 'refresh-token');
-        await settle();
+        const reopen = async () => {
+            sent.length = 0;
+            await ipcMain.invoke('dashboard:open');
+            await settle();
+        };
 
-        expect((await ipcMain.invoke('auth:status')).authenticated).toBe(true);
-        expect(stored().dashboard).toEqual({ accessToken: 'dash-access', refreshToken: 'dash-refresh' });
-        expect(sent).toContain('dashboard:reload');
+        beforeEach(async () => {
+            jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
+            await signIn();
+            await ipcMain.invoke('dashboard:open');
+            routes['refresh-token'] = () => {
+                throw new Error('ECONNREFUSED');
+            };
+            sent.length = 0;
+        });
 
-        await ipcMain.invoke('dashboard:open');
-        expect(calls('fork-session')).toHaveLength(1);
-        expect(cookies.jar.get('refresh-token')).toBe('dash-refresh');
+        afterEach(() => {
+            jest.useRealTimers();
+        });
+
+        test('the dashboard session is kept and the landing page shows instead of reloading', async () => {
+            await dashboardLogsOut();
+
+            expect((await ipcMain.invoke('auth:status')).authenticated).toBe(true);
+            expect(stored().dashboard).toEqual({ accessToken: 'dash-access', refreshToken: 'dash-refresh' });
+            expect(sent).toContain('dashboard:unavailable');
+            expect(sent).not.toContain('dashboard:reload');
+
+            await reopen();
+            expect(calls('fork-session')).toHaveLength(1);
+            expect(cookies.jar.get('refresh-token')).toBe('dash-refresh');
+        });
+
+        test('retries back off from 30 seconds and double each time', async () => {
+            await dashboardLogsOut();
+            jest.advanceTimersByTime(29 * 1000);
+            expect(sent).not.toContain('dashboard:reload');
+            jest.advanceTimersByTime(1000);
+            expect(sent).toContain('dashboard:reload');
+
+            await reopen();
+            await dashboardLogsOut();
+            jest.advanceTimersByTime(59 * 1000);
+            expect(sent).not.toContain('dashboard:reload');
+            jest.advanceTimersByTime(1000);
+            expect(sent).toContain('dashboard:reload');
+        });
+
+        test('the delay is capped at five minutes', async () => {
+            for (let i = 0; i < 6; i++) {
+                await dashboardLogsOut();
+                jest.advanceTimersByTime(5 * 60 * 1000);
+                await reopen();
+            }
+            await dashboardLogsOut();
+            jest.advanceTimersByTime(5 * 60 * 1000 - 1);
+            expect(sent).not.toContain('dashboard:reload');
+            jest.advanceTimersByTime(1);
+            expect(sent).toContain('dashboard:reload');
+        });
+
+        test('a working dashboard refresh resets the delay', async () => {
+            await dashboardLogsOut();
+            jest.advanceTimersByTime(30 * 1000);
+            await reopen();
+
+            await cookies.set({ name: 'auth-token', value: 'dash-access-2' });
+            await cookies.set({ name: 'refresh-token', value: 'dash-refresh-2' });
+            await settle();
+            sent.length = 0;
+
+            await dashboardLogsOut();
+            jest.advanceTimersByTime(30 * 1000);
+            expect(sent).toContain('dashboard:reload');
+        });
+
+        test('signing out cancels the pending retry', async () => {
+            await dashboardLogsOut();
+            await ipcMain.invoke('auth:signout');
+            await settle();
+            sent.length = 0;
+
+            jest.advanceTimersByTime(10 * 60 * 1000);
+            expect(sent).not.toContain('dashboard:reload');
+        });
     });
 
     test('signing out of the launcher ends both sessions and clears the dashboard cookies', async () => {
