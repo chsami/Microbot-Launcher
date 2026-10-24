@@ -19,39 +19,13 @@ function getShell() {
 
 // commonly used internal locations (create if missing on demand)
 const homeDir = os.homedir();
-const microbotDir = path.join(homeDir, '.microbot');
+const microbotDirName = require('../package.json').name.endsWith('-dev')
+    ? '.microbot-dev'
+    : '.microbot';
+const microbotDir = path.join(homeDir, microbotDirName);
 const runeliteDir = path.join(homeDir, '.runelite');
 const clientLogs = path.join(runeliteDir, 'logs', 'client.log');
-const launcherLogs = () => {
-    switch (process.platform) {
-        case 'win32':
-            return path.join(
-                homeDir,
-                'AppData',
-                'Roaming',
-                'microbot-launcher',
-                'logs',
-                'main.log'
-            );
-        case 'darwin':
-            return path.join(
-                homeDir,
-                'Library',
-                'Logs',
-                'microbot-launcher',
-                'main.log'
-            );
-        case 'linux':
-            return path.join(
-                homeDir,
-                '.config',
-                'microbot-launcher',
-                'logs',
-                'main.log'
-            );
-    }
-    return null;
-};
+const launcherLogs = () => require('electron-log').transports.file.getFile().path;
 
 /**
  * Uses electron shell to open a path based on the logical key.
@@ -246,6 +220,7 @@ async function updateClientJarTTL(version) {
 
 module.exports = {
     microbotDir,
+    microbotDirName,
     openLocation,
     getClientsJarTTL,
     cleanupUnusedClientsJar,

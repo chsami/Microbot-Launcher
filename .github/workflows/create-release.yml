@@ -30,6 +30,18 @@ jobs:
                   echo "version=$APP_VERSION" >> $GITHUB_OUTPUT
                   echo "App version: $APP_VERSION"
 
+            - name: Check the version matches the channel
+              env:
+                  CHANNEL: ${{ inputs.channel }}
+                  VERSION: ${{ steps.version.outputs.version }}
+              run: |
+                  case "$CHANNEL:$VERSION" in
+                      dev:*-dev.*) ;;
+                      latest:*-*) echo "::error::Prerelease $VERSION cannot be published as a release"; exit 1 ;;
+                      latest:*) ;;
+                      *) echo "::error::Version $VERSION does not belong in the $CHANNEL channel"; exit 1 ;;
+                  esac
+
             - name: Download all artifacts
               uses: actions/download-artifact@v4
               with:
