@@ -2,6 +2,10 @@ name: Create Release
 
 on:
     workflow_call:
+        inputs:
+            channel:
+                type: string
+                default: latest
 
 permissions:
     contents: write
@@ -12,6 +16,12 @@ jobs:
 
         steps:
             - uses: actions/checkout@v4
+
+            - name: Prepare dev build
+              if: inputs.channel == 'dev'
+              run: node scripts/prepare-dev-build.js
+              env:
+                  DEV_BUILD_NUMBER: ${{ github.run_number }}
 
             - name: Get version from package.json
               id: version
@@ -32,7 +42,10 @@ jobs:
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: v${{ steps.version.outputs.version }}
-                  name: Release v${{ steps.version.outputs.version }}
+                  name: ${{ inputs.channel == 'dev' && 'Dev build' || 'Release' }} v${{ steps.version.outputs.version }}
+                  prerelease: ${{ inputs.channel == 'dev' }}
+                  make_latest: ${{ inputs.channel == 'dev' && 'false' || 'true' }}
+                  target_commitish: ${{ github.sha }}
                   files: |
                       ./artifacts/microbot-launcher-exe-latest/*.exe
                       ./artifacts/microbot-launcher-exe-latest/latest.yml
@@ -43,7 +56,21 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+            - name: Prune old dev builds
+              if: inputs.channel == 'dev'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  set -euo pipefail
+                  gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName,isPrerelease,createdAt \
+                      --jq '[.[] | select(.isPrerelease and (.tagName | test("-dev\\.[0-9]+$")))] | sort_by(.createdAt) | reverse | .[10:] | .[].tagName' |
+                  while read -r tag; do
+                      echo "Deleting $tag"
+                      gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+                  done
+
             - name: Install jq and verify API secrets
+              if: inputs.channel != 'dev'
               run: |
                   set -euo pipefail
                   sudo apt-get update
@@ -58,6 +85,7 @@ jobs:
                   echo "jq installed and required secrets present"
 
             - name: Get Auth Token (Launcher Version Update)
+              if: inputs.channel != 'dev'
               id: auth
               run: |
                   set -euo pipefail
@@ -77,6 +105,7 @@ jobs:
                   echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
             - name: Update Launcher Version in API
+              if: inputs.channel != 'dev'
               run: |
                   set -euo pipefail
                   VERSION=${{ steps.version.outputs.version }}

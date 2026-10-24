@@ -1,0 +1,47 @@
+name: PR CI
+
+on:
+    pull_request:
+        branches:
+            - development
+            - main
+
+concurrency:
+    group: pr-ci-${{ github.event.pull_request.number }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
+
+jobs:
+    test:
+        name: Test (${{ matrix.os }})
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, windows-latest]
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+
+            - run: npm ci
+            - run: npm test
+
+    package:
+        name: Package (linux)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+
+            - run: npm ci
+
+            - name: Package without publishing
+              run: npx electron-builder --linux dir --publish never
