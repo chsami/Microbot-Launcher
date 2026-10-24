@@ -501,6 +501,7 @@ async function refreshAuthStatus() {
     if (!status?.authenticated) hideChangePasswordModal();
     updateSessionEmail(status?.authenticated ? status?.user?.email || '' : '');
     await ensureLauncherInitialized();
+    updateEmbeddedPage();
 }
 
 async function ensureLauncherInitialized() {
@@ -962,6 +963,7 @@ async function initializeLauncher() {
 
 window.addEventListener('load', async () => {
     setupAuthUI();
+    window.electron.ipcRenderer.receive('auth:changed', () => refreshAuthStatus());
     await refreshAuthStatus();
 });
 
@@ -2024,16 +2026,46 @@ async function checkForClientUpdate(properties) {
     }
 }
 
+const LANDING_PAGE_URL = 'https://www.themicrobot.com?source=launcher';
+let embeddedPageReady = false;
+let embeddedPageRequest = 0;
+
+/**
+ * Show the Microbot dashboard in the embedded webview while signed in, and the landing page otherwise.
+ *
+ * @param {{reload?: boolean}} [options] reload: load the target again even if it is already showing.
+ */
+async function updateEmbeddedPage({ reload = false } = {}) {
+    const webview = document.getElementById('website');
+    if (!webview || !embeddedPageReady) return;
+    const request = ++embeddedPageRequest;
+    let target = LANDING_PAGE_URL;
+    if (currentSessionEmail && apiAuthEnabled) {
+        try {
+            const result = await window.electron.dashboard.open();
+            if (result?.url) target = result.url;
+        } catch (error) {
+            console.error('Could not open the dashboard:', error);
+        }
+    }
+    if (request !== embeddedPageRequest) return;
+    if (!reload && webview.dataset.target === target) return;
+    webview.dataset.target = target;
+    webview.src = target;
+}
+
 /**
  * Initialize the webview for the embedded site.
- * This webview will load the Microbot landing page and manipulate some elements
+ * On the Microbot landing page it manipulates some elements
  * so it looks more integrated with the launcher.
  */
 function loadLandingPageWebview() {
     const webview = document.getElementById('website');
     const webviewOverlay = document.getElementById('embed-overlay');
     if (webview) {
-        webview.src = 'https://www.themicrobot.com?source=launcher';
+        embeddedPageReady = true;
+        updateEmbeddedPage();
+        window.electron.ipcRenderer.receive('dashboard:reload', () => updateEmbeddedPage({ reload: true }));
         webview.addEventListener('dom-ready', () => {
             // Mirrors the .sidebar scrollbar in css/styles.css; auto width/color lets the webkit rules apply.
             webview
@@ -2046,6 +2078,10 @@ function loadLandingPageWebview() {
                     ::-webkit-scrollbar-thumb:active { background-color: #ffb13b; }`
                 )
                 .catch((err) => console.error('insertCSS failed', err));
+            if (!webview.getURL().startsWith('https://www.themicrobot.com')) {
+                webviewOverlay?.classList.add('hidden');
+                return;
+            }
             try {
                 webview
                     .executeJavaScript(
