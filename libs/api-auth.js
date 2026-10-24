@@ -295,7 +295,11 @@ module.exports = function setupApiAuth(deps) {
             alive = true;
             await endOnServer(data.refreshToken);
         } catch (error) {
-            alive = false;
+            const status = error?.response?.status;
+            if (!status || status >= 500 || status === 408 || status === 429) {
+                log.warn(`Could not check the dashboard session: ${error?.message || error}`);
+                return session === current ? 'expired' : 'none';
+            }
         }
         if (session !== current) return 'none';
         if (alive) {

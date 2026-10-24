@@ -202,6 +202,26 @@ describe('dashboard session', () => {
         expect(cookies.jar.get('refresh-token')).toBe('dash-refresh-3');
     });
 
+    test('a failed check keeps the dashboard session when the server is unreachable', async () => {
+        await signIn();
+        await ipcMain.invoke('dashboard:open');
+        routes['refresh-token'] = () => {
+            throw new Error('ECONNREFUSED');
+        };
+
+        await cookies.remove('', 'auth-token');
+        await cookies.remove('', 'refresh-token');
+        await settle();
+
+        expect((await ipcMain.invoke('auth:status')).authenticated).toBe(true);
+        expect(stored().dashboard).toEqual({ accessToken: 'dash-access', refreshToken: 'dash-refresh' });
+        expect(sent).toContain('dashboard:reload');
+
+        await ipcMain.invoke('dashboard:open');
+        expect(calls('fork-session')).toHaveLength(1);
+        expect(cookies.jar.get('refresh-token')).toBe('dash-refresh');
+    });
+
     test('signing out of the launcher ends both sessions and clears the dashboard cookies', async () => {
         await signIn();
         await ipcMain.invoke('dashboard:open');
