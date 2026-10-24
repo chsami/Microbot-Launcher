@@ -2,6 +2,8 @@ const DEFAULT_DASHBOARD_URL = 'https://dashboard.microbot.cloud';
 const PARTITION = 'persist:dashboard';
 const ACCESS_COOKIE = 'auth-token';
 const REFRESH_COOKIE = 'refresh-token';
+const RETRY_MIN_MS = 30 * 1000;
+const RETRY_MAX_MS = 5 * 60 * 1000;
 
 module.exports = function setupDashboardSession(deps) {
     const { ipcMain, log, session: electronSession, auth, getWindow } = deps;
@@ -40,17 +42,36 @@ module.exports = function setupDashboardSession(deps) {
     let writing = Promise.resolve();
     let reconciling = null;
     let reconcileAgain = false;
+    let retryDelay = RETRY_MIN_MS;
+    let retryTimer = null;
+
+    const resetRetry = () => {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+        retryDelay = RETRY_MIN_MS;
+    };
+
+    const retryLater = () => {
+        send('dashboard:unavailable');
+        if (retryTimer) return;
+        retryTimer = setTimeout(() => {
+            retryTimer = null;
+            send('dashboard:reload');
+        }, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, RETRY_MAX_MS);
+    };
 
     const reconcile = async () => {
         await writing;
         const { accessToken, refreshToken } = await readCookies();
         if (accessToken && refreshToken) {
-            auth.setDashboardTokens({ accessToken, refreshToken });
+            if (auth.setDashboardTokens({ accessToken, refreshToken })) resetRetry();
             return;
         }
         if (refreshToken) return;
         const outcome = await auth.dashboardSignedOut();
         if (outcome === 'expired') send('dashboard:reload');
+        if (outcome === 'unreachable') retryLater();
     };
 
     const scheduleReconcile = () => {
@@ -76,7 +97,10 @@ module.exports = function setupDashboardSession(deps) {
     });
 
     auth.onChange((user) => {
-        if (!user) writing = writing.then(clearCookies);
+        if (!user) {
+            resetRetry();
+            writing = writing.then(clearCookies);
+        }
         send('auth:changed');
     });
 

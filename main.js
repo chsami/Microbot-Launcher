@@ -198,6 +198,14 @@ autoUpdater.on('update-downloaded', () => {
         });
 });
 
+app.on('web-contents-created', (_event, contents) => {
+    if (contents.getType() !== 'webview') return;
+    contents.setWindowOpenHandler(({ url }) => {
+        if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+        return { action: 'deny' };
+    });
+});
+
 app.whenReady().then(async () => {
     log.info('App starting...');
 

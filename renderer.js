@@ -2033,14 +2033,15 @@ let embeddedPageRequest = 0;
 /**
  * Show the Microbot dashboard in the embedded webview while signed in, and the landing page otherwise.
  *
- * @param {{reload?: boolean}} [options] reload: load the target again even if it is already showing.
+ * @param {{reload?: boolean, landing?: boolean}} [options] reload: load the target again even if it is already showing.
+ * landing: show the landing page even while signed in.
  */
-async function updateEmbeddedPage({ reload = false } = {}) {
+async function updateEmbeddedPage({ reload = false, landing = false } = {}) {
     const webview = document.getElementById('website');
     if (!webview || !embeddedPageReady) return;
     const request = ++embeddedPageRequest;
     let target = LANDING_PAGE_URL;
-    if (currentSessionEmail && apiAuthEnabled) {
+    if (!landing && currentSessionEmail && apiAuthEnabled) {
         try {
             const result = await window.electron.dashboard.open();
             if (result?.url) target = result.url;
@@ -2066,6 +2067,7 @@ function loadLandingPageWebview() {
         embeddedPageReady = true;
         updateEmbeddedPage();
         window.electron.ipcRenderer.receive('dashboard:reload', () => updateEmbeddedPage({ reload: true }));
+        window.electron.ipcRenderer.receive('dashboard:unavailable', () => updateEmbeddedPage({ landing: true }));
         webview.addEventListener('dom-ready', () => {
             // Mirrors the .sidebar scrollbar in css/styles.css; auto width/color lets the webkit rules apply.
             webview
