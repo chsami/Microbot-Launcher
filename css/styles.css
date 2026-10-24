@@ -1054,7 +1054,7 @@ h2 {
 }
 
 .hwid-spoof-state::after {
-    content: "All accounts send this PC's ID";
+    content: "Using this PC's real ID";
     margin-left: 8px;
     font-size: 12px;
     font-weight: 500;
@@ -1066,7 +1066,7 @@ h2 {
 }
 
 .hwid-spoof-toggle:has(.hwid-spoof-input:checked) .hwid-spoof-state::after {
-    content: 'Each account sends its own ID';
+    content: 'Using a unique ID per account';
 }
 
 .hwid-spoof-input {
