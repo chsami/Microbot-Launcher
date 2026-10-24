@@ -2,6 +2,10 @@ name: Upload to Hetzner
 
 on:
     workflow_call:
+        inputs:
+            channel:
+                type: string
+                default: latest
 
 jobs:
     upload-to-hetzner:
@@ -16,9 +20,23 @@ jobs:
             - name: List downloaded files for debugging
               run: ls -R ./artifacts
 
+            - name: Check the build matches the channel
+              env:
+                  CHANNEL: ${{ inputs.channel }}
+              run: |
+                  set -euo pipefail
+                  VERSION=$(sed -n 's/^version: *//p' ./artifacts/microbot-launcher-exe-latest/latest.yml)
+                  case "$CHANNEL:$VERSION" in
+                      dev:*-dev.*) ;;
+                      latest:*-*) echo "::error::Prerelease $VERSION cannot go to the release feed"; exit 1 ;;
+                      latest:*) ;;
+                      *) echo "::error::Version $VERSION does not belong in the $CHANNEL channel"; exit 1 ;;
+                  esac
+
             - name: Upload to Hetzner
               env:
                   SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+                  RELEASE_DIR: /var/www/files/releases/${{ inputs.channel == 'dev' && 'microbot-launcher-dev' || 'microbot-launcher' }}/
               run: |
                   mkdir -p ~/.ssh
                   echo "$SSH_KEY" > ~/.ssh/id_rsa
@@ -26,11 +44,11 @@ jobs:
                   ssh-keyscan -H 138.201.81.246 >> ~/.ssh/known_hosts
 
                   # Create directories on server if they don't exist
-                  ssh root@138.201.81.246 "mkdir -p /var/www/files/releases/microbot-launcher/"
+                  ssh root@138.201.81.246 "mkdir -p $RELEASE_DIR"
 
                   # Upload Windows files with error handling
                   if ls ./artifacts/microbot-launcher-exe-latest/*.exe 1> /dev/null 2>&1; then
-                    scp -r ./artifacts/microbot-launcher-exe-latest/* root@138.201.81.246:/var/www/files/releases/microbot-launcher/
+                    scp -r ./artifacts/microbot-launcher-exe-latest/* root@138.201.81.246:$RELEASE_DIR
                     echo "✅ Windows files uploaded successfully"
                   else
                     echo "⚠️  Warning: Windows installer not found"
@@ -38,8 +56,8 @@ jobs:
 
                   # Upload Linux AppImage with error handling
                   if ls ./artifacts/microbot-launcher-linux-latest/*.AppImage 1> /dev/null 2>&1; then
-                    scp -r ./artifacts/microbot-launcher-linux-latest/*.AppImage root@138.201.81.246:/var/www/files/releases/microbot-launcher/
-                    scp ./artifacts/microbot-launcher-linux-latest/latest-linux.yml root@138.201.81.246:/var/www/files/releases/microbot-launcher/
+                    scp -r ./artifacts/microbot-launcher-linux-latest/*.AppImage root@138.201.81.246:$RELEASE_DIR
+                    scp ./artifacts/microbot-launcher-linux-latest/latest-linux.yml root@138.201.81.246:$RELEASE_DIR
                     echo "✅ Linux AppImage uploaded successfully"
                   else
                     echo "⚠️  Warning: Linux AppImage not found"
@@ -47,10 +65,27 @@ jobs:
 
                   # Upload macOS DMG with error handling
                   if ls ./artifacts/microbot-launcher-mac-latest/*.dmg 1> /dev/null 2>&1; then
-                    scp -r ./artifacts/microbot-launcher-mac-latest/*.dmg root@138.201.81.246:/var/www/files/releases/microbot-launcher/
+                    scp -r ./artifacts/microbot-launcher-mac-latest/*.dmg root@138.201.81.246:$RELEASE_DIR
                     echo "✅ macOS DMG uploaded successfully"
                   else
                     echo "⚠️  Warning: macOS DMG not found"
                   fi
 
                   echo "🎉 All uploads to Hetzner completed!"
+
+            - name: Remove old dev builds from Hetzner
+              if: inputs.channel == 'dev'
+              run: |
+                  ssh root@138.201.81.246 'bash -s' <<'EOF'
+                  set -euo pipefail
+                  cd /var/www/files/releases/microbot-launcher-dev/
+                  pattern='[0-9]+\.[0-9]+\.[0-9]+-dev\.[0-9]+'
+                  keep=$(ls -1 | grep -oE "$pattern" | sort -uV | tail -n 3)
+                  ls -1 | while IFS= read -r file; do
+                      version=$(printf '%s\n' "$file" | grep -oE "$pattern" | head -n 1 || true)
+                      if [ -n "$version" ] && ! printf '%s\n' "$keep" | grep -qxF "$version"; then
+                          echo "Deleting $file"
+                          rm -f -- "$file"
+                      fi
+                  done
+                  EOF

@@ -89,6 +89,9 @@ contextBridge.exposeInMainWorld('electron', {
             ipcRenderer.invoke('auth:request-password-reset', payload),
         status: () => ipcRenderer.invoke('auth:status')
     },
+    dashboard: {
+        open: () => ipcRenderer.invoke('dashboard:open')
+    },
     alerts: {
         status: (profiles) => ipcRenderer.invoke('alerts:status', profiles),
         setEnabled: (profile, enabled) =>

@@ -1,0 +1,30 @@
+name: Retarget to development
+
+on:
+    pull_request_target:
+        branches:
+            - main
+        types: [opened, reopened, edited]
+
+permissions:
+    pull-requests: write
+
+jobs:
+    retarget:
+        if: github.event.pull_request.head.ref != 'development' || github.event.pull_request.head.repo.full_name != github.repository
+        runs-on: ubuntu-latest
+        steps:
+            - name: Move the pull request to development
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  PR: ${{ github.event.pull_request.number }}
+              run: |
+                  set -euo pipefail
+                  if gh api -X PATCH "repos/$GITHUB_REPOSITORY/pulls/$PR" -f base=development --silent; then
+                      gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --silent -f body="Thanks for the pull request! \`main\` only takes merges from \`development\`, so this pull request was moved to target \`development\`.
+
+                  New changes land in \`development\` first, ship as a dev build of the launcher, and reach \`main\` in the next release. If GitHub reports conflicts, rebase your branch onto \`development\` and push again."
+                  else
+                      gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --silent -f body="Thanks for the pull request! \`main\` only takes merges from \`development\`, but this pull request could not be moved there automatically (for example because another pull request from the same branch already targets \`development\`). Please change the base branch to \`development\`, or close this one."
+                      exit 1
+                  fi

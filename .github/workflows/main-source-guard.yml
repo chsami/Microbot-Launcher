@@ -1,0 +1,56 @@
+name: Main source guard
+
+on:
+    pull_request_target:
+        branches:
+            - main
+        types: [opened, reopened, edited, synchronize]
+
+permissions:
+    contents: read
+    pull-requests: read
+
+jobs:
+    source:
+        name: Source is development
+        runs-on: ubuntu-latest
+        steps:
+            - name: Only development can be merged into main
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  PR: ${{ github.event.pull_request.number }}
+                  HEAD_REF: ${{ github.event.pull_request.head.ref }}
+                  HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+              run: |
+                  if [ "$HEAD_REF" = "development" ] && [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; then
+                      echo "Source is $GITHUB_REPOSITORY:development"
+                      exit 0
+                  fi
+                  for attempt in $(seq 1 12); do
+                      sleep 10
+                      BASE=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .base.ref)
+                      if [ "$BASE" != "main" ]; then
+                          echo "This pull request now targets $BASE"
+                          exit 0
+                      fi
+                  done
+                  echo "::error::Only $GITHUB_REPOSITORY:development can be merged into main. Change the base branch of this pull request to development."
+                  exit 1
+
+    version:
+        name: Release version is new
+        if: github.event.pull_request.head.ref == 'development' && github.event.pull_request.head.repo.full_name == github.repository
+        runs-on: ubuntu-latest
+        steps:
+            - name: Merging must publish a new launcher version
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+              run: |
+                  set -euo pipefail
+                  VERSION=$(gh api "repos/$GITHUB_REPOSITORY/contents/package.json?ref=$HEAD_SHA" -H "Accept: application/vnd.github.raw" | jq -r .version)
+                  if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+                      echo "::error::v$VERSION is already released, so merging this will not publish a launcher. Bump the version in package.json on development to ship a release."
+                      exit 1
+                  fi
+                  echo "Merging publishes v$VERSION"
