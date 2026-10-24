@@ -2129,7 +2129,7 @@ function loadLandingPageWebview() {
                     `html, body { scrollbar-width: auto !important; scrollbar-color: auto !important; }
                     ::-webkit-scrollbar { width: 10px; height: 10px; }
                     ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
-                    ::-webkit-scrollbar-thumb { background-color: #3a2e22; border: 2px solid transparent; border-radius: 5px; background-clip: padding-box; }
+                    ::-webkit-scrollbar-thumb { background-color: #2e261c; border: 2px solid transparent; border-radius: 6px; background-clip: padding-box; }
                     ::-webkit-scrollbar-thumb:hover { background-color: #e9c98f; }
                     ::-webkit-scrollbar-thumb:active { background-color: #ffb13b; }`
                 )

@@ -3042,7 +3042,7 @@ button.hamburger {
 .hw-bat-2 { right: 70px; top: 34px; width: 22px; animation-duration: .28s, 5s; animation-delay: -.1s, -2s; }
 .hw-bat-3 { right: 112px; top: 10px; width: 17px; animation-duration: .25s, 6s; animation-delay: -.2s, -1s; }
 
-.is-halloween .play-button {
+.is-halloween #play {
     background: linear-gradient(135deg, #ffb347, #e8650f);
     box-shadow: 0 0 14px rgba(255, 122, 0, .35);
 }
