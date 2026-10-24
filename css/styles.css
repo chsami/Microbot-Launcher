@@ -1147,6 +1147,15 @@ h2 {
     color: #c4b8ff;
 }
 
+.nightly-info-hint.warning {
+    color: var(--mb-gold);
+}
+
+.play-button:disabled {
+    cursor: wait;
+    opacity: .5;
+}
+
 .proxy-select-row {
     display: flex;
     align-items: stretch;

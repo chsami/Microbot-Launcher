@@ -7,10 +7,10 @@ let latestClientVersion = null;
 let cleanupAccountsDropdownListeners = null;
 
 const DEFAULT_CLIENT_RAM = '1g';
-const NIGHTLY_VERSION = 'nightly';
 const CLIENT_CHANNEL = 'client_channel';
 let clientChannel = 'stable';
 let channelSwitching = false;
+let nightlyNotice = null;
 let launcherInitialized = false;
 let authUiReady = false;
 let mockAuthEnabled = false;
@@ -540,10 +540,7 @@ async function openClient() {
     );
     if (selectedAccount) {
         try {
-            const result = await window.electron.updateClientJarTTL(version);
-            if (result?.error) {
-                window.electron.logError(result.error);
-            }
+            await recordClientUse(version);
             await window.electron.overwriteCredentialProperties(
                 selectedAccount
             );
@@ -1549,12 +1546,7 @@ function playNoJagexAccount() {
         const version = await resolveLaunchVersion();
         if (version) {
             try {
-                const result = await window.electron.updateClientJarTTL(
-                    version
-                );
-                if (result?.error) {
-                    window.electron.logError(result.error);
-                }
+                await recordClientUse(version);
                 const playResult = await window.electron.playNoJagexAccount(
                     version,
                     proxy,
@@ -1572,11 +1564,12 @@ function playNoJagexAccount() {
 }
 
 async function resolveLaunchVersion() {
+    if (channelSwitching) return null;
     if (isNightlyChannel()) {
-        const ready = await prepareNightlyClient(
+        const info = await prepareNightlyClient(
             'Check your internet connection, or click Stable under Version to keep playing.'
         );
-        return ready ? NIGHTLY_VERSION : null;
+        return info?.build || null;
     }
     const selectedVersion = document.getElementById('client').value;
     if (!selectedVersion || !selectedVersion.includes('microbot-')) {
@@ -1588,19 +1581,27 @@ async function resolveLaunchVersion() {
     return result?.exists ? version : null;
 }
 
+async function recordClientUse(version) {
+    if (version.startsWith('nightly-')) return;
+    const result = await window.electron.updateClientJarTTL(version);
+    if (result?.error) {
+        window.electron.logError(result.error);
+    }
+}
+
 function isNightlyChannel() {
     return clientChannel === 'nightly';
 }
 
-function formatNightlyDate(iso) {
+function formatNightlyBuildTime(iso, now = new Date()) {
     const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleString(undefined, {
-        day: 'numeric',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+    if (!iso || Number.isNaN(date.getTime())) return '';
+    const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const days = Math.round((startOfDay(now) - startOfDay(date)) / (24 * 60 * 60 * 1000));
+    if (days === 0) return `today at ${time}`;
+    if (days === 1) return `yesterday at ${time}`;
+    return `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${time}`;
 }
 
 function renderChannel() {
@@ -1608,32 +1609,41 @@ function renderChannel() {
         button.setAttribute('aria-pressed', button.dataset.channel === clientChannel ? 'true' : 'false');
         button.disabled = channelSwitching;
     });
+    ['play', 'play-no-jagex-account'].forEach((id) => {
+        const button = document.getElementById(id);
+        if (button) button.disabled = channelSwitching;
+    });
     const clientSelect = document.getElementById('client');
     if (clientSelect) clientSelect.hidden = isNightlyChannel();
     const nightlyInfo = document.getElementById('nightly-info');
     if (nightlyInfo) nightlyInfo.hidden = !isNightlyChannel();
 }
 
-function renderNightlyInfo(status, message) {
-    const box = document.getElementById('nightly-info');
+function renderNightlyInfo(status) {
     const title = document.getElementById('nightly-info-title');
     const hint = document.getElementById('nightly-info-hint');
-    if (!box || !title || !hint) return;
+    if (!title || !hint) return;
     const installed = status?.installed;
-    const builtAt = installed ? formatNightlyDate(installed.builtAt) : '';
-    title.textContent = builtAt ? `Nightly from ${builtAt}` : 'Nightly';
-    box.title = installed ? `Client version ${installed.version}` : '';
-    const updateReady = Boolean(installed && status?.updateAvailable);
-    if (message) {
-        hint.textContent = message;
-    } else if (updateReady) {
-        hint.textContent = 'A newer build is out. It downloads when you press Play.';
+    const builtAt = installed ? formatNightlyBuildTime(installed.builtAt) : '';
+    title.textContent = builtAt ? `Nightly, built ${builtAt}` : 'Nightly';
+    let message;
+    let warning = false;
+    if (nightlyNotice) {
+        message = nightlyNotice;
+        warning = true;
+    } else if (installed && status?.error) {
+        message = `${status.error} Using the build you have.`;
+        warning = true;
+    } else if (installed && status?.updateAvailable) {
+        message = 'A newer build is out. It downloads when you press Play.';
     } else if (installed) {
-        hint.textContent = 'Updates to the newest build when you press Play.';
+        message = 'Checks for a newer build when you press Play.';
     } else {
-        hint.textContent = 'Downloads when you press Play.';
+        message = 'Downloads when you press Play.';
     }
-    hint.classList.toggle('update', Boolean(message) || updateReady);
+    hint.textContent = message;
+    hint.classList.toggle('update', !warning && Boolean(installed && status?.updateAvailable));
+    hint.classList.toggle('warning', warning);
 }
 
 async function refreshNightlyInfo(checkRemote = false) {
@@ -1651,20 +1661,28 @@ async function prepareNightlyClient(failureHint) {
     if (loader) loader.style.display = 'block';
     try {
         const result = await window.electron.prepareNightly();
-        if (!result || result.error) {
+        if (!result || result.error || !result.info?.build) {
             window.electron.errorAlert(
-                `${result?.error || 'Could not download the nightly build.'}\n\n${failureHint}`
+                `${result?.error || 'The nightly download failed.'}\n\n${failureHint}`
             );
-            return false;
+            return null;
         }
+        nightlyNotice = result.warning || null;
         if (result.warning) {
             window.electron.logError(result.warning);
         }
-        renderNightlyInfo({ installed: result.info }, result.warning);
-        return true;
+        window.electron.logError(`Using nightly ${result.info.version} (${result.info.build})`);
+        renderNightlyInfo({ installed: result.info });
+        return result.info;
     } finally {
         if (loader) loader.style.display = 'none';
     }
+}
+
+function setBackgroundInert(inert) {
+    document.querySelectorAll('#main-container, #loader-container').forEach((element) => {
+        element.inert = inert;
+    });
 }
 
 function confirmNightly() {
@@ -1673,14 +1691,16 @@ function confirmNightly() {
     const cancelButton = document.getElementById('nightly-confirm-cancel');
     if (!modal || !okButton || !cancelButton) return Promise.resolve(true);
     modal.classList.remove('auth-hidden');
+    setBackgroundInert(true);
     okButton.focus();
     return new Promise((resolve) => {
         const close = (confirmed) => {
             modal.classList.add('auth-hidden');
+            setBackgroundInert(false);
             okButton.removeEventListener('click', onConfirm);
             cancelButton.removeEventListener('click', onCancel);
             document.removeEventListener('keydown', onKeydown);
-            document.getElementById(`channel-${clientChannel}`)?.focus();
+            document.getElementById('channel-nightly')?.focus();
             resolve(confirmed);
         };
         const onConfirm = () => close(true);
@@ -1707,9 +1727,11 @@ async function selectChannel(channel) {
             return;
         }
         clientChannel = channel;
-        const properties = await window.electron.readProperties();
-        properties[CLIENT_CHANNEL] = channel;
-        await window.electron.writeProperties(properties);
+        const properties = await withProperties(async (latest) => {
+            latest[CLIENT_CHANNEL] = channel;
+            await window.electron.writeProperties(latest);
+            return latest;
+        });
         if (channel === 'stable') {
             await checkForClientUpdate(properties);
         } else {
@@ -1719,6 +1741,7 @@ async function selectChannel(channel) {
     } finally {
         channelSwitching = false;
         renderChannel();
+        document.getElementById(`channel-${clientChannel}`)?.focus();
     }
 }
 

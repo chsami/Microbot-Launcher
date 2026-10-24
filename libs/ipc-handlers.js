@@ -31,7 +31,7 @@ module.exports = async function (deps) {
         isSafeClientVersion
     } = require(path.join(projectDir, 'libs', 'client-jars.js'));
     const { ensureHwidAgentJar } = require(path.join(projectDir, 'libs', 'hwid-agent.js'));
-    const { NIGHTLY_VERSION, prepareNightly, nightlyStatus } = require(path.join(
+    const { prepareNightly, nightlyStatus } = require(path.join(
         projectDir,
         'libs',
         'nightly-client.js'
@@ -275,7 +275,9 @@ module.exports = async function (deps) {
                 log,
                 microbotDir,
                 filestorage,
-                progress: (percent, status) => event.sender.send('progress', { percent, status })
+                progress: (percent, status) => {
+                    if (!event.sender.isDestroyed()) event.sender.send('progress', { percent, status });
+                }
             }).finally(() => {
                 nightlyInFlight = null;
             });
@@ -315,7 +317,7 @@ module.exports = async function (deps) {
         try {
             const filePath = path.join(microbotDir, `microbot-${version}.jar`);
             log.info(filePath);
-            if (version !== NIGHTLY_VERSION && fs.existsSync(filePath)) {
+            if (!version.startsWith('nightly-') && fs.existsSync(filePath)) {
                 ensureHwidAgentJar({ axios, fs, log, microbotDir, filestorage, version }).catch((error) =>
                     log.warn(`HWID agent ensure failed (${version}): ${error.message}`)
                 );
