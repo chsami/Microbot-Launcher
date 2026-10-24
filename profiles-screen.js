@@ -406,11 +406,11 @@
         const email = status?.authenticated ? status?.user?.email : '';
         const title = $('profiles-cloud-title');
         const text = $('profiles-cloud-text');
-        if (title) title.textContent = email ? `Signed in as ${email}` : 'Back up your profiles';
+        if (title) title.textContent = email ? `Signed in as ${email}` : 'Bot alerts';
         if (text) {
             text.textContent = email
                 ? 'Turn on Alerts for a profile to hear on Discord or by email when its bot stops. Cloud backup for profiles is coming soon.'
-                : 'Sign in to keep your profiles in the cloud and use them on any PC.';
+                : 'Sign in to hear on Discord or by email when a bot stops. Profile backup is coming soon.';
         }
         $('profiles-sign-in')?.classList.toggle('auth-hidden', Boolean(email));
     };

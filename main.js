@@ -159,43 +159,11 @@ async function createWindow() {
     await mainWindow.loadFile(path.join(__dirname, 'index.html'));
 }
 
-autoUpdater.autoDownload = false;
-autoUpdater.disableWebInstaller = true;
-
-autoUpdater.on('update-available', (info) => {
-    dialog
-        .showMessageBox({
-            type: 'info',
-            title: 'Update available',
-            detail: `Would you like to download version ${info.version} and install it now?`,
-            message: `New version of launcher available!`,
-            buttons: ['Install', 'Later'],
-            cancelId: 1,
-            defaultId: 0,
-            noLink: false
-        })
-        .then((result) => {
-            if (result.response === 0) {
-                dialog.showMessageBox({
-                    type: 'info',
-                    title: 'Downloading',
-                    message: `Downloading version ${info.version} of the launcher...`
-                });
-                autoUpdater.downloadUpdate();
-            }
-        });
-});
-
-autoUpdater.on('update-downloaded', () => {
-    dialog
-        .showMessageBox({
-            title: 'Install Updates',
-            message:
-                'Updates downloaded. The application will now quit and install the updates.'
-        })
-        .then(() => {
-            autoUpdater.quitAndInstall();
-        });
+require(path.join(__dirname, 'libs', 'launcher-updater.js')).registerLauncherUpdater({
+    autoUpdater,
+    ipcMain,
+    log,
+    send: (status) => mainWindow?.webContents.send('launcher-update', status)
 });
 
 app.on('web-contents-created', (_event, contents) => {
@@ -214,7 +182,8 @@ app.whenReady().then(async () => {
 
     if (process.env.DEBUG !== 'true') {
         mainWindow.show();
-        autoUpdater.checkForUpdates();
+        // Failures are already logged by the 'error' handler.
+        autoUpdater.checkForUpdates().catch(() => {});
     } else {
         mainWindow.show();
     }
