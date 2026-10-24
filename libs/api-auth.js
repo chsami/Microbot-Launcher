@@ -7,6 +7,7 @@ module.exports = function setupApiAuth(deps) {
 
     let session = null;
     let restored = false;
+    const listeners = new Set();
 
     const post = (endpoint, body) =>
         axios.post(`${baseUrl}/api/auth/${endpoint}`, body, { timeout: REQUEST_TIMEOUT_MS });
@@ -34,7 +35,11 @@ module.exports = function setupApiAuth(deps) {
     };
 
     const writeSession = (value) => {
+        const previous = session;
         session = value;
+        if (Boolean(previous) !== Boolean(value) || previous?.email !== value?.email) {
+            listeners.forEach((listener) => listener(value ? { email: value.email } : null));
+        }
         try {
             if (!value) {
                 if (fs.existsSync(sessionFile)) fs.unlinkSync(sessionFile);
@@ -178,16 +183,26 @@ module.exports = function setupApiAuth(deps) {
         }
     });
 
-    ipcMain.handle('auth:signout', async () => {
+    const endOnServer = async (refreshToken) => {
+        try {
+            await post('logout', { refreshToken });
+        } catch (error) {
+            log.warn(`Could not end the session on the server: ${error?.message || error}`);
+        }
+    };
+
+    const signOut = async () => {
         const current = session;
         writeSession(null);
         if (current) {
-            try {
-                await post('logout', { refreshToken: current.refreshToken });
-            } catch (error) {
-                log.warn(`Could not end the session on the server: ${error?.message || error}`);
-            }
+            await Promise.all(
+                [current.refreshToken, current.dashboard?.refreshToken].filter(Boolean).map(endOnServer)
+            );
         }
+    };
+
+    ipcMain.handle('auth:signout', async () => {
+        await signOut();
         return { success: true };
     });
 
@@ -219,12 +234,93 @@ module.exports = function setupApiAuth(deps) {
         return send(config, session);
     };
 
+    let forking = null;
+
+    const forkDashboard = async (retry = true) => {
+        const current = session;
+        let tokens;
+        try {
+            const { data } = await post('fork-session', { refreshToken: current.refreshToken });
+            tokens = { accessToken: data.token, refreshToken: data.refreshToken };
+        } catch (error) {
+            if (retry && error?.response?.status === 401) {
+                if (session === current) await refresh();
+                return session ? forkDashboard(false) : null;
+            }
+            log.warn(`Could not start a dashboard session: ${error?.message || error}`);
+            return null;
+        }
+        if (session?.email !== current.email) {
+            await endOnServer(tokens.refreshToken);
+            return null;
+        }
+        if (session.dashboard) {
+            await endOnServer(tokens.refreshToken);
+            return session.dashboard;
+        }
+        writeSession({ ...session, dashboard: tokens });
+        return tokens;
+    };
+
+    const dashboardTokens = async () => {
+        restore();
+        if (refreshing) await refreshing;
+        if (!session) return null;
+        if (session.dashboard) return session.dashboard;
+        if (!forking) {
+            forking = forkDashboard().finally(() => {
+                forking = null;
+            });
+        }
+        return forking;
+    };
+
+    const setDashboardTokens = (tokens) => {
+        if (!session || !tokens?.accessToken || !tokens?.refreshToken) return false;
+        const stored = session.dashboard;
+        if (stored?.accessToken === tokens.accessToken && stored?.refreshToken === tokens.refreshToken) return false;
+        writeSession({ ...session, dashboard: { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken } });
+        return true;
+    };
+
+    const dashboardSignedOut = async () => {
+        const current = session;
+        const dashboard = current?.dashboard;
+        if (!dashboard) return 'none';
+        let alive = false;
+        try {
+            const { data } = await post('refresh-token', {
+                accessToken: dashboard.accessToken,
+                refreshToken: dashboard.refreshToken
+            });
+            alive = true;
+            await endOnServer(data.refreshToken);
+        } catch (error) {
+            const status = error?.response?.status;
+            if (!status || status >= 500 || status === 408 || status === 429) {
+                log.warn(`Could not check the dashboard session: ${error?.message || error}`);
+                return session === current ? 'unreachable' : 'none';
+            }
+        }
+        if (session !== current) return 'none';
+        if (alive) {
+            await signOut();
+            return 'signed-out';
+        }
+        writeSession({ ...current, dashboard: undefined });
+        return 'expired';
+    };
+
     return {
         email: () => {
             restore();
             return session?.email || null;
         },
-        request
+        request,
+        onChange: (listener) => listeners.add(listener),
+        dashboardTokens,
+        setDashboardTokens,
+        dashboardSignedOut
     };
 };
 
