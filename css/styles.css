@@ -1131,8 +1131,8 @@ h2 {
     border: none;
     border-radius: 6px;
     background: transparent;
-    color: var(--mb-muted);
-    font-family: var(--mb-body);
+    color: var(--muted);
+    font-family: var(--body);
     font-size: 13px;
     font-weight: 700;
     letter-spacing: .04em;
@@ -1146,7 +1146,7 @@ h2 {
 
 .channel-option[aria-pressed="true"] {
     background: rgba(255, 177, 59, .18);
-    color: var(--mb-gold);
+    color: var(--gold);
 }
 
 .channel-option[data-channel="nightly"][aria-pressed="true"] {
@@ -1155,7 +1155,7 @@ h2 {
 }
 
 .channel-option:focus-visible {
-    outline: 2px solid var(--mb-gold);
+    outline: 2px solid var(--gold);
     outline-offset: 2px;
 }
 
@@ -1187,7 +1187,7 @@ h2 {
 
 .nightly-info-hint {
     font-size: 11px;
-    color: var(--mb-muted);
+    color: var(--muted);
 }
 
 .nightly-info-hint.update {
@@ -1195,7 +1195,7 @@ h2 {
 }
 
 .nightly-info-hint.warning {
-    color: var(--mb-gold);
+    color: var(--gold);
 }
 
 .play-button:disabled {

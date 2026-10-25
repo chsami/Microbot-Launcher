@@ -259,7 +259,7 @@
                             <li data-target="client-ram"><strong>Client RAM.</strong> 1 or 2 GB is enough for one
                                 client. Raise it if the client lags or closes with an out of memory error.</li>
                             <li data-target="hwid-spoof-row"><strong>Spoof hardware IDs.</strong> On by default. Each
-                                account sends its own device ID instead of this PC's real one. Pick one setting per
+                                account sends its own random.dat ID instead of this PC's. Pick one setting per
                                 account and keep it: switching sends both IDs for the same account.</li>
                             <li data-target="proxy-ip"><strong>Proxy.</strong> Optional, SOCKS5 only. Characters you
                                 added through a proxy switch back to it when you select them.</li>
@@ -575,7 +575,7 @@
                     <div id="hwid-spoof-row">
                         <label for="hwid-spoof">Spoof hardware IDs</label>
                         <label class="hwid-spoof-toggle" for="hwid-spoof"
-                            title="When on, each account sends its own device ID instead of this PC's real one. Keep one setting per account: switching sends both IDs. Applies on next launch.">
+                            title="When on, each account sends its own random.dat ID instead of this PC's. Keep one setting per account: switching sends both IDs. Applies on next launch.">
                             <span class="hwid-spoof-state" aria-hidden="true"></span>
                             <input id="hwid-spoof" class="hwid-spoof-input" type="checkbox" role="switch" checked />
                             <span class="hwid-spoof-switch" aria-hidden="true"></span>
