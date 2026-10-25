@@ -55,7 +55,7 @@ describe('renderer client version select', () => {
             microbotDir,
             packageJson: { version: '1.0.0' },
             path,
-            log: { info: jest.fn(), error: jest.fn() },
+            log: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
             dialog: {},
             fs,
             projectDir: path.join(__dirname, '..'),
@@ -96,7 +96,7 @@ describe('renderer client version select', () => {
         });
         const source = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
         vm.runInContext(
-            `${source}\nglobalThis.__renderer = { checkForOutdatedLaunch, populateAndSelectClientVersion, selectClientVersion, shouldPromptForClientDownload, orderClientJarsByVersion, rememberLatestClientVersion };`,
+            `${source}\nglobalThis.__renderer = { formatNightlyBuildTime, resolveLaunchVersion, checkForOutdatedLaunch, populateAndSelectClientVersion, selectClientVersion, shouldPromptForClientDownload, orderClientJarsByVersion, rememberLatestClientVersion };`,
             context
         );
         context.__renderer.rememberLatestClientVersion('2.6.28');
@@ -153,5 +153,25 @@ describe('renderer client version select', () => {
 
         expect(dialog).toHaveBeenCalledTimes(1);
         expect(select.value).toBe('microbot-2.6.2.jar');
+    });
+
+    test('nightly build times read as today, yesterday or a date', () => {
+        const { formatNightlyBuildTime } = context.__renderer;
+        const now = new Date(2026, 9, 24, 18, 0);
+
+        expect(formatNightlyBuildTime(new Date(2026, 9, 24, 4, 21).toISOString(), now)).toMatch(/^today at 4:21/);
+        expect(formatNightlyBuildTime(new Date(2026, 9, 23, 4, 21).toISOString(), now)).toMatch(/^yesterday at 4:21/);
+        expect(formatNightlyBuildTime(new Date(2026, 9, 20, 4, 21).toISOString(), now)).toMatch(/Oct 20, 4:21/);
+        expect(formatNightlyBuildTime(null, now)).toBe('');
+    });
+
+    test('Play does nothing while the channel is switching', async () => {
+        await context.__renderer.populateAndSelectClientVersion('2.6.28');
+        vm.runInContext('channelSwitching = true', context);
+
+        expect(await context.__renderer.resolveLaunchVersion()).toBeNull();
+
+        vm.runInContext('channelSwitching = false', context);
+        expect(await context.__renderer.resolveLaunchVersion()).toBe('2.6.28');
     });
 });

@@ -122,6 +122,23 @@
             <button id="proxy-login-info-ok" class="auth-submit" type="button">Got it</button>
         </div>
     </div>
+    <div id="nightly-confirm-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
+        aria-labelledby="nightly-confirm-title">
+        <div class="auth-card">
+            <h1 id="nightly-confirm-title" class="auth-title">Switch to Nightly?</h1>
+            <ul class="proxy-info-list">
+                <li>Nightly is built every night from the newest Microbot code, so you get fixes and new features
+                    before they reach Stable.</li>
+                <li>It is tested less than Stable, so it may have more bugs.</li>
+                <li>The launcher downloads it now (about 70 MB). After that it checks for a newer build each time
+                    you press Play, and only downloads when there is one.</li>
+                <li>Your accounts, profiles and settings are shared with Stable. Click Stable to switch back at any
+                    time.</li>
+            </ul>
+            <button id="nightly-confirm-ok" class="auth-submit" type="button">Switch to Nightly</button>
+            <button id="nightly-confirm-cancel" class="auth-cancel" type="button">Stay on Stable</button>
+        </div>
+    </div>
     <div id="setup-guide" class="setup-guide guide-hidden" role="dialog" aria-modal="true"
         aria-labelledby="guide-eyebrow">
         <div class="guide-stage">
@@ -231,11 +248,12 @@
                         </div>
                     </section>
 
-                    <section class="guide-step" data-title="Before you play" data-target="client">
+                    <section class="guide-step" data-title="Before you play" data-target="client nightly-info">
                         <h1 class="guide-title">Check these before you play</h1>
                         <ol class="guide-list">
-                            <li data-target="client"><strong>Version.</strong> Keep the newest one. Older versions
-                                stop working after game updates.</li>
+                            <li data-target="client nightly-info"><strong>Version.</strong> Stable is tested and right
+                                for most players. Nightly gets new fixes first but may have bugs. On Stable, keep the
+                                newest version: older versions stop working after game updates.</li>
                             <li data-target="profile"><strong>Profile.</strong> Holds your plugin settings. Each Jagex
                                 character remembers its own profile, so you can keep a separate setup per account.</li>
                             <li data-target="client-ram"><strong>Client RAM.</strong> 1 or 2 GB is enough for one
@@ -500,8 +518,20 @@
                     Remove all accounts
                 </button>
                 <div class="game-info">
-                    <label for="client">Version</label>
-                    <select id="client"></select>
+                    <label id="client-channel-label">Version</label>
+                    <div class="channel-switch" role="group" aria-labelledby="client-channel-label">
+                        <button id="channel-stable" class="channel-option" type="button"
+                            data-channel="stable" aria-pressed="true"
+                            title="Tested releases. Recommended for most players.">Stable</button>
+                        <button id="channel-nightly" class="channel-option" type="button"
+                            data-channel="nightly" aria-pressed="false"
+                            title="Built every night from the newest code. New fixes first, but may have bugs.">Nightly</button>
+                    </div>
+                    <select id="client" aria-labelledby="client-channel-label"></select>
+                    <div id="nightly-info" class="nightly-info" aria-live="polite" hidden>
+                        <span id="nightly-info-title" class="nightly-info-title">Nightly build</span>
+                        <span id="nightly-info-hint" class="nightly-info-hint"></span>
+                    </div>
                     <label for="character">Jagex Account</label>
                     <div class="accounts-refresh-row">
                         <div id="accounts-dropdown-container" class="accounts-dropdown-container" aria-live="polite">
