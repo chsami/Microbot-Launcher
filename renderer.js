@@ -541,9 +541,6 @@ async function openClient() {
     if (selectedAccount) {
         try {
             await recordClientUse(version);
-            await window.electron.overwriteCredentialProperties(
-                selectedAccount
-            );
             const launchResult = await window.electron.openClient(
                 version,
                 proxy,
@@ -558,13 +555,57 @@ async function openClient() {
             window.electron.errorAlert(err?.message || String(err));
         }
     } else {
-        alert('Account not found. Please restart your client.');
+        showErrorToast('That account is no longer in the list. Pick it again or log in again.', {
+            logs: false
+        });
     }
 }
 
 window.electron.ipcRenderer.receive('progress', (event, data) => {
     if (data) {
         updateProgress(data.percent, data.status);
+    }
+});
+
+let launcherUpdateState = null;
+let launcherUpdateVersion = '';
+
+window.electron.ipcRenderer.receive('launcher-update', (event, status) => {
+    const banner = document.getElementById('launcher-update-banner');
+    if (!banner) {
+        return;
+    }
+    // A failed background check (offline, no feed) stays silent; only failures after the banner appeared show.
+    if (status.state === 'error' && !launcherUpdateState) {
+        return;
+    }
+    launcherUpdateState = status.state;
+    launcherUpdateVersion = status.version || launcherUpdateVersion;
+    const percent = status.percent ?? 0;
+    const [text, button] = {
+        available: [`Launcher out of date (v${status.current})`, `Update to v${launcherUpdateVersion}`],
+        downloading: [`Downloading v${launcherUpdateVersion}… ${percent}%`, 'Downloading'],
+        ready: [`v${launcherUpdateVersion} is ready to install`, 'Restart now'],
+        error: ['Launcher update failed', 'Retry']
+    }[status.state];
+    banner.hidden = false;
+    banner.dataset.state = status.state;
+    // Hold screen-reader announcements until the download settles instead of reading every percent.
+    banner.setAttribute('aria-busy', status.state === 'downloading');
+    banner.style.setProperty('--progress', `${status.state === 'downloading' ? percent : 0}%`);
+    document.getElementById('launcher-update-text').textContent = text;
+    const btn = document.getElementById('launcher-update-btn');
+    btn.textContent = button;
+    btn.disabled = status.state === 'downloading';
+});
+
+document.getElementById('launcher-update-btn')?.addEventListener('click', () => {
+    if (launcherUpdateState === 'ready') {
+        window.electron.ipcRenderer.invoke('launcher-update:install').catch(() => {});
+    } else {
+        launcherUpdateState = 'downloading';
+        // Failures reach the banner through the 'error' status event.
+        window.electron.ipcRenderer.invoke('launcher-update:download').catch(() => {});
     }
 });
 
@@ -816,26 +857,35 @@ async function handleJagexAccountLogic(properties) {
     }, 1000);
 }
 
-window.onerror = function myErrorHandler(errorMsg) {
-    alert(`Error occurred: ${errorMsg}`);
-    window.electron.logError(errorMsg);
-    return false;
-};
-window.addEventListener('error', function (e) {
-    if (e.error) {
-        alert(`Error occurred: ${e.error.stack}`);
-        window.electron.logError(e.error.stack);
-    } else if (e.reason) {
-        alert(`Error occurred: ${e.reason.stack}`);
-        window.electron.logError(e.reason.stack);
-    }
-    return false;
+// The stack goes to the launcher log; the user gets a plain message and a way to that log.
+function showErrorToast(message, { logs = true } = {}) {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    document.getElementById('toast-logs').hidden = !logs;
+    toast.hidden = false;
+    // Set the text after unhiding so role="alert" announces it.
+    document.getElementById('toast-text').textContent = message;
+}
+
+document.getElementById('toast-close')?.addEventListener('click', () => {
+    document.getElementById('toast').hidden = true;
+});
+document.getElementById('toast-logs')?.addEventListener('click', () => {
+    window.electron.openLocation('launcher-logs');
+});
+
+const UNEXPECTED_ERROR = 'Something went wrong. The details are in the launcher logs.';
+
+// One handler: window.onerror fired for the same errors and logged each one twice.
+window.addEventListener('error', (e) => {
+    showErrorToast(UNEXPECTED_ERROR);
+    window.electron.logError(e.error?.stack || e.message);
 });
 
 window.addEventListener('unhandledrejection', (e) => {
     e.preventDefault();
-    alert(`Error occurred: ${e.reason.stack}`);
-    window.electron.logError(e.reason.stack);
+    showErrorToast(UNEXPECTED_ERROR);
+    window.electron.logError(e.reason?.stack || String(e.reason));
 });
 
 async function initializeLauncher() {
@@ -847,8 +897,8 @@ async function initializeLauncher() {
 
     const microbotLauncherVersion = await window.electron.launcherVersion();
 
-    document.querySelector('.titlebar-title').innerText =
-        'Microbot Launcher - ' + microbotLauncherVersion;
+    document.getElementById('titlebar-version').textContent =
+        'v' + microbotLauncherVersion;
 
     if (properties['client'] === '0.0.0') {
         document.getElementById('loader-container').style.display = 'block';
@@ -1369,7 +1419,11 @@ async function handleAccountDelete(accountId) {
 }
 
 async function removeAccountsHandler() {
-    const userConfirmed = confirm('Are you sure you want to proceed?');
+    const count = accounts.length;
+    const userConfirmed = confirm(
+        `Remove ${count === 1 ? 'your Jagex character' : `all ${count} Jagex characters`} from this launcher? ` +
+            'Your game accounts are not affected, and you can add them again by logging in.'
+    );
     if (!userConfirmed) return;
 
     // Remove accounts via the Electron API
@@ -1397,7 +1451,6 @@ function setupLogoutButton() {
 async function setupSidebarLayout(amountOfAccounts) {
     const selectedAccount = document.getElementById('character')?.value;
     const playJagexButton = document.getElementById('play');
-    const playButtonsDiv = document.querySelector('.play-buttons');
     const logoutButton = document.getElementById('logout');
     const addAccountsButton = document.getElementById('add-accounts');
     const characterSelectLabel = document.querySelector(
@@ -1410,7 +1463,6 @@ async function setupSidebarLayout(amountOfAccounts) {
     if (amountOfAccounts > 0) {
         playJagexButton.innerHTML = 'Play With Jagex Account';
         logoutButton.style.display = 'block';
-        playButtonsDiv.style.display = 'flex';
         if (characterSelectLabel) {
             characterSelectLabel.style.display = 'block';
         }
@@ -1439,7 +1491,6 @@ async function setupSidebarLayout(amountOfAccounts) {
         // Reset UI for no accounts state
         playJagexButton.innerHTML = 'Login Jagex Account';
         logoutButton.style.display = 'none';
-        playButtonsDiv.style.display = 'block';
         if (characterSelectLabel) {
             characterSelectLabel.style.display = 'none';
         }
@@ -2070,6 +2121,38 @@ async function initUI(properties) {
     setupRefreshAccountsButton();
 }
 
+async function setupMenuToggle(item, setting, hideMenu, afterChange = () => {}) {
+    if (!item || !setting) return null;
+    const render = (enabled) => item.setAttribute('aria-checked', enabled ? 'true' : 'false');
+    const refresh = async () => {
+        try {
+            render((await setting.status())?.enabled);
+        } catch (error) {
+            console.error('Could not read a launcher setting:', error);
+        }
+    };
+    await refresh();
+    const toggle = async () => {
+        const next = item.getAttribute('aria-checked') !== 'true';
+        hideMenu();
+        try {
+            const result = await setting.setEnabled(next);
+            render(result?.enabled);
+            if (result?.error) showErrorToast(result.error, { logs: false });
+            else await afterChange();
+        } catch (error) {
+            showErrorToast('Could not save the setting.', { logs: false });
+        }
+    };
+    item.addEventListener('click', toggle);
+    item.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        toggle();
+    });
+    return refresh;
+}
+
 /**
  * Setup the hamburger menu for the app.
  * Has some functional behavior for showing and hiding the menu
@@ -2114,6 +2197,22 @@ function setupHamburgerMenu() {
     menu.querySelector('[data-action="setup-guide"]')?.addEventListener('click', () => {
         hideMenu();
         window.openSetupGuide?.();
+    });
+
+    const remoteItem = menu.querySelector('[data-action="remote-start"]');
+    let refreshRemote = null;
+    setupMenuToggle(menu.querySelector('[data-action="run-in-background"]'), window.electron.background, hideMenu, async () => {
+        const wasOn = remoteItem?.getAttribute('aria-checked') === 'true';
+        await refreshRemote?.();
+        if (wasOn && remoteItem?.getAttribute('aria-checked') !== 'true') {
+            showErrorToast('Starting clients from the dashboard is now off too. It needs the launcher to keep running in the tray.', {
+                logs: false
+            });
+        }
+    }).then((refreshBackground) => {
+        setupMenuToggle(remoteItem, window.electron.remoteStart, hideMenu, () => refreshBackground?.()).then((refresh) => {
+            refreshRemote = refresh;
+        });
     });
 
     menu.querySelectorAll('.submenu-item').forEach((item) => {
@@ -2238,7 +2337,7 @@ function loadLandingPageWebview() {
                     `html, body { scrollbar-width: auto !important; scrollbar-color: auto !important; }
                     ::-webkit-scrollbar { width: 10px; height: 10px; }
                     ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
-                    ::-webkit-scrollbar-thumb { background-color: #3a2e22; border: 2px solid transparent; border-radius: 5px; background-clip: padding-box; }
+                    ::-webkit-scrollbar-thumb { background-color: #2e261c; border: 2px solid transparent; border-radius: 6px; background-clip: padding-box; }
                     ::-webkit-scrollbar-thumb:hover { background-color: #e9c98f; }
                     ::-webkit-scrollbar-thumb:active { background-color: #ffb13b; }`
                 )

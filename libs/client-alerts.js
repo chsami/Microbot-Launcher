@@ -291,7 +291,17 @@ module.exports = function setupClientAlerts(deps) {
         return { enabled: isEnabled(profile), label: defaultLabel(profile) };
     });
 
-    return { tokenForProfile, retryRevokes };
+    const linkedProfiles = () => {
+        const email = signedInEmail();
+        if (!email || !canPersist()) return {};
+        const linked = {};
+        Object.entries(readLinks(email)).forEach(([profile, link]) => {
+            if (link?.id && isEnabled(profile)) linked[profile] = String(link.id);
+        });
+        return linked;
+    };
+
+    return { tokenForProfile, retryRevokes, linkedProfiles };
 };
 
 function defaultLabel() {

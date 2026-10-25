@@ -312,6 +312,7 @@ module.exports = function setupApiAuth(deps) {
     };
 
     return {
+        baseUrl,
         email: () => {
             restore();
             return session?.email || null;

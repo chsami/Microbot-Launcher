@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell, nativeImage, clipboard, safeStorage, session } = require('electron');
+const { app, BrowserWindow, dialog, shell, nativeImage, clipboard, safeStorage, session, Tray, Menu, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
@@ -20,11 +20,26 @@ process.on('uncaughtException', (error) => {
 });
 
 let mainWindow = null;
+let remoteStart = null;
 
 // Ensure the .microbot directory exists
 if (!fs.existsSync(microbotDir)) {
     fs.mkdirSync(microbotDir);
 }
+
+const background = require(path.join(__dirname, 'libs', 'background-mode.js'))({
+    app,
+    ipcMain,
+    Tray,
+    Menu,
+    nativeImage,
+    Notification,
+    log,
+    fs,
+    settingsFile: path.join(microbotDir, 'launcher-settings.json'),
+    iconPath: path.join(__dirname, 'images', 'microbot_transparent.png'),
+    getWindow: () => mainWindow
+});
 
 async function loadLibraries() {
     log.info('Loading libraries...');
@@ -107,7 +122,32 @@ async function loadLibraries() {
             log.error('Error setting up bot alerts:', alertsError);
         }
         if (typeof handler === 'function') {
-            await handler(deps);
+            const launcher = await handler(deps);
+            if (apiAuth && launcher) {
+                try {
+                    remoteStart = require(path.join(__dirname, 'libs', 'remote-start.js'))({
+                        ipcMain,
+                        log,
+                        fs,
+                        safeStorage,
+                        axios,
+                        auth: apiAuth,
+                        alerts: deps.alerts,
+                        background,
+                        launchProfile: launcher.launchProfile,
+                        listProxies: launcher.listProxies,
+                        settingsFile: path.join(microbotDir, 'launcher-settings.json'),
+                        launcherFile: path.join(microbotDir, 'launcher-link.dat'),
+                        launcherName: require('os').hostname(),
+                        version: packageJson.version,
+                        notify: (title, body) => {
+                            if (Notification.isSupported()) new Notification({ title, body }).show();
+                        }
+                    });
+                } catch (remoteStartError) {
+                    log.error('Error setting up dashboard starts:', remoteStartError);
+                }
+            }
         } else {
             log.error('ipcHandlers does not export a function');
         }
@@ -136,6 +176,7 @@ async function createWindow() {
         titleBarStyle: process.env.DEBUG !== 'true' ? 'hidden' : '',
         frame: process.env.DEBUG === 'true'
     });
+    background.attachWindow(mainWindow);
 
     if (process.platform === 'darwin') {
         mainWindow.setWindowButtonVisibility(false);
@@ -148,7 +189,15 @@ async function createWindow() {
             'extra-ipc-handlers.js'
         ));
         if (typeof extraHandlers === 'function') {
-            await extraHandlers(app, ipcMain, mainWindow, log, openLocation, (url) => shell.openExternal(url));
+            await extraHandlers(
+                app,
+                ipcMain,
+                mainWindow,
+                log,
+                openLocation,
+                (url) => shell.openExternal(url),
+                () => background.close()
+            );
         } else {
             log.error('extra-ipc-handlers does not export a function');
         }
@@ -159,43 +208,12 @@ async function createWindow() {
     await mainWindow.loadFile(path.join(__dirname, 'index.html'));
 }
 
-autoUpdater.autoDownload = false;
-autoUpdater.disableWebInstaller = true;
-
-autoUpdater.on('update-available', (info) => {
-    dialog
-        .showMessageBox({
-            type: 'info',
-            title: 'Update available',
-            detail: `Would you like to download version ${info.version} and install it now?`,
-            message: `New version of launcher available!`,
-            buttons: ['Install', 'Later'],
-            cancelId: 1,
-            defaultId: 0,
-            noLink: false
-        })
-        .then((result) => {
-            if (result.response === 0) {
-                dialog.showMessageBox({
-                    type: 'info',
-                    title: 'Downloading',
-                    message: `Downloading version ${info.version} of the launcher...`
-                });
-                autoUpdater.downloadUpdate();
-            }
-        });
-});
-
-autoUpdater.on('update-downloaded', () => {
-    dialog
-        .showMessageBox({
-            title: 'Install Updates',
-            message:
-                'Updates downloaded. The application will now quit and install the updates.'
-        })
-        .then(() => {
-            autoUpdater.quitAndInstall();
-        });
+require(path.join(__dirname, 'libs', 'launcher-updater.js')).registerLauncherUpdater({
+    autoUpdater,
+    ipcMain,
+    log,
+    send: (status) => mainWindow?.webContents.send('launcher-update', status),
+    beforeInstall: () => background.allowQuit()
 });
 
 app.on('web-contents-created', (_event, contents) => {
@@ -208,13 +226,20 @@ app.on('web-contents-created', (_event, contents) => {
 
 app.whenReady().then(async () => {
     log.info('App starting...');
+    if (!background.claimInstance()) {
+        app.quit();
+        return;
+    }
 
     await loadLibraries();
     await createWindow();
+    background.start();
+    remoteStart?.start();
 
     if (process.env.DEBUG !== 'true') {
         mainWindow.show();
-        autoUpdater.checkForUpdates();
+        // Failures are already logged by the 'error' handler.
+        autoUpdater.checkForUpdates().catch(() => {});
     } else {
         mainWindow.show();
     }

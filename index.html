@@ -7,9 +7,6 @@
     <meta name="description" content="Microbot Launcher - Download, update, and manage your Microbot client easily.">
     <meta name="keywords" content="Microbot, Launcher, Download, Update, Jagex, Account, Game, Proxy">
     <title>Microbot Launcher</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Montserrat:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="css/styles.css">
 </head>
 
@@ -262,8 +259,8 @@
                             <li data-target="client-ram"><strong>Client RAM.</strong> 1 or 2 GB is enough for one
                                 client. Raise it if the client lags or closes with an out of memory error.</li>
                             <li data-target="hwid-spoof-row"><strong>Spoof hardware IDs.</strong> On by default. Each
-                                account sends its own random random.dat seed instead of this computer's. Pick one
-                                setting per account and keep it: switching sends both values for the same account.</li>
+                                account sends its own random.dat ID instead of this PC's. Pick one setting per
+                                account and keep it: switching sends both IDs for the same account.</li>
                             <li data-target="proxy-ip"><strong>Proxy.</strong> Optional, SOCKS5 only. Characters you
                                 added through a proxy switch back to it when you select them.</li>
                         </ol>
@@ -353,8 +350,8 @@
                     </svg>
                 </div>
                 <div class="profiles-cloud-text">
-                    <h2 id="profiles-cloud-title">Back up your profiles</h2>
-                    <p id="profiles-cloud-text">Sign in to keep your profiles in the cloud and use them on any PC.</p>
+                    <h2 id="profiles-cloud-title">Bot alerts</h2>
+                    <p id="profiles-cloud-text">Sign in to hear on Discord or by email when a bot stops. Profile backup is coming soon.</p>
                 </div>
                 <button id="profiles-sign-in" class="profiles-cloud-button" type="button">Sign in</button>
             </section>
@@ -387,7 +384,7 @@
         </div>
     </div>
     <div id="loader-container">
-        <h1>Download and Unpack Progress</h1>
+        <h1>Downloading the Microbot client</h1>
         <div id="loader">
             <div id="progress-bar">0%</div>
         </div>
@@ -411,6 +408,17 @@
         </div>
     </div>
 
+    <div id="toast" class="toast" role="alert" hidden>
+        <span id="toast-text" class="toast-text"></span>
+        <button id="toast-logs" class="toast-action" type="button">Open logs</button>
+        <button id="toast-close" class="toast-close" type="button" aria-label="Dismiss">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 6 6 18M6 6l12 12"></path>
+            </svg>
+        </button>
+    </div>
+
     <div id="main-container" class="container">
         <div class="titlebar">
             <button id="menu-btn" class="titlebar-button hamburger" title="Menu" aria-label="Application Menu">
@@ -421,38 +429,26 @@
                     <line x1="3" y1="18" x2="21" y2="18"></line>
                 </svg>
             </button>
-            <span class="titlebar-title">Microbot Launcher - 0.0.0.0</span>
+            <span class="titlebar-title">Microbot Launcher <span id="titlebar-version" class="titlebar-version"></span></span>
             <div class="titlebar-controls">
-                <button class="titlebar-button" id="minimize-btn">
+                <button class="titlebar-button" id="minimize-btn" aria-label="Minimize">
                     <svg width="20px" height="20px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"
                         fill="#ffffff" stroke="#ffffff">
-                        <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                        <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
-                        <g id="SVGRepo_iconCarrier">
-                            <path d="M14 8v1H3V8h11z"></path>
-                        </g>
+                        <path d="M14 8v1H3V8h11z"></path>
                     </svg>
                 </button>
-                <button class="titlebar-button" id="maximize-btn">
+                <button class="titlebar-button" id="maximize-btn" aria-label="Maximize">
                     <svg width="20px" height="20px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"
                         fill="#ffffff" stroke="#ffffff">
-                        <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                        <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
-                        <g id="SVGRepo_iconCarrier">
-                            <path d="M3 3v10h10V3H3zm9 9H4V4h8v8z"></path>
-                        </g>
+                        <path d="M3 3v10h10V3H3zm9 9H4V4h8v8z"></path>
                     </svg>
                 </button>
-                <button class="titlebar-button" id="close-btn">
+                <button class="titlebar-button" id="close-btn" aria-label="Close">
                     <svg width="20px" height="20px" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"
                         fill="#ffffff" stroke="#ffffff">
-                        <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                        <g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
-                        <g id="SVGRepo_iconCarrier">
-                            <path fill-rule="evenodd" clip-rule="evenodd"
-                                d="M7.116 8l-4.558 4.558.884.884L8 8.884l4.558 4.558.884-.884L8.884 8l4.558-4.558-.884-.884L8 7.116 3.442 2.558l-.884.884L7.116 8z">
-                            </path>
-                        </g>
+                        <path fill-rule="evenodd" clip-rule="evenodd"
+                            d="M7.116 8l-4.558 4.558.884.884L8 8.884l4.558 4.558.884-.884L8.884 8l4.558-4.558-.884-.884L8 7.116 3.442 2.558l-.884.884L7.116 8z">
+                        </path>
                     </svg>
                 </button>
             </div>
@@ -477,6 +473,14 @@
                         <span class="game-logo-tagline">Old School Launcher</span>
                     </span>
                 </div>
+                <div id="launcher-update-banner" class="launcher-update-banner" role="status" hidden>
+                    <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 4v11M7 10l5 5 5-5M5 20h14"></path>
+                    </svg>
+                    <span id="launcher-update-text" class="launcher-update-text"></span>
+                    <button id="launcher-update-btn" class="launcher-update-btn" type="button"></button>
+                </div>
                 <section id="user-session" class="account-card hidden" aria-live="polite">
                     <div id="account-avatar" class="account-avatar" aria-hidden="true"></div>
                     <div class="account-text">
@@ -500,18 +504,18 @@
                     </div>
                 </section>
                 <div class="play-buttons">
-                    <button id="play-no-jagex-account" class="play-button loadingButton">
-                        Play Normal Account
-                    </button>
                     <button id="play" class="play-button loadingButton">
                         Login Jagex Account
+                    </button>
+                    <button id="play-no-jagex-account" class="play-button loadingButton">
+                        Play Normal Account
                     </button>
                 </div>
                 <button id="add-accounts" class="add-accounts loadingButton">
                     Add accounts
                 </button>
                 <button id="logout" class="logout-button loadingButton">
-                    Remove All Accounts
+                    Remove all accounts
                 </button>
                 <div class="game-info">
                     <label id="client-channel-label">Version</label>
@@ -568,15 +572,15 @@
                         <option value="6g">6 GB</option>
                         <option value="8g">8 GB</option>
                     </select>
-                    <label id="hwid-spoof-row" class="hwid-spoof-toggle" for="hwid-spoof"
-                        title="Send a random per-account random.dat seed at login instead of this computer's, and keep the real random.dat file untouched. Applies from the next client launch.">
-                        <span class="hwid-spoof-text">
-                            <span class="hwid-spoof-name">Spoof hardware IDs</span>
-                            <span class="hwid-spoof-hint">Per-account random.dat seed</span>
-                        </span>
-                        <input id="hwid-spoof" class="hwid-spoof-input" type="checkbox" role="switch" checked />
-                        <span class="hwid-spoof-switch" aria-hidden="true"></span>
-                    </label>
+                    <div id="hwid-spoof-row">
+                        <label for="hwid-spoof">Spoof hardware IDs</label>
+                        <label class="hwid-spoof-toggle" for="hwid-spoof"
+                            title="When on, each account sends its own random.dat ID instead of this PC's. Keep one setting per account: switching sends both IDs. Applies on next launch.">
+                            <span class="hwid-spoof-state" aria-hidden="true"></span>
+                            <input id="hwid-spoof" class="hwid-spoof-input" type="checkbox" role="switch" checked />
+                            <span class="hwid-spoof-switch" aria-hidden="true"></span>
+                        </label>
+                    </div>
                 </div>
                 <div class="proxy-section">
                     <label for="proxy-ip">Proxy (optional, SOCKS5 only)</label>
@@ -600,9 +604,17 @@
         <div id="app-menu" class="app-menu hidden" aria-hidden="true">
             <ul class="menu-root">
                 <li class="menu-item" data-action="setup-guide">Setup guide</li>
+                <li class="menu-item menu-check" data-action="run-in-background" role="menuitemcheckbox"
+                    aria-checked="false" tabindex="0"
+                    title="Closing the launcher hides it to the tray instead of quitting. Quit from the tray icon.">
+                    Keep running in the tray when closed</li>
+                <li class="menu-item menu-check" data-action="remote-start" role="menuitemcheckbox"
+                    aria-checked="false" tabindex="0"
+                    title="Lets you start this PC's clients from the Microbot dashboard, with the proxy you pick there. Needs your Microbot sign-in, and keeps the launcher running in the tray.">
+                    Start clients from the dashboard</li>
                 <li class="separator" role="separator"></li>
                 <li class="menu-item has-sub" data-action="open-folder-root">
-                    <span class="menu-label">Open ▸</span>
+                    <span class="menu-label">Open</span>
                     <ul class="submenu">
                         <li class="submenu-item" data-location="microbot-folder">Microbot Folder</li>
                         <li class="submenu-item" data-location="runelite-folder">Runelite Folder</li>
