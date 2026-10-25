@@ -27,8 +27,16 @@ describe('launcher updater', () => {
         const order = [];
         const { autoUpdater, handlers } = setup(() => order.push('allow quit'));
         autoUpdater.quitAndInstall.mockImplementation(() => order.push('install'));
+        autoUpdater.emit('update-downloaded', { version: '3.2.17' });
         handlers['launcher-update:install']();
         expect(order).toEqual(['allow quit', 'install']);
+    });
+
+    test('keeps hiding to the tray when there is no update to install yet', () => {
+        const beforeInstall = jest.fn();
+        const { handlers } = setup(beforeInstall);
+        handlers['launcher-update:install']();
+        expect(beforeInstall).not.toHaveBeenCalled();
     });
 
     test('only downloads when the user asks', () => {

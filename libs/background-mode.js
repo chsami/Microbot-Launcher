@@ -106,15 +106,18 @@ module.exports = function setupBackgroundMode(deps) {
 
     const setEnabled = (value) => {
         const next = Boolean(value);
+        if (next && !app.hasSingleInstanceLock() && !app.requestSingleInstanceLock()) {
+            return { error: 'Another Microbot Launcher is already running in the background. Use that one, or quit it first.' };
+        }
         fs.writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), runInBackground: next }, null, 2));
         enabled = next;
         if (next) {
-            if (!app.hasSingleInstanceLock()) app.requestSingleInstanceLock();
             createTray();
         } else {
             destroyTray();
             if (app.hasSingleInstanceLock()) app.releaseSingleInstanceLock();
         }
+        return {};
     };
 
     app.on('second-instance', showWindow);
@@ -127,7 +130,8 @@ module.exports = function setupBackgroundMode(deps) {
 
     ipcMain.handle('background:set-enabled', async (_event, value) => {
         try {
-            setEnabled(value);
+            const result = setEnabled(value);
+            if (result.error) return { error: result.error, enabled };
         } catch (error) {
             log.warn(`Could not save the background setting: ${error?.message || error}`);
             return { error: 'Could not save the setting.', enabled };

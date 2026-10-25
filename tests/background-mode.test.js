@@ -168,6 +168,16 @@ describe('background mode', () => {
         expect(app.quit).toHaveBeenCalled();
     });
 
+    test('will not switch on while another launcher already runs in the background', async () => {
+        const { handlers, trays, background, closeWindow } = setup({ lockAvailable: false });
+        const result = await handlers['background:set-enabled']({}, true);
+        expect(result.enabled).toBe(false);
+        expect(result.error).toMatch(/already running in the background/);
+        expect(trays).toHaveLength(0);
+        expect(background.isEnabled()).toBe(false);
+        expect(closeWindow().preventDefault).not.toHaveBeenCalled();
+    });
+
     test('treats an unreadable settings file as off', () => {
         const { background, log } = setup({ settings: 'not json' });
         expect(background.isEnabled()).toBe(false);

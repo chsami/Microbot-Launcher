@@ -2132,7 +2132,7 @@ async function setupBackgroundToggle(item, hideMenu) {
     } catch (error) {
         console.error('Could not read the background setting:', error);
     }
-    item.addEventListener('click', async () => {
+    const toggle = async () => {
         const next = item.getAttribute('aria-checked') !== 'true';
         hideMenu();
         try {
@@ -2142,6 +2142,12 @@ async function setupBackgroundToggle(item, hideMenu) {
         } catch (error) {
             showErrorToast('Could not save the setting.', { logs: false });
         }
+    };
+    item.addEventListener('click', toggle);
+    item.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        toggle();
     });
 }
 

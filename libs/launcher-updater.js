@@ -9,7 +9,11 @@ function registerLauncherUpdater({ autoUpdater, ipcMain, log, send, beforeInstal
     autoUpdater.on('download-progress', (progress) =>
         send({ state: 'downloading', percent: Math.round(progress.percent) })
     );
-    autoUpdater.on('update-downloaded', (info) => send({ state: 'ready', version: info.version }));
+    let downloaded = false;
+    autoUpdater.on('update-downloaded', (info) => {
+        downloaded = true;
+        send({ state: 'ready', version: info.version });
+    });
     autoUpdater.on('error', (error) => {
         log.error('Launcher update failed:', error);
         send({ state: 'error' });
@@ -18,7 +22,7 @@ function registerLauncherUpdater({ autoUpdater, ipcMain, log, send, beforeInstal
     ipcMain.handle('launcher-update:download', () => autoUpdater.downloadUpdate());
     // Silent (/S) install over the existing copy, then relaunch: skips the NSIS wizard.
     ipcMain.handle('launcher-update:install', () => {
-        beforeInstall();
+        if (downloaded) beforeInstall();
         return autoUpdater.quitAndInstall(true, true);
     });
 }
