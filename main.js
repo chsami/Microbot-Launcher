@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell, nativeImage, clipboard, safeStorage, session } = require('electron');
+const { app, BrowserWindow, dialog, shell, nativeImage, clipboard, safeStorage, session, Tray, Menu, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
@@ -25,6 +25,20 @@ let mainWindow = null;
 if (!fs.existsSync(microbotDir)) {
     fs.mkdirSync(microbotDir);
 }
+
+const background = require(path.join(__dirname, 'libs', 'background-mode.js'))({
+    app,
+    ipcMain,
+    Tray,
+    Menu,
+    nativeImage,
+    Notification,
+    log,
+    fs,
+    settingsFile: path.join(microbotDir, 'launcher-settings.json'),
+    iconPath: path.join(__dirname, 'images', 'microbot_transparent.png'),
+    getWindow: () => mainWindow
+});
 
 async function loadLibraries() {
     log.info('Loading libraries...');
@@ -136,6 +150,7 @@ async function createWindow() {
         titleBarStyle: process.env.DEBUG !== 'true' ? 'hidden' : '',
         frame: process.env.DEBUG === 'true'
     });
+    background.attachWindow(mainWindow);
 
     if (process.platform === 'darwin') {
         mainWindow.setWindowButtonVisibility(false);
@@ -148,7 +163,15 @@ async function createWindow() {
             'extra-ipc-handlers.js'
         ));
         if (typeof extraHandlers === 'function') {
-            await extraHandlers(app, ipcMain, mainWindow, log, openLocation, (url) => shell.openExternal(url));
+            await extraHandlers(
+                app,
+                ipcMain,
+                mainWindow,
+                log,
+                openLocation,
+                (url) => shell.openExternal(url),
+                () => background.close()
+            );
         } else {
             log.error('extra-ipc-handlers does not export a function');
         }
@@ -163,7 +186,8 @@ require(path.join(__dirname, 'libs', 'launcher-updater.js')).registerLauncherUpd
     autoUpdater,
     ipcMain,
     log,
-    send: (status) => mainWindow?.webContents.send('launcher-update', status)
+    send: (status) => mainWindow?.webContents.send('launcher-update', status),
+    beforeInstall: () => background.allowQuit()
 });
 
 app.on('web-contents-created', (_event, contents) => {
@@ -176,9 +200,14 @@ app.on('web-contents-created', (_event, contents) => {
 
 app.whenReady().then(async () => {
     log.info('App starting...');
+    if (!background.claimInstance()) {
+        app.quit();
+        return;
+    }
 
     await loadLibraries();
     await createWindow();
+    background.start();
 
     if (process.env.DEBUG !== 'true') {
         mainWindow.show();

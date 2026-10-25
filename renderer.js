@@ -2124,6 +2124,27 @@ async function initUI(properties) {
     setupRefreshAccountsButton();
 }
 
+async function setupBackgroundToggle(item, hideMenu) {
+    if (!item || !window.electron.background) return;
+    const render = (enabled) => item.setAttribute('aria-checked', enabled ? 'true' : 'false');
+    try {
+        render((await window.electron.background.status())?.enabled);
+    } catch (error) {
+        console.error('Could not read the background setting:', error);
+    }
+    item.addEventListener('click', async () => {
+        const next = item.getAttribute('aria-checked') !== 'true';
+        hideMenu();
+        try {
+            const result = await window.electron.background.setEnabled(next);
+            render(result?.enabled);
+            if (result?.error) showErrorToast(result.error, { logs: false });
+        } catch (error) {
+            showErrorToast('Could not save the setting.', { logs: false });
+        }
+    });
+}
+
 /**
  * Setup the hamburger menu for the app.
  * Has some functional behavior for showing and hiding the menu
@@ -2169,6 +2190,8 @@ function setupHamburgerMenu() {
         hideMenu();
         window.openSetupGuide?.();
     });
+
+    setupBackgroundToggle(menu.querySelector('[data-action="run-in-background"]'), hideMenu);
 
     menu.querySelectorAll('.submenu-item').forEach((item) => {
         item.addEventListener('click', async (e) => {

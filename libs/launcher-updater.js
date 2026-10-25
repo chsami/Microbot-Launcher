@@ -1,5 +1,5 @@
 // Forwards electron-updater events to the renderer's update banner and handles its button clicks.
-function registerLauncherUpdater({ autoUpdater, ipcMain, log, send }) {
+function registerLauncherUpdater({ autoUpdater, ipcMain, log, send, beforeInstall = () => {} }) {
     autoUpdater.autoDownload = false;
     autoUpdater.disableWebInstaller = true;
 
@@ -17,7 +17,10 @@ function registerLauncherUpdater({ autoUpdater, ipcMain, log, send }) {
 
     ipcMain.handle('launcher-update:download', () => autoUpdater.downloadUpdate());
     // Silent (/S) install over the existing copy, then relaunch: skips the NSIS wizard.
-    ipcMain.handle('launcher-update:install', () => autoUpdater.quitAndInstall(true, true));
+    ipcMain.handle('launcher-update:install', () => {
+        beforeInstall();
+        return autoUpdater.quitAndInstall(true, true);
+    });
 }
 
 module.exports = { registerLauncherUpdater };
