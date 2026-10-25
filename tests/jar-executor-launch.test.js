@@ -451,3 +451,73 @@ describe('open-client launch diagnostics with real Java runtimes', () => {
         expect(harness.deps.dialog.showMessageBox).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('launch without anyone at the screen', () => {
+    const quietLaunch = async (harness, options = {}) => {
+        const { launch: start } = await require('../libs/jar-executor')(harness.deps);
+        return start({ version: VERSION, account: { profile: 'main', displayName: 'Zezima' }, ...options });
+    };
+
+    test('missing Java is reported back instead of offering an install', async () => {
+        const empty = path.join(workDir, 'empty-bin-quiet');
+        fs.mkdirSync(empty, { recursive: true });
+        process.env.PATH = empty;
+        const harness = createHarness({ response: 0 });
+        const outcome = await quietLaunch(harness);
+        expect(outcome.problem.kind).toBe('java-needs-install');
+        expect(harness.dialogs).toHaveLength(0);
+    });
+
+    withJdk(17)('a client that keeps running counts as started', async () => {
+        useJava(17);
+        process.env.M07_MODE = 'sleep';
+        process.env.M07_SLEEP_MS = '4000';
+        const harness = createHarness({ startupWindowMs: 1500 });
+        try {
+            await expect(quietLaunch(harness)).resolves.toEqual({ started: true });
+        } finally {
+            delete process.env.M07_SLEEP_MS;
+        }
+        expect(harness.spawnCalls[1].args).toContain('-profile=main');
+        expect(harness.dialogs).toHaveLength(0);
+    }, 15000);
+
+    withJdk(17)('a crash during startup comes back as the same problem the dialog would show', async () => {
+        useJava(17);
+        process.env.M07_MODE = 'crash';
+        const harness = createHarness();
+        const outcome = await quietLaunch(harness);
+        expect(outcome.problem.kind).toBe('client-startup');
+        expect(harness.dialogs).toHaveLength(0);
+        expect(harness.log.error).toHaveBeenCalledWith(expect.stringContaining('[launch problem]'));
+    }, 15000);
+
+    withJdk(17)('a client that closes cleanly during startup is not reported as started', async () => {
+        useJava(17);
+        process.env.M07_MODE = 'sleep';
+        process.env.M07_SLEEP_MS = '10';
+        const harness = createHarness();
+        try {
+            const outcome = await quietLaunch(harness);
+            expect(outcome.problem.kind).toBe('closed-during-startup');
+        } finally {
+            delete process.env.M07_SLEEP_MS;
+        }
+        expect(harness.dialogs).toHaveLength(0);
+    }, 15000);
+
+    withJdk(17)('a profile without a Jagex account starts with the Jagex login cleared', async () => {
+        useJava(17);
+        process.env.M07_MODE = 'sleep';
+        process.env.M07_SLEEP_MS = '4000';
+        const harness = createHarness({ startupWindowMs: 1500 });
+        try {
+            await expect(quietLaunch(harness, { account: undefined, noJagexProfile: 'alt' })).resolves.toEqual({
+                started: true
+            });
+        } finally {
+            delete process.env.M07_SLEEP_MS;
+        }
+        expect(harness.spawnCalls[1].args).toEqual(expect.arrayContaining(['-clean-jagex-launcher', '-profile=alt']));
+    }, 15000);
+});

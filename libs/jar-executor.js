@@ -52,45 +52,74 @@ module.exports = async function (deps) {
         };
     }
 
+    function buildCommandArgs({ version, proxy, ramPreference, hwidSpoof, profile, cleanJagex, label }) {
+        const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
+        const memoryConfig = selectMemoryArgs(ramPreference);
+        log.info(
+            `Launching ${label} with ${memoryConfig.source} memory settings: ${memoryConfig.args.join(' ')}`
+        );
+        const commandArgs = [...memoryConfig.args, ...GC_FLAGS, '-jar', jarPath];
+        if (cleanJagex) commandArgs.push('-clean-jagex-launcher');
+        commandArgs.unshift(...hwidAgentArgs({ fs, microbotDir, version, enabled: hwidSpoof }));
+
+        const err = addProxyArgs(commandArgs, proxy);
+        if (err) return { error: err.message };
+
+        if (profile) commandArgs.push(`-profile=${profile}`);
+
+        if (process.platform === 'darwin') {
+            commandArgs.unshift('--add-opens=java.desktop/com.apple.eawt=ALL-UNNAMED');
+            commandArgs.unshift('--add-opens=java.desktop/sun.awt=ALL-UNNAMED');
+        }
+        return { commandArgs };
+    }
+
+    async function prepareLaunch({ version, proxy, account, ramPreference, hwidSpoof, noJagexProfile }) {
+        const noJagex = noJagexProfile !== undefined;
+        const profile = noJagex
+            ? noJagexProfile && noJagexProfile !== 'default'
+                ? noJagexProfile
+                : null
+            : account && account.profile;
+        const built = buildCommandArgs({
+            version,
+            proxy,
+            ramPreference,
+            hwidSpoof,
+            profile,
+            cleanJagex: noJagex,
+            label: noJagex ? 'non-Jagex client' : 'client'
+        });
+        if (built.error) return built;
+        const token = await alertToken(noJagex ? profile : account && account.profile);
+        return {
+            commandArgs: built.commandArgs,
+            secrets: withToken(noJagex ? [] : accountSecrets(account), token),
+            env: clientEnv(token)
+        };
+    }
+
+    async function launch(options) {
+        const prepared = await prepareLaunch(options);
+        if (prepared.error) {
+            log.error(prepared.error);
+            return { problem: { kind: 'invalid-proxy', title: 'Invalid Proxy', message: prepared.error } };
+        }
+        return checkJavaAndRunJar(prepared.commandArgs, prepared.secrets, options.progress, prepared.env, {
+            interactive: false
+        });
+    }
+
     ipcMain.handle(
         'open-client',
         async (event, version, proxy, account, ramPreference, hwidSpoof) => {
             try {
-                const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
-                const memoryConfig = selectMemoryArgs(ramPreference);
-                log.info(
-                    `Launching client with ${memoryConfig.source} memory settings: ${memoryConfig.args.join(' ')}`
-                );
-                const commandArgs = [...memoryConfig.args, ...GC_FLAGS, '-jar', jarPath];
-                commandArgs.unshift(...hwidAgentArgs({ fs, microbotDir, version, enabled: hwidSpoof }));
-
-                // apply proxy args (done differently depending on client version)
-                const err = addProxyArgs(commandArgs, proxy);
-                if (err) {
-                    log.error(err.message);
-                    return { error: err.message };
+                const prepared = await prepareLaunch({ version, proxy, account, ramPreference, hwidSpoof });
+                if (prepared.error) {
+                    log.error(prepared.error);
+                    return { error: prepared.error };
                 }
-
-                if (account && account.profile) {
-                    commandArgs.push(`-profile=${account.profile}`);
-                }
-
-                if (process.platform === 'darwin') {
-                    commandArgs.unshift(
-                        '--add-opens=java.desktop/com.apple.eawt=ALL-UNNAMED'
-                    );
-                    commandArgs.unshift(
-                        '--add-opens=java.desktop/sun.awt=ALL-UNNAMED'
-                    );
-                }
-
-                const token = await alertToken(account && account.profile);
-                checkJavaAndRunJar(
-                    commandArgs,
-                    withToken(accountSecrets(account), token),
-                    progressFor(event),
-                    clientEnv(token)
-                );
+                checkJavaAndRunJar(prepared.commandArgs, prepared.secrets, progressFor(event), prepared.env);
                 return { success: true };
             } catch (error) {
                 log.error(error.message);
@@ -102,68 +131,32 @@ module.exports = async function (deps) {
     ipcMain.handle(
         'play-no-jagex-account',
         async (event, version, proxy, ramPreference, hwidSpoof) => {
-            const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
-            const memoryConfig = selectMemoryArgs(ramPreference);
-            log.info(
-                `Launching non-Jagex client with ${memoryConfig.source} memory settings: ${memoryConfig.args.join(' ')}`
-            );
-            const commandArgs = [
-                ...memoryConfig.args,
-                ...GC_FLAGS,
-                '-jar',
-                jarPath,
-                '-clean-jagex-launcher'
-            ];
-            commandArgs.unshift(...hwidAgentArgs({ fs, microbotDir, version, enabled: hwidSpoof }));
-
-            // apply proxy args (done differently depending on client version)
-            const err = addProxyArgs(commandArgs, proxy);
-            if (err) {
-                log.error(err.message);
-                return { error: err.message };
+            const prepared = await prepareLaunch({
+                version,
+                proxy,
+                ramPreference,
+                hwidSpoof,
+                noJagexProfile: readPreferredProfile()
+            });
+            if (prepared.error) {
+                log.error(prepared.error);
+                return { error: prepared.error };
             }
-
-            let preferredProfile = null;
-            if (
-                fs.existsSync(
-                    path.join(microbotDir, 'non-jagex-preferred-profile.json')
-                )
-            ) {
-                try {
-                    const profileData = JSON.parse(
-                        fs.readFileSync(
-                            path.join(
-                                microbotDir,
-                                'non-jagex-preferred-profile.json'
-                            ),
-                            'utf8'
-                        )
-                    );
-                    if (profileData?.profile && profileData.profile !== 'default') {
-                        commandArgs.push(`-profile=${profileData.profile}`);
-                        preferredProfile = profileData.profile;
-                    }
-                } catch (error) {
-                    log.error(
-                        'Invalid non-jagex-preferred-profile.json:',
-                        error.message
-                    );
-                }
-            }
-            if (process.platform === 'darwin') {
-                commandArgs.unshift(
-                    '--add-opens=java.desktop/com.apple.eawt=ALL-UNNAMED'
-                );
-                commandArgs.unshift(
-                    '--add-opens=java.desktop/sun.awt=ALL-UNNAMED'
-                );
-            }
-
-            const token = await alertToken(preferredProfile);
-            checkJavaAndRunJar(commandArgs, withToken([], token), progressFor(event), clientEnv(token));
+            checkJavaAndRunJar(prepared.commandArgs, prepared.secrets, progressFor(event), prepared.env);
             return { success: true };
         }
     );
+
+    function readPreferredProfile() {
+        const file = path.join(microbotDir, 'non-jagex-preferred-profile.json');
+        if (!fs.existsSync(file)) return null;
+        try {
+            return JSON.parse(fs.readFileSync(file, 'utf8'))?.profile || null;
+        } catch (error) {
+            log.error('Invalid non-jagex-preferred-profile.json:', error.message);
+            return null;
+        }
+    }
 
     async function alertToken(profile) {
         if (!deps.alerts) return null;
@@ -280,7 +273,16 @@ module.exports = async function (deps) {
         );
     }
 
-    function showLaunchProblem(problem, { runtime, executable, stderr, secrets } = {}) {
+    function reportProblem(launch, problem, context = {}) {
+        if (launch.interactive) {
+            showLaunchProblem(problem, { ...context, secrets: launch.secrets });
+        } else {
+            logLaunchProblem(problem, { ...context, secrets: launch.secrets });
+        }
+        launch.finish({ problem });
+    }
+
+    function logLaunchProblem(problem, { runtime, executable, stderr, secrets } = {}) {
         const details = javaRuntime.formatProblemDetails({
             problem,
             runtime,
@@ -293,6 +295,11 @@ module.exports = async function (deps) {
             secrets
         });
         log.error(`[launch problem]\n${details}`);
+        return details;
+    }
+
+    function showLaunchProblem(problem, context = {}) {
+        const details = logLaunchProblem(problem, context);
         if (!dialog) return;
 
         const buttons = [];
@@ -325,7 +332,8 @@ module.exports = async function (deps) {
             .catch((err) => log.error(`Failed to show launch problem: ${err.message}`));
     }
 
-    function executeJar(executable, commandArgs, runtime, secrets, env) {
+    function executeJar(executable, commandArgs, runtime, launch) {
+        const { env } = launch;
         const loggedArgs = commandArgs.map((arg) => arg.replace(/^(-(?:profile|proxy)=).*/s, '$1***'));
         log.info(`${executable} ${javaRuntime.redactText(loggedArgs.join(' '), { homeDir: homeDirectories() })}`);
 
@@ -348,7 +356,7 @@ module.exports = async function (deps) {
         const report = (problem) => {
             if (reported) return;
             reported = true;
-            showLaunchProblem(problem, { runtime, executable, stderr: stderrData, secrets });
+            reportProblem(launch, problem, { runtime, executable, stderr: stderrData });
         };
 
         try {
@@ -384,6 +392,7 @@ module.exports = async function (deps) {
                 if (!process.env.DEBUG && jarProcess.stderr) {
                     jarProcess.stderr.destroy();
                 }
+                launch.finish({ started: true });
             }, STARTUP_WINDOW_MS);
             if (startupTimer.unref) startupTimer.unref();
 
@@ -409,6 +418,8 @@ module.exports = async function (deps) {
                 log.info(`JAR exited with code ${code} after ${elapsed}ms`);
                 if (elapsed <= STARTUP_WINDOW_MS && code !== 0) {
                     report(javaRuntime.classifyLaunchFailure({ code, signal, stderr: stderrData }));
+                } else if (elapsed <= STARTUP_WINDOW_MS) {
+                    launch.finish({ problem: CLOSED_DURING_STARTUP });
                 }
             });
         } catch (error) {
@@ -417,18 +428,35 @@ module.exports = async function (deps) {
         }
     }
 
-    function checkJavaAndRunJar(commandArgs, secrets = [], progress = () => {}, env = null) {
-        probeJava((result) => {
-            if (!needsManagedJava(result)) {
-                launchWithRuntime(result, commandArgs, secrets, env);
-                return;
-            }
-            probeManagedJava((managed) => {
-                if (!needsManagedJava(managed)) {
-                    launchWithRuntime(managed, commandArgs, secrets, env);
+    function checkJavaAndRunJar(commandArgs, secrets = [], progress = () => {}, env = null, { interactive = true } = {}) {
+        return new Promise((resolve) => {
+            let finished = false;
+            const launch = {
+                secrets,
+                env,
+                interactive,
+                finish: (outcome) => {
+                    if (finished) return;
+                    finished = true;
+                    resolve(outcome);
+                }
+            };
+            probeJava((result) => {
+                if (!needsManagedJava(result)) {
+                    launchWithRuntime(result, commandArgs, launch);
                     return;
                 }
-                offerManagedInstall(commandArgs, secrets, progress, env);
+                probeManagedJava((managed) => {
+                    if (!needsManagedJava(managed)) {
+                        launchWithRuntime(managed, commandArgs, launch);
+                        return;
+                    }
+                    if (!interactive) {
+                        reportProblem(launch, JAVA_NEEDS_INSTALL);
+                        return;
+                    }
+                    offerManagedInstall(commandArgs, progress || (() => {}), launch);
+                });
             });
         });
     }
@@ -452,9 +480,9 @@ module.exports = async function (deps) {
         return new Promise((resolve) => probeJava(resolve, command));
     }
 
-    function launchWithRuntime({ runtime, problem }, commandArgs, secrets, env) {
+    function launchWithRuntime({ runtime, problem }, commandArgs, launch) {
         if (problem) {
-            showLaunchProblem(problem, { stderr: problem.stderr, secrets });
+            reportProblem(launch, problem, { stderr: problem.stderr });
             return;
         }
 
@@ -464,7 +492,8 @@ module.exports = async function (deps) {
         });
         evaluation.warnings.forEach((warning) => log.warn(warning.message));
         if (!evaluation.compatible) {
-            showLaunchProblem(
+            reportProblem(
+                launch,
                 {
                     kind: 'incompatible-java',
                     title: 'Incompatible Java',
@@ -472,7 +501,7 @@ module.exports = async function (deps) {
                     recovery: evaluation.problems.map((p) => p.recovery).join(' '),
                     offerDownload: true
                 },
-                { runtime, secrets }
+                { runtime }
             );
             return;
         }
@@ -483,7 +512,7 @@ module.exports = async function (deps) {
         }
         const executable = javaRuntime.launcherExecutable(runtime, process.platform, fs.existsSync);
         log.info('Java runtime is compatible, running the JAR...');
-        executeJar(executable, launchArgs, runtime, secrets, env);
+        executeJar(executable, launchArgs, runtime, launch);
     }
 
     function obtainManagedJava(progress) {
@@ -495,9 +524,10 @@ module.exports = async function (deps) {
         return managedJavaReady;
     }
 
-    function offerManagedInstall(commandArgs, secrets, progress, env) {
+    function offerManagedInstall(commandArgs, progress, launch) {
         obtainManagedJava(progress).then((result) => {
-            if (result) launchWithRuntime(result, commandArgs, secrets, env);
+            if (result) launchWithRuntime(result, commandArgs, launch);
+            else launch.finish({ problem: JAVA_NEEDS_INSTALL });
         });
     }
 
@@ -551,6 +581,20 @@ module.exports = async function (deps) {
             return null;
         }
     }
+
+    return { launch };
+};
+
+const JAVA_NEEDS_INSTALL = {
+    kind: 'java-needs-install',
+    title: 'Java Is Needed',
+    message: 'Microbot needs Java, and none was found. Open the launcher and press Play once to install it.'
+};
+
+const CLOSED_DURING_STARTUP = {
+    kind: 'closed-during-startup',
+    title: 'Client Closed',
+    message: 'The client closed while it was starting.'
 };
 
 const DEFAULT_XMS_VALUE = '512m';
