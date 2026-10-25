@@ -2,7 +2,7 @@ const HELP_LINKS = {
     discord: 'https://discord.gg/zaGrfqFEWE'
 };
 
-module.exports = async function (app, ipcMain, window, log, openLocation, openExternal) {
+module.exports = async function (app, ipcMain, window, log, openLocation, openExternal, close = () => app?.quit()) {
     if (typeof openLocation !== 'function') {
         throw new Error('missing required dependency: openLocation');
     }
@@ -39,9 +39,7 @@ module.exports = async function (app, ipcMain, window, log, openLocation, openEx
 
     ipcMain.handle('close-launcher', async () => {
         try {
-            if (app) {
-                app.quit();
-            }
+            close();
             return { success: true };
         } catch (error) {
             log?.error('Error closing launcher:', error.message);

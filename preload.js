@@ -94,6 +94,10 @@ contextBridge.exposeInMainWorld('electron', {
     dashboard: {
         open: () => ipcRenderer.invoke('dashboard:open')
     },
+    background: {
+        status: () => ipcRenderer.invoke('background:status'),
+        setEnabled: (enabled) => ipcRenderer.invoke('background:set-enabled', enabled)
+    },
     alerts: {
         status: (profiles) => ipcRenderer.invoke('alerts:status', profiles),
         setEnabled: (profile, enabled) =>

@@ -1709,6 +1709,22 @@ button.hamburger {
     background: rgba(255, 255, 255, 0.08);
 }
 
+.app-menu .menu-item.menu-check {
+    padding-right: 34px;
+}
+
+.app-menu .menu-item.menu-check[aria-checked='true']::after {
+    content: '';
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    width: 4px;
+    height: 8px;
+    border: solid var(--gold);
+    border-width: 0 1.5px 1.5px 0;
+    transform: translateY(-65%) rotate(45deg);
+}
+
 .app-menu .menu-item.has-sub>.menu-label {
     display: flex;
     align-items: center;
