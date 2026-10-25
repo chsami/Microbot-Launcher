@@ -3,17 +3,23 @@ const os = require('os');
 const path = require('path');
 
 const setupProfileLauncher = require('../libs/profile-launcher.js');
+const setupProxyChoices = require('../libs/proxy-choices.js');
 const { isSafeClientVersion } = require('../libs/client-jars.js');
 
 const JAGEX_MAIN = { accountId: '111', sessionId: 's-1', displayName: 'Zezima', profile: 'main', proxyIp: '' };
-const JAGEX_ALT = { accountId: '222', sessionId: 's-2', displayName: 'Lynx', profile: 'alt', proxyIp: '10.0.0.2:1080' };
+const JAGEX_ALT = { accountId: '222', sessionId: 's-2', displayName: 'Lynx', profile: 'alt', proxyIp: '10.0.0.2:1080:bob:hunter2' };
+const SAVED_PROXIES = [
+    { name: 'Germany', address: 'socks5://amy:secret@10.0.0.7:1080' },
+    { name: '', address: '10.0.0.8:1080' },
+    { name: 'Broken', address: 'not a proxy' }
+];
 
 function setup({ accounts = [JAGEX_MAIN, JAGEX_ALT], properties = {}, jars = ['2.6.43'], launchOutcome, deadlineMs } = {}) {
     const microbotDir = fs.mkdtempSync(path.join(os.tmpdir(), 'profile-launcher-'));
     fs.writeFileSync(path.join(microbotDir, 'accounts.json'), JSON.stringify(accounts));
     fs.writeFileSync(
         path.join(microbotDir, 'resource_versions.json'),
-        JSON.stringify({ version_pref: '2.6.43', client_ram: '2g', proxyip: '10.0.0.9:1080', ...properties })
+        JSON.stringify({ version_pref: '2.6.43', client_ram: '2g', proxyip: '10.0.0.9:1080', proxies: SAVED_PROXIES, ...properties })
     );
     jars.forEach((version) => fs.writeFileSync(path.join(microbotDir, `microbot-${version}.jar`), ''));
 
@@ -33,10 +39,11 @@ function setup({ accounts = [JAGEX_MAIN, JAGEX_ALT], properties = {}, jars = ['2
         prepareNightly: jest.fn(async () => ({ info: { build: 'nightly-20261025' } })),
         fetchLatestVersion: jest.fn(async () => '2.6.44'),
         recordClientUse: jest.fn(async () => {}),
+        proxyChoices: setupProxyChoices({ fs, path, microbotDir }),
         deadlineMs
     };
-    const { launchProfile } = setupProfileLauncher(deps);
-    return { deps, events, launchProfile };
+    const { launchProfile, listProxies } = setupProfileLauncher(deps);
+    return { deps, events, launchProfile, listProxies };
 }
 
 describe('launching a profile without the launcher window', () => {
@@ -49,7 +56,7 @@ describe('launching a profile without the launcher window', () => {
         ]);
         expect(deps.launch).toHaveBeenCalledWith({
             version: '2.6.43',
-            proxy: { proxyIp: '10.0.0.9:1080' },
+            proxy: { proxyIp: '' },
             ramPreference: '2g',
             hwidSpoof: true,
             account: JAGEX_MAIN
@@ -58,10 +65,41 @@ describe('launching a profile without the launcher window', () => {
         expect(deps.downloadClient).not.toHaveBeenCalled();
     });
 
-    test("uses the account's own proxy before the one last picked in the launcher", async () => {
+    test('starts without a proxy unless one is chosen, even when one was last picked in the launcher', async () => {
         const { deps, launchProfile } = setup();
         await launchProfile('alt');
-        expect(deps.launch.mock.calls[0][0].proxy).toEqual({ proxyIp: '10.0.0.2:1080' });
+        expect(deps.launch.mock.calls[0][0].proxy).toEqual({ proxyIp: '' });
+    });
+
+    test('lists saved proxies by name and host only, and suggests the one each account logged in through', () => {
+        const { listProxies } = setup();
+        const { proxies, suggested } = listProxies();
+        expect(proxies.map((proxy) => proxy.label)).toEqual([
+            'Germany (10.0.0.7:1080)',
+            '10.0.0.8:1080',
+            '10.0.0.9:1080',
+            '10.0.0.2:1080'
+        ]);
+        expect(JSON.stringify(proxies)).not.toMatch(/secret|hunter2|amy|bob/);
+        expect(suggested).toEqual({ alt: proxies[3].id });
+    });
+
+    test('starts through the chosen proxy, looked up on this PC', async () => {
+        const { deps, launchProfile, listProxies } = setup();
+        const germany = listProxies().proxies[0];
+        await launchProfile('main', { proxyId: germany.id });
+        expect(deps.launch.mock.calls[0][0].proxy).toEqual({ proxyIp: 'socks5://amy:secret@10.0.0.7:1080' });
+        const alt = listProxies().suggested.alt;
+        await launchProfile('alt', { proxyId: alt });
+        expect(deps.launch.mock.calls[1][0].proxy).toEqual({ proxyIp: '10.0.0.2:1080:bob:hunter2' });
+    });
+
+    test('refuses a proxy id it does not know, rather than starting without one', async () => {
+        const { deps, launchProfile } = setup();
+        const outcome = await launchProfile('main', { proxyId: 'socks5://evil:1080' });
+        expect(outcome.problem.kind).toBe('unknown-proxy');
+        expect(deps.launch).not.toHaveBeenCalled();
+        expect(deps.writeCredentials).not.toHaveBeenCalled();
     });
 
     test('keeps hardware ID spoofing off when it was switched off', async () => {

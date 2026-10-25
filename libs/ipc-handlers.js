@@ -529,6 +529,7 @@ module.exports = async function (deps) {
         recordClientUse: async (version) => {
             const result = await updateClientJarTTL(version);
             if (result?.error) throw new Error(result.error);
-        }
+        },
+        proxyChoices: require(path.join(projectDir, 'libs', 'proxy-choices.js'))({ fs, path, microbotDir })
     });
 };

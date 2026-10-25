@@ -17,7 +17,8 @@ module.exports = function setupProfileLauncher(deps) {
         downloadClient,
         prepareNightly,
         fetchLatestVersion,
-        recordClientUse
+        recordClientUse,
+        proxyChoices
     } = deps;
 
     const deadlineMs = deps.deadlineMs || LAUNCH_DEADLINE_MS;
@@ -90,21 +91,36 @@ module.exports = function setupProfileLauncher(deps) {
         return ensureDownloaded(version);
     };
 
-    const proxyFor = (account, properties) => {
-        const own = typeof account?.proxyIp === 'string' ? account.proxyIp.trim() : '';
-        if (own) return own;
-        return typeof properties.proxyip === 'string' ? properties.proxyip.trim() : '';
+    const choosableProxies = (properties) => proxyChoices.savedProxies(properties, readAccounts());
+
+    const listProxies = () => {
+        const accounts = readAccounts();
+        const proxies = proxyChoices.savedProxies(readProperties(), accounts);
+        const suggested = {};
+        accounts.forEach((account) => {
+            const own = typeof account.proxyIp === 'string' ? account.proxyIp.trim() : '';
+            if (own) suggested[profileName(account.profile)] = proxyChoices.idFor(own);
+        });
+        return { proxies: proxies.map(({ id, label }) => ({ id, label })), suggested };
     };
 
-    const launchNow = async (profile) => {
+    const launchNow = async (profile, proxyId) => {
         const target = findAccount(profile);
         if (target.problem) return target;
         const properties = readProperties();
+        let proxyIp = '';
+        if (proxyId) {
+            const chosen = choosableProxies(properties).find((proxy) => proxy.id === proxyId);
+            if (!chosen) {
+                return problem('unknown-proxy', 'Unknown Proxy', 'That proxy is no longer saved in the launcher.');
+            }
+            proxyIp = chosen.address;
+        }
         const resolved = await resolveVersion(properties);
         if (resolved.problem) return resolved;
         const settings = {
             version: resolved.version,
-            proxy: { proxyIp: proxyFor(target.account, properties) },
+            proxy: { proxyIp },
             ramPreference: typeof properties.client_ram === 'string' ? properties.client_ram : '',
             hwidSpoof: properties.hwid_spoof !== 'false'
         };
@@ -123,7 +139,7 @@ module.exports = function setupProfileLauncher(deps) {
         return launch({ ...settings, noJagexProfile: profile });
     };
 
-    const launchProfile = (rawProfile) => {
+    const launchProfile = (rawProfile, { proxyId = null } = {}) => {
         const profile = profileName(rawProfile);
         if (profile.length > MAX_PROFILE_LENGTH || /[\u0000-\u001f]/.test(profile)) {
             return Promise.resolve(problem('invalid-profile', 'Invalid Profile', 'That profile name is not valid.'));
@@ -135,7 +151,7 @@ module.exports = function setupProfileLauncher(deps) {
         }
         waiting += 1;
         const run = queue
-            .then(() => withDeadline(launchNow(profile), profile))
+            .then(() => withDeadline(launchNow(profile, proxyId), profile))
             .catch((error) => {
                 log.error(`Could not start profile "${profile}": ${error?.message || error}`);
                 return problem('launch-failed', 'Launch Failed', error?.message || String(error));
@@ -158,5 +174,5 @@ module.exports = function setupProfileLauncher(deps) {
         return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
     };
 
-    return { launchProfile };
+    return { launchProfile, listProxies };
 };
