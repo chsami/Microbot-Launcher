@@ -147,6 +147,15 @@ module.exports = function setupBackgroundMode(deps) {
         allowQuit: () => {
             quitting = true;
         },
+        enable: () => {
+            if (enabled) return {};
+            try {
+                return setEnabled(true);
+            } catch (error) {
+                log.warn(`Could not save the background setting: ${error?.message || error}`);
+                return { error: 'Could not save the setting.' };
+            }
+        },
         isEnabled: () => enabled
     };
 };

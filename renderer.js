@@ -2124,21 +2124,25 @@ async function initUI(properties) {
     setupRefreshAccountsButton();
 }
 
-async function setupBackgroundToggle(item, hideMenu) {
-    if (!item || !window.electron.background) return;
+async function setupMenuToggle(item, setting, hideMenu, afterChange = () => {}) {
+    if (!item || !setting) return null;
     const render = (enabled) => item.setAttribute('aria-checked', enabled ? 'true' : 'false');
-    try {
-        render((await window.electron.background.status())?.enabled);
-    } catch (error) {
-        console.error('Could not read the background setting:', error);
-    }
+    const refresh = async () => {
+        try {
+            render((await setting.status())?.enabled);
+        } catch (error) {
+            console.error('Could not read a launcher setting:', error);
+        }
+    };
+    await refresh();
     const toggle = async () => {
         const next = item.getAttribute('aria-checked') !== 'true';
         hideMenu();
         try {
-            const result = await window.electron.background.setEnabled(next);
+            const result = await setting.setEnabled(next);
             render(result?.enabled);
             if (result?.error) showErrorToast(result.error, { logs: false });
+            else await afterChange();
         } catch (error) {
             showErrorToast('Could not save the setting.', { logs: false });
         }
@@ -2149,6 +2153,7 @@ async function setupBackgroundToggle(item, hideMenu) {
         event.preventDefault();
         toggle();
     });
+    return refresh;
 }
 
 /**
@@ -2197,7 +2202,15 @@ function setupHamburgerMenu() {
         window.openSetupGuide?.();
     });
 
-    setupBackgroundToggle(menu.querySelector('[data-action="run-in-background"]'), hideMenu);
+    setupMenuToggle(menu.querySelector('[data-action="run-in-background"]'), window.electron.background, hideMenu).then(
+        (refreshBackground) =>
+            setupMenuToggle(
+                menu.querySelector('[data-action="remote-start"]'),
+                window.electron.remoteStart,
+                hideMenu,
+                () => refreshBackground?.()
+            )
+    );
 
     menu.querySelectorAll('.submenu-item').forEach((item) => {
         item.addEventListener('click', async (e) => {

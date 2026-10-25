@@ -22,7 +22,7 @@ module.exports = function setupProfileLauncher(deps) {
     } = deps;
 
     const deadlineMs = deps.deadlineMs || LAUNCH_DEADLINE_MS;
-    let queue = Promise.resolve();
+    const launchQueue = deps.launchQueue || require('./launch-queue.js')();
     let waiting = 0;
 
     const readJson = (name, fallback) => {
@@ -151,8 +151,8 @@ module.exports = function setupProfileLauncher(deps) {
             );
         }
         waiting += 1;
-        const run = queue
-            .then(() => withDeadline((attempt) => launchNow(profile, proxyId, attempt), profile))
+        return launchQueue
+            .run(() => withDeadline((attempt) => launchNow(profile, proxyId, attempt), profile))
             .catch((error) => {
                 log.error(`Could not start profile "${profile}": ${error?.message || error}`);
                 return problem('launch-failed', 'Launch Failed', error?.message || String(error));
@@ -160,8 +160,6 @@ module.exports = function setupProfileLauncher(deps) {
             .finally(() => {
                 waiting -= 1;
             });
-        queue = run;
-        return run;
     };
 
     const withDeadline = (start, profile) => {
