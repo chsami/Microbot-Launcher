@@ -6,6 +6,7 @@ module.exports = function setupBackgroundMode(deps) {
     const { app, ipcMain, Tray, Menu, nativeImage, Notification, log, fs, settingsFile, iconPath, getWindow } = deps;
 
     let tray = null;
+    const disabledListeners = new Set();
     let quitting = false;
     let hintShown = false;
     let enabled = readSettings().runInBackground === true;
@@ -116,6 +117,7 @@ module.exports = function setupBackgroundMode(deps) {
         } else {
             destroyTray();
             if (app.hasSingleInstanceLock()) app.releaseSingleInstanceLock();
+            disabledListeners.forEach((listener) => listener());
         }
         return {};
     };
@@ -156,6 +158,7 @@ module.exports = function setupBackgroundMode(deps) {
                 return { error: 'Could not save the setting.' };
             }
         },
-        isEnabled: () => enabled
+        isEnabled: () => enabled,
+        onDisabled: (listener) => disabledListeners.add(listener)
     };
 };

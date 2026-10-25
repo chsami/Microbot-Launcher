@@ -121,7 +121,22 @@ module.exports = async function (deps) {
                 }
                 const credentials = account && account.accountId && account.sessionId ? account : null;
                 startInTurn(event, () => {
-                    if (credentials) deps.writeCredentials?.(credentials);
+                    if (credentials) {
+                        try {
+                            deps.writeCredentials?.(credentials);
+                        } catch (error) {
+                            showLaunchProblem(
+                                {
+                                    kind: 'credentials-failed',
+                                    title: 'Could Not Save The Login',
+                                    message: `The launcher could not write credentials.properties: ${error.message}`,
+                                    recovery: 'Check that the .runelite folder in your home folder is writable, then try again.'
+                                },
+                                { secrets: prepared.secrets }
+                            );
+                            return { problem: { kind: 'credentials-failed' } };
+                        }
+                    }
                     return checkJavaAndRunJar(prepared.commandArgs, prepared.secrets, progressFor(event), prepared.env);
                 });
                 return { success: true };

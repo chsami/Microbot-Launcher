@@ -44,7 +44,12 @@ function setup({ settings = {}, signedIn = true, linked = { main: 'link-1', alt:
         onChange: (listener) => listeners.add(listener)
     };
     const handlers = {};
-    const background = { enable: jest.fn(() => (backgroundError ? { error: backgroundError } : {})) };
+    const backgroundListeners = [];
+    const background = {
+        enable: jest.fn(() => (backgroundError ? { error: backgroundError } : {})),
+        onDisabled: (listener) => backgroundListeners.push(listener)
+    };
+    const trayOff = () => backgroundListeners.forEach((listener) => listener());
     const launchProfile = jest.fn(async () => ({ started: true }));
     const notify = jest.fn();
     const log = { info: jest.fn(), warn: jest.fn() };
@@ -83,7 +88,7 @@ function setup({ settings = {}, signedIn = true, linked = { main: 'link-1', alt:
         listeners.forEach((listener) => listener({ email }));
     };
     const readSettings = () => JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-    return { remote, handlers, axios, auth, syncs, results, respond, fail, background, launchProfile, notify, log, launcherFile, readSettings, signOut, signIn };
+    return { remote, handlers, axios, auth, syncs, results, respond, fail, background, launchProfile, notify, log, launcherFile, readSettings, signOut, signIn, trayOff };
 }
 
 describe('starting clients from the dashboard', () => {
@@ -214,6 +219,18 @@ describe('starting clients from the dashboard', () => {
         expect(readSettings().remoteStart).toBe(false);
         await flush();
         expect(syncs).toHaveLength(2);
+    });
+
+    test('turning the tray off turns dashboard starts off too', async () => {
+        const { remote, syncs, respond, trayOff, readSettings, handlers } = setup({ settings: { remoteStart: true } });
+        remote.start();
+        await waitFor(() => syncs.length === 1);
+        respond({ commands: [] });
+        trayOff();
+        await waitFor(() => syncs.length === 2);
+        expect(syncs[1].body.startAllowed).toBe(false);
+        expect(readSettings().remoteStart).toBe(false);
+        await expect(handlers['remote-start:status']()).resolves.toMatchObject({ enabled: false });
     });
 
     test('stops on sign-out and picks up again on sign-in', async () => {

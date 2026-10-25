@@ -238,6 +238,19 @@ module.exports = function setupRemoteStart(deps) {
         enabled = value;
     };
 
+    background?.onDisabled?.(() => {
+        if (!enabled) return;
+        try {
+            saveEnabled(false);
+        } catch (error) {
+            log.warn(`Could not save the dashboard start setting: ${error?.message || error}`);
+            enabled = false;
+        }
+        stop();
+        log.info('Dashboard starts were turned off because the launcher no longer keeps running in the tray.');
+        announceOff().catch(() => {});
+    });
+
     auth?.onChange((user) => {
         stop();
         if (user) start();

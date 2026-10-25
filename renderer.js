@@ -2202,15 +2202,21 @@ function setupHamburgerMenu() {
         window.openSetupGuide?.();
     });
 
-    setupMenuToggle(menu.querySelector('[data-action="run-in-background"]'), window.electron.background, hideMenu).then(
-        (refreshBackground) =>
-            setupMenuToggle(
-                menu.querySelector('[data-action="remote-start"]'),
-                window.electron.remoteStart,
-                hideMenu,
-                () => refreshBackground?.()
-            )
-    );
+    const remoteItem = menu.querySelector('[data-action="remote-start"]');
+    let refreshRemote = null;
+    setupMenuToggle(menu.querySelector('[data-action="run-in-background"]'), window.electron.background, hideMenu, async () => {
+        const wasOn = remoteItem?.getAttribute('aria-checked') === 'true';
+        await refreshRemote?.();
+        if (wasOn && remoteItem?.getAttribute('aria-checked') !== 'true') {
+            showErrorToast('Starting clients from the dashboard is now off too. It needs the launcher to keep running in the tray.', {
+                logs: false
+            });
+        }
+    }).then((refreshBackground) => {
+        setupMenuToggle(remoteItem, window.electron.remoteStart, hideMenu, () => refreshBackground?.()).then((refresh) => {
+            refreshRemote = refresh;
+        });
+    });
 
     menu.querySelectorAll('.submenu-item').forEach((item) => {
         item.addEventListener('click', async (e) => {

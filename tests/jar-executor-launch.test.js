@@ -552,3 +552,23 @@ describe('Play while another client is starting', () => {
         expect(harness.spawnCalls[1].args).toContain('-profile=main');
     }, 15000);
 });
+
+describe('Play when the login file cannot be written', () => {
+    withJdk(17)('explains it instead of starting a client with the wrong login', async () => {
+        useJava(17);
+        const harness = createHarness();
+        harness.deps.launchQueue = require('../libs/launch-queue')();
+        harness.deps.writeCredentials = () => {
+            throw new Error('EACCES: permission denied');
+        };
+        await require('../libs/jar-executor')(harness.deps);
+        const account = { accountId: '111', sessionId: 'session', displayName: 'Zezima', profile: 'main' };
+        await expect(harness.handlers['open-client']({}, VERSION, null, account, '')).resolves.toEqual({ success: true });
+
+        const shown = await within(harness.dialogShown, 5000);
+        expect(shown.title).toBe('Could Not Save The Login');
+        expect(shown.message).toContain('EACCES');
+        expect(shown.detail).not.toContain('Zezima');
+        expect(harness.spawnCalls).toHaveLength(0);
+    }, 15000);
+});
