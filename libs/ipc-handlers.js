@@ -110,7 +110,7 @@ module.exports = async function (deps) {
             return typeof value === 'function' ? value.bind(target) : value;
         }
     });
-    await jarExecutorHandler({ ...deps, ipcMain: versionCheckedIpcMain });
+    const jarExecutor = await jarExecutorHandler({ ...deps, ipcMain: versionCheckedIpcMain });
     const packageVersion = packageJson.version;
 
     async function refreshSession(writeAccountsToFile, sessionId, proxyIp) {
@@ -198,13 +198,13 @@ module.exports = async function (deps) {
         }
     });
 
-    ipcMain.handle('download-client', async (event, version) => {
+    async function downloadClient(version, send = () => {}) {
         if (!isSafeClientVersion(version)) {
             return invalidVersionResult(version);
         }
         const url = `${filestorage}/releases/microbot/stable/microbot-${version}.jar`;
         try {
-            event.sender.send('progress', {
+            send({
                 percent: 90,
                 status: 'Downloading Microbot-' + version + ''
             });
@@ -228,7 +228,7 @@ module.exports = async function (deps) {
                         ).toFixed(2);
                         // Scale from 10% to 90% for download progress
                         let currentPercent = (10 + progress * 0.8).toFixed(2);
-                        event.sender.send('progress', {
+                        send({
                             percent: currentPercent,
                             status: `Downloading client ${version}... (${progress}%)`
                         });
@@ -238,7 +238,7 @@ module.exports = async function (deps) {
                             progressEvent.loaded /
                             (1024 * 1024)
                         ).toFixed(1);
-                        event.sender.send('progress', {
+                        send({
                             percent: 50,
                             status: `Downloading client ${version}... (${downloadedMB}MB)`
                         });
@@ -253,7 +253,7 @@ module.exports = async function (deps) {
                 log.error(`Failed to record downloaded client ${version}: ${markError.message}`);
             }
             await ensureHwidAgentJar({ axios, fs, log, microbotDir, filestorage, version });
-            event.sender.send('progress', {
+            send({
                 percent: 100,
                 status: 'Completed!'
             });
@@ -265,9 +265,13 @@ module.exports = async function (deps) {
             );
             return { error: error.message };
         }
-    });
+    }
 
-    ipcMain.handle('prepare-nightly', async (event) => {
+    ipcMain.handle('download-client', async (event, version) =>
+        downloadClient(version, (progress) => event.sender.send('progress', progress))
+    );
+
+    function prepareNightlyOnce(progress = () => {}) {
         if (!nightlyInFlight) {
             nightlyInFlight = prepareNightly({
                 axios,
@@ -275,15 +279,19 @@ module.exports = async function (deps) {
                 log,
                 microbotDir,
                 filestorage,
-                progress: (percent, status) => {
-                    if (!event.sender.isDestroyed()) event.sender.send('progress', { percent, status });
-                }
+                progress
             }).finally(() => {
                 nightlyInFlight = null;
             });
         }
         return nightlyInFlight;
-    });
+    }
+
+    ipcMain.handle('prepare-nightly', async (event) =>
+        prepareNightlyOnce((percent, status) => {
+            if (!event.sender.isDestroyed()) event.sender.send('progress', { percent, status });
+        })
+    );
 
     ipcMain.handle('nightly-status', async (event, checkRemote) =>
         nightlyStatus({ axios, fs, log, microbotDir, filestorage, checkRemote: checkRemote === true })
@@ -503,5 +511,25 @@ module.exports = async function (deps) {
             'dir-module.js'
         ));
         return await updateClientJarTTL(version);
+    });
+
+    const { updateClientJarTTL } = require(path.join(projectDir, 'libs', 'dir-module.js'));
+    const { writeCredentialProperties } = require(path.join(projectDir, 'libs', 'overwrite-credential-properties.js'));
+    return require(path.join(projectDir, 'libs', 'profile-launcher.js'))({
+        fs,
+        path,
+        log,
+        microbotDir,
+        launch: jarExecutor.launch,
+        writeCredentials: (account) => writeCredentialProperties({ fs, path, homeDir: require('os').homedir() }, account),
+        isSafeClientVersion,
+        downloadClient: (version) => downloadClient(version),
+        prepareNightly: () => prepareNightlyOnce(),
+        fetchLatestVersion: async () => (await axios.get(url + '/api/version/client')).data,
+        recordClientUse: async (version) => {
+            const result = await updateClientJarTTL(version);
+            if (result?.error) throw new Error(result.error);
+        },
+        proxyChoices: require(path.join(projectDir, 'libs', 'proxy-choices.js'))({ fs, path, microbotDir })
     });
 };
