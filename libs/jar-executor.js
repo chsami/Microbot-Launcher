@@ -420,6 +420,8 @@ module.exports = async function (deps) {
                     report(javaRuntime.classifyLaunchFailure({ code, signal, stderr: stderrData }));
                 } else if (elapsed <= STARTUP_WINDOW_MS) {
                     launch.finish({ problem: CLOSED_DURING_STARTUP });
+                } else {
+                    launch.finish({ started: true });
                 }
             });
         } catch (error) {
@@ -588,7 +590,7 @@ module.exports = async function (deps) {
 const JAVA_NEEDS_INSTALL = {
     kind: 'java-needs-install',
     title: 'Java Is Needed',
-    message: 'Microbot needs Java, and none was found. Open the launcher and press Play once to install it.'
+    message: 'Microbot needs Java 17 or newer, and no usable Java was found. Open the launcher and press Play once to install it.'
 };
 
 const CLOSED_DURING_STARTUP = {

@@ -8,7 +8,7 @@ const { isSafeClientVersion } = require('../libs/client-jars.js');
 const JAGEX_MAIN = { accountId: '111', sessionId: 's-1', displayName: 'Zezima', profile: 'main', proxyIp: '' };
 const JAGEX_ALT = { accountId: '222', sessionId: 's-2', displayName: 'Lynx', profile: 'alt', proxyIp: '10.0.0.2:1080' };
 
-function setup({ accounts = [JAGEX_MAIN, JAGEX_ALT], properties = {}, jars = ['2.6.43'], launchOutcome } = {}) {
+function setup({ accounts = [JAGEX_MAIN, JAGEX_ALT], properties = {}, jars = ['2.6.43'], launchOutcome, deadlineMs } = {}) {
     const microbotDir = fs.mkdtempSync(path.join(os.tmpdir(), 'profile-launcher-'));
     fs.writeFileSync(path.join(microbotDir, 'accounts.json'), JSON.stringify(accounts));
     fs.writeFileSync(
@@ -32,7 +32,8 @@ function setup({ accounts = [JAGEX_MAIN, JAGEX_ALT], properties = {}, jars = ['2
         downloadClient: jest.fn(async () => ({ success: true })),
         prepareNightly: jest.fn(async () => ({ info: { build: 'nightly-20261025' } })),
         fetchLatestVersion: jest.fn(async () => '2.6.44'),
-        recordClientUse: jest.fn(async () => {})
+        recordClientUse: jest.fn(async () => {}),
+        deadlineMs
     };
     const { launchProfile } = setupProfileLauncher(deps);
     return { deps, events, launchProfile };
@@ -164,6 +165,30 @@ describe('launching a profile without the launcher window', () => {
         const failed = await launchProfile('main');
         expect(failed.problem).toMatchObject({ kind: 'launch-failed', message: 'boom' });
         await expect(launchProfile('alt')).resolves.toEqual({ started: true });
+    });
+
+    test('a launch that never finishes is given up on, and the next one still runs', async () => {
+        const { launchProfile } = setup({
+            deadlineMs: 50,
+            launchOutcome: (options) => (options.account.accountId === '111' ? new Promise(() => {}) : { started: true })
+        });
+        const stuck = launchProfile('main');
+        const next = launchProfile('alt');
+        await expect(stuck).resolves.toMatchObject({ problem: { kind: 'timed-out' } });
+        await expect(next).resolves.toEqual({ started: true });
+    });
+
+    test('refuses more launches while three are already waiting', async () => {
+        let release;
+        const held = new Promise((resolve) => (release = resolve));
+        const { deps, launchProfile } = setup({ launchOutcome: () => held });
+        const waiting = [launchProfile('main'), launchProfile('alt'), launchProfile('main')];
+        const refused = await launchProfile('alt');
+        expect(refused.problem.kind).toBe('too-many-launches');
+        release({ started: true });
+        await Promise.all(waiting);
+        await expect(launchProfile('alt')).resolves.toEqual({ started: true });
+        expect(deps.launch).toHaveBeenCalledTimes(4);
     });
 
     test('a broken accounts file counts as no Jagex accounts', async () => {

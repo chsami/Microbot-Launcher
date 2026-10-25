@@ -1,5 +1,7 @@
 const DEFAULT_PROFILE = 'default';
 const MAX_PROFILE_LENGTH = 128;
+const MAX_WAITING = 3;
+const LAUNCH_DEADLINE_MS = 10 * 60 * 1000;
 
 const problem = (kind, title, message) => ({ problem: { kind, title, message } });
 
@@ -18,7 +20,9 @@ module.exports = function setupProfileLauncher(deps) {
         recordClientUse
     } = deps;
 
+    const deadlineMs = deps.deadlineMs || LAUNCH_DEADLINE_MS;
     let queue = Promise.resolve();
+    let waiting = 0;
 
     const readJson = (name, fallback) => {
         const file = path.join(microbotDir, name);
@@ -124,14 +128,34 @@ module.exports = function setupProfileLauncher(deps) {
         if (profile.length > MAX_PROFILE_LENGTH || /[\u0000-\u001f]/.test(profile)) {
             return Promise.resolve(problem('invalid-profile', 'Invalid Profile', 'That profile name is not valid.'));
         }
-        const run = queue.then(() =>
-            launchNow(profile).catch((error) => {
+        if (waiting >= MAX_WAITING) {
+            return Promise.resolve(
+                problem('too-many-launches', 'Too Many Launches', 'Other clients are still starting. Try again in a minute.')
+            );
+        }
+        waiting += 1;
+        const run = queue
+            .then(() => withDeadline(launchNow(profile), profile))
+            .catch((error) => {
                 log.error(`Could not start profile "${profile}": ${error?.message || error}`);
                 return problem('launch-failed', 'Launch Failed', error?.message || String(error));
             })
-        );
+            .finally(() => {
+                waiting -= 1;
+            });
         queue = run;
         return run;
+    };
+
+    const withDeadline = (work, profile) => {
+        let timer = null;
+        const deadline = new Promise((resolve) => {
+            timer = setTimeout(() => {
+                log.warn(`Starting profile "${profile}" took too long; moving on to the next launch.`);
+                resolve(problem('timed-out', 'Took Too Long', 'Starting the client took too long. Check the launcher.'));
+            }, deadlineMs);
+        });
+        return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
     };
 
     return { launchProfile };
