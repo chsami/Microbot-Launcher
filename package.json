@@ -60,6 +60,7 @@
       "libs/**",
       "index.html",
       "css/**",
+      "fonts/**",
       "build/READ THIS BEFORE INSTALL.html"
     ],
     "directories": {
