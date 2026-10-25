@@ -20,6 +20,7 @@ process.on('uncaughtException', (error) => {
 });
 
 let mainWindow = null;
+let remoteStart = null;
 
 // Ensure the .microbot directory exists
 if (!fs.existsSync(microbotDir)) {
@@ -121,7 +122,32 @@ async function loadLibraries() {
             log.error('Error setting up bot alerts:', alertsError);
         }
         if (typeof handler === 'function') {
-            await handler(deps);
+            const launcher = await handler(deps);
+            if (apiAuth && launcher) {
+                try {
+                    remoteStart = require(path.join(__dirname, 'libs', 'remote-start.js'))({
+                        ipcMain,
+                        log,
+                        fs,
+                        safeStorage,
+                        axios,
+                        auth: apiAuth,
+                        alerts: deps.alerts,
+                        background,
+                        launchProfile: launcher.launchProfile,
+                        listProxies: launcher.listProxies,
+                        settingsFile: path.join(microbotDir, 'launcher-settings.json'),
+                        launcherFile: path.join(microbotDir, 'launcher-link.dat'),
+                        launcherName: require('os').hostname(),
+                        version: packageJson.version,
+                        notify: (title, body) => {
+                            if (Notification.isSupported()) new Notification({ title, body }).show();
+                        }
+                    });
+                } catch (remoteStartError) {
+                    log.error('Error setting up dashboard starts:', remoteStartError);
+                }
+            }
         } else {
             log.error('ipcHandlers does not export a function');
         }
@@ -208,6 +234,7 @@ app.whenReady().then(async () => {
     await loadLibraries();
     await createWindow();
     background.start();
+    remoteStart?.start();
 
     if (process.env.DEBUG !== 'true') {
         mainWindow.show();

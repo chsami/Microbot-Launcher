@@ -13,13 +13,14 @@ JX_ACCESS_TOKEN=
 }
 
 module.exports = async function (deps) {
-    const { fs, path, ipcMain, log } = deps;
+    const { fs, path, ipcMain, log, launchQueue } = deps;
 
     ipcMain.handle(
         'overwrite-credential-properties',
         async (event, character) => {
             try {
-                writeCredentialProperties({ fs, path, homeDir: require('os').homedir() }, character);
+                const write = () => writeCredentialProperties({ fs, path, homeDir: require('os').homedir() }, character);
+                await (launchQueue ? launchQueue.run(write) : write());
                 log.info('credentials.properties file updated successfully.');
                 return { success: 'Succesfull' };
             } catch (error) {

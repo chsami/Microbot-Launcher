@@ -541,9 +541,6 @@ async function openClient() {
     if (selectedAccount) {
         try {
             await recordClientUse(version);
-            await window.electron.overwriteCredentialProperties(
-                selectedAccount
-            );
             const launchResult = await window.electron.openClient(
                 version,
                 proxy,
@@ -2124,21 +2121,25 @@ async function initUI(properties) {
     setupRefreshAccountsButton();
 }
 
-async function setupBackgroundToggle(item, hideMenu) {
-    if (!item || !window.electron.background) return;
+async function setupMenuToggle(item, setting, hideMenu, afterChange = () => {}) {
+    if (!item || !setting) return null;
     const render = (enabled) => item.setAttribute('aria-checked', enabled ? 'true' : 'false');
-    try {
-        render((await window.electron.background.status())?.enabled);
-    } catch (error) {
-        console.error('Could not read the background setting:', error);
-    }
+    const refresh = async () => {
+        try {
+            render((await setting.status())?.enabled);
+        } catch (error) {
+            console.error('Could not read a launcher setting:', error);
+        }
+    };
+    await refresh();
     const toggle = async () => {
         const next = item.getAttribute('aria-checked') !== 'true';
         hideMenu();
         try {
-            const result = await window.electron.background.setEnabled(next);
+            const result = await setting.setEnabled(next);
             render(result?.enabled);
             if (result?.error) showErrorToast(result.error, { logs: false });
+            else await afterChange();
         } catch (error) {
             showErrorToast('Could not save the setting.', { logs: false });
         }
@@ -2149,6 +2150,7 @@ async function setupBackgroundToggle(item, hideMenu) {
         event.preventDefault();
         toggle();
     });
+    return refresh;
 }
 
 /**
@@ -2197,7 +2199,21 @@ function setupHamburgerMenu() {
         window.openSetupGuide?.();
     });
 
-    setupBackgroundToggle(menu.querySelector('[data-action="run-in-background"]'), hideMenu);
+    const remoteItem = menu.querySelector('[data-action="remote-start"]');
+    let refreshRemote = null;
+    setupMenuToggle(menu.querySelector('[data-action="run-in-background"]'), window.electron.background, hideMenu, async () => {
+        const wasOn = remoteItem?.getAttribute('aria-checked') === 'true';
+        await refreshRemote?.();
+        if (wasOn && remoteItem?.getAttribute('aria-checked') !== 'true') {
+            showErrorToast('Starting clients from the dashboard is now off too. It needs the launcher to keep running in the tray.', {
+                logs: false
+            });
+        }
+    }).then((refreshBackground) => {
+        setupMenuToggle(remoteItem, window.electron.remoteStart, hideMenu, () => refreshBackground?.()).then((refresh) => {
+            refreshRemote = refresh;
+        });
+    });
 
     menu.querySelectorAll('.submenu-item').forEach((item) => {
         item.addEventListener('click', async (e) => {

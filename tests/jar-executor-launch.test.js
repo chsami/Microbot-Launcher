@@ -521,3 +521,54 @@ describe('launch without anyone at the screen', () => {
         expect(harness.spawnCalls[1].args).toEqual(expect.arrayContaining(['-clean-jagex-launcher', '-profile=alt']));
     }, 15000);
 });
+
+describe('Play while another client is starting', () => {
+    withJdk(17)('waits its turn, then writes its own login just before starting', async () => {
+        useJava(17);
+        process.env.M07_MODE = 'sleep';
+        const harness = createHarness({ startupWindowMs: 1500 });
+        const queue = require('../libs/launch-queue')();
+        const order = [];
+        harness.deps.launchQueue = queue;
+        harness.deps.writeCredentials = jest.fn((account) => order.push(`login ${account.accountId}`));
+        let release;
+        queue.run(() => new Promise((resolve) => (release = resolve)));
+
+        const account = { accountId: '111', sessionId: 'session', displayName: 'Zezima', profile: 'main' };
+        await require('../libs/jar-executor')(harness.deps);
+        const sent = [];
+        const event = { sender: { send: (_channel, progress) => sent.push(progress.status) } };
+        await expect(harness.handlers['open-client'](event, VERSION, null, account, '')).resolves.toEqual({ success: true });
+
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        expect(harness.spawnCalls).toHaveLength(0);
+        expect(harness.deps.writeCredentials).not.toHaveBeenCalled();
+        expect(sent).toContain('Waiting for the previous client to finish starting...');
+
+        order.push('other start finished');
+        release();
+        await waitFor(() => harness.spawnCalls.length >= 2);
+        expect(order).toEqual(['other start finished', 'login 111']);
+        expect(harness.spawnCalls[1].args).toContain('-profile=main');
+    }, 15000);
+});
+
+describe('Play when the login file cannot be written', () => {
+    withJdk(17)('explains it instead of starting a client with the wrong login', async () => {
+        useJava(17);
+        const harness = createHarness();
+        harness.deps.launchQueue = require('../libs/launch-queue')();
+        harness.deps.writeCredentials = () => {
+            throw new Error('EACCES: permission denied');
+        };
+        await require('../libs/jar-executor')(harness.deps);
+        const account = { accountId: '111', sessionId: 'session', displayName: 'Zezima', profile: 'main' };
+        await expect(harness.handlers['open-client']({}, VERSION, null, account, '')).resolves.toEqual({ success: true });
+
+        const shown = await within(harness.dialogShown, 5000);
+        expect(shown.title).toBe('Could Not Save The Login');
+        expect(shown.message).toContain('EACCES');
+        expect(shown.detail).not.toContain('Zezima');
+        expect(harness.spawnCalls).toHaveLength(0);
+    }, 15000);
+});

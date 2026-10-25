@@ -22,7 +22,7 @@ module.exports = function setupProfileLauncher(deps) {
     } = deps;
 
     const deadlineMs = deps.deadlineMs || LAUNCH_DEADLINE_MS;
-    let queue = Promise.resolve();
+    const launchQueue = deps.launchQueue || require('./launch-queue.js')();
     let waiting = 0;
 
     const readJson = (name, fallback) => {
@@ -104,7 +104,8 @@ module.exports = function setupProfileLauncher(deps) {
         return { proxies: proxies.map(({ id, label }) => ({ id, label })), suggested };
     };
 
-    const launchNow = async (profile, proxyId, attempt) => {
+    const launchNow = async (profile, proxyId, attempt, stillWanted) => {
+        if (!stillWanted()) return problem('disabled', 'Start Cancelled', 'Starting from the dashboard was turned off.');
         const target = findAccount(profile);
         if (target.problem) return target;
         const properties = readProperties();
@@ -119,6 +120,7 @@ module.exports = function setupProfileLauncher(deps) {
         const resolved = await resolveVersion(properties);
         if (resolved.problem) return resolved;
         if (attempt.expired) return problem('timed-out', 'Took Too Long', 'Starting the client took too long. Check the launcher.');
+        if (!stillWanted()) return problem('disabled', 'Start Cancelled', 'Starting from the dashboard was turned off.');
         const settings = {
             version: resolved.version,
             proxy: { proxyIp },
@@ -140,7 +142,7 @@ module.exports = function setupProfileLauncher(deps) {
         return launch({ ...settings, noJagexProfile: profile });
     };
 
-    const launchProfile = (rawProfile, { proxyId = null } = {}) => {
+    const launchProfile = (rawProfile, { proxyId = null, stillWanted = () => true } = {}) => {
         const profile = profileName(rawProfile);
         if (profile.length > MAX_PROFILE_LENGTH || /[\u0000-\u001f]/.test(profile)) {
             return Promise.resolve(problem('invalid-profile', 'Invalid Profile', 'That profile name is not valid.'));
@@ -151,8 +153,8 @@ module.exports = function setupProfileLauncher(deps) {
             );
         }
         waiting += 1;
-        const run = queue
-            .then(() => withDeadline((attempt) => launchNow(profile, proxyId, attempt), profile))
+        return launchQueue
+            .run(() => withDeadline((attempt) => launchNow(profile, proxyId, attempt, stillWanted), profile))
             .catch((error) => {
                 log.error(`Could not start profile "${profile}": ${error?.message || error}`);
                 return problem('launch-failed', 'Launch Failed', error?.message || String(error));
@@ -160,8 +162,6 @@ module.exports = function setupProfileLauncher(deps) {
             .finally(() => {
                 waiting -= 1;
             });
-        queue = run;
-        return run;
     };
 
     const withDeadline = (start, profile) => {

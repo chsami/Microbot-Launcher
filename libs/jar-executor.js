@@ -119,7 +119,26 @@ module.exports = async function (deps) {
                     log.error(prepared.error);
                     return { error: prepared.error };
                 }
-                checkJavaAndRunJar(prepared.commandArgs, prepared.secrets, progressFor(event), prepared.env);
+                const credentials = account && account.accountId && account.sessionId ? account : null;
+                startInTurn(event, () => {
+                    if (credentials) {
+                        try {
+                            deps.writeCredentials?.(credentials);
+                        } catch (error) {
+                            showLaunchProblem(
+                                {
+                                    kind: 'credentials-failed',
+                                    title: 'Could Not Save The Login',
+                                    message: `The launcher could not write credentials.properties: ${error.message}`,
+                                    recovery: 'Check that the .runelite folder in your home folder is writable, then try again.'
+                                },
+                                { secrets: prepared.secrets }
+                            );
+                            return { problem: { kind: 'credentials-failed' } };
+                        }
+                    }
+                    return checkJavaAndRunJar(prepared.commandArgs, prepared.secrets, progressFor(event), prepared.env);
+                });
                 return { success: true };
             } catch (error) {
                 log.error(error.message);
@@ -142,10 +161,22 @@ module.exports = async function (deps) {
                 log.error(prepared.error);
                 return { error: prepared.error };
             }
-            checkJavaAndRunJar(prepared.commandArgs, prepared.secrets, progressFor(event), prepared.env);
+            startInTurn(event, () =>
+                checkJavaAndRunJar(prepared.commandArgs, prepared.secrets, progressFor(event), prepared.env)
+            );
             return { success: true };
         }
     );
+
+    function startInTurn(event, start) {
+        const queue = deps.launchQueue;
+        if (!queue) {
+            start();
+            return;
+        }
+        if (queue.busy()) progressFor(event)(5, 'Waiting for the previous client to finish starting...');
+        queue.run(start).catch((error) => log.error(`Launch failed: ${error?.message || error}`));
+    }
 
     function readPreferredProfile() {
         const file = path.join(microbotDir, 'non-jagex-preferred-profile.json');

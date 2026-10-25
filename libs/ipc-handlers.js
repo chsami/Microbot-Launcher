@@ -79,7 +79,10 @@ module.exports = async function (deps) {
         'libs',
         'overwrite-credential-properties.js'
     ));
-    await overwriteCredentialsHandler(deps);
+    const launchQueue = require(path.join(projectDir, 'libs', 'launch-queue.js'))();
+    const writeCredentials = (account) =>
+        overwriteCredentialsHandler.writeCredentialProperties({ fs, path, homeDir: require('os').homedir() }, account);
+    await overwriteCredentialsHandler({ ...deps, launchQueue });
     const accountLoaderHandler = require(path.join(
         projectDir,
         'libs',
@@ -110,7 +113,7 @@ module.exports = async function (deps) {
             return typeof value === 'function' ? value.bind(target) : value;
         }
     });
-    const jarExecutor = await jarExecutorHandler({ ...deps, ipcMain: versionCheckedIpcMain });
+    const jarExecutor = await jarExecutorHandler({ ...deps, ipcMain: versionCheckedIpcMain, launchQueue, writeCredentials });
     const packageVersion = packageJson.version;
 
     async function refreshSession(writeAccountsToFile, sessionId, proxyIp) {
@@ -514,14 +517,14 @@ module.exports = async function (deps) {
     });
 
     const { updateClientJarTTL } = require(path.join(projectDir, 'libs', 'dir-module.js'));
-    const { writeCredentialProperties } = require(path.join(projectDir, 'libs', 'overwrite-credential-properties.js'));
     return require(path.join(projectDir, 'libs', 'profile-launcher.js'))({
         fs,
         path,
         log,
         microbotDir,
         launch: jarExecutor.launch,
-        writeCredentials: (account) => writeCredentialProperties({ fs, path, homeDir: require('os').homedir() }, account),
+        launchQueue,
+        writeCredentials,
         isSafeClientVersion,
         downloadClient: (version) => downloadClient(version),
         prepareNightly: () => prepareNightlyOnce(),

@@ -178,6 +178,16 @@ describe('background mode', () => {
         expect(closeWindow().preventDefault).not.toHaveBeenCalled();
     });
 
+    test('tells listeners when it is switched off', async () => {
+        const { handlers, background } = setup({ settings: '{"runInBackground":true}' });
+        const listener = jest.fn();
+        background.onDisabled(listener);
+        await handlers['background:set-enabled']({}, true);
+        expect(listener).not.toHaveBeenCalled();
+        await handlers['background:set-enabled']({}, false);
+        expect(listener).toHaveBeenCalledTimes(1);
+    });
+
     test('treats an unreadable settings file as off', () => {
         const { background, log } = setup({ settings: 'not json' });
         expect(background.isEnabled()).toBe(false);

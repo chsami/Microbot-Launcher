@@ -244,6 +244,28 @@ describe('launching a profile without the launcher window', () => {
         expect(deps.launch).toHaveBeenCalledTimes(4);
     });
 
+    test('a start that is no longer wanted when its turn comes never writes the login or starts', async () => {
+        const { deps, launchProfile } = setup();
+        let wanted = false;
+        await expect(launchProfile('main', { stillWanted: () => wanted })).resolves.toMatchObject({ problem: { kind: 'disabled' } });
+        expect(deps.writeCredentials).not.toHaveBeenCalled();
+        expect(deps.launch).not.toHaveBeenCalled();
+        wanted = true;
+        await expect(launchProfile('main', { stillWanted: () => wanted })).resolves.toEqual({ started: true });
+    });
+
+    test('a start turned off while its client downloads stops before writing the login', async () => {
+        let wanted = true;
+        const { deps, launchProfile } = setup({ jars: [] });
+        deps.downloadClient.mockImplementationOnce(async () => {
+            wanted = false;
+            return { success: true };
+        });
+        await expect(launchProfile('main', { stillWanted: () => wanted })).resolves.toMatchObject({ problem: { kind: 'disabled' } });
+        expect(deps.writeCredentials).not.toHaveBeenCalled();
+        expect(deps.launch).not.toHaveBeenCalled();
+    });
+
     test('a broken accounts file counts as no Jagex accounts', async () => {
         const { deps, launchProfile } = setup();
         fs.writeFileSync(path.join(deps.microbotDir, 'accounts.json'), '{oops');
