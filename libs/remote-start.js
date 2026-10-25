@@ -7,6 +7,10 @@ const RETRY_MIN_MS = 5000;
 const RETRY_MAX_MS = 5 * 60 * 1000;
 const REPORT_ATTEMPTS = 3;
 const MAX_NAME_LENGTH = 60;
+const MAX_PROXIES = 100;
+const MAX_CLIENTS = 50;
+const MAX_LABEL_LENGTH = 80;
+const MIN_SYNC_GAP_MS = 2000;
 const DEFAULT_NAME = 'Microbot Launcher';
 
 module.exports = function setupRemoteStart(deps) {
@@ -30,10 +34,14 @@ module.exports = function setupRemoteStart(deps) {
     const sleep = deps.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     const retryMinMs = deps.retryMinMs || RETRY_MIN_MS;
 
-    let enabled = readSettings().remoteStart === true;
+    let owner = ownerFrom(readSettings());
     let generation = 0;
     let controller = null;
     let loop = null;
+
+    function ownerFrom(settings) {
+        return typeof settings.remoteStartFor === 'string' && settings.remoteStartFor ? settings.remoteStartFor : null;
+    }
 
     function readSettings() {
         try {
@@ -87,12 +95,15 @@ module.exports = function setupRemoteStart(deps) {
         }
     };
 
-    const register = async (email) => {
+    const isOn = () => owner !== null && owner === signedInEmail();
+
+    const register = async (email, current) => {
         const stored = readStore(email);
         if (stored) return stored;
         const name = (String(launcherName || '').replace(/[\u0000-\u001f]/g, '').trim() || DEFAULT_NAME).slice(0, MAX_NAME_LENGTH);
         const { data } = await auth.request({ method: 'post', path: '/api/launchers', data: { name }, timeout: REQUEST_TIMEOUT_MS });
         if (!data?.id || !TOKEN_PATTERN.test(String(data?.token))) throw new Error('The API returned an invalid launcher link');
+        if (current !== generation) return null;
         const created = { email, id: String(data.id), token: data.token };
         writeStore(created);
         log.info('Linked this launcher to the Microbot dashboard.');
@@ -118,11 +129,13 @@ module.exports = function setupRemoteStart(deps) {
         }
         return {
             version,
-            clients: Object.entries(linked).map(([profile, clientLinkId]) => ({
-                clientLinkId,
-                suggestedProxyId: choices.suggested[profile] || null
-            })),
-            proxies: choices.proxies
+            clients: Object.entries(linked)
+                .slice(0, MAX_CLIENTS)
+                .map(([profile, clientLinkId]) => ({
+                    clientLinkId,
+                    suggestedProxyId: choices.suggested[profile] || null
+                })),
+            proxies: choices.proxies.slice(0, MAX_PROXIES).map((proxy) => ({ id: proxy.id, label: String(proxy.label).slice(0, MAX_LABEL_LENGTH) }))
         };
     };
 
@@ -153,7 +166,7 @@ module.exports = function setupRemoteStart(deps) {
 
     const handleStart = async (store, command) => {
         const profile = Object.entries(linkedProfiles()).find(([, id]) => id === String(command.clientLinkId))?.[0];
-        if (!enabled) {
+        if (!isOn()) {
             await sendResult(store, command.id, false, 'disabled');
             return;
         }
@@ -165,7 +178,10 @@ module.exports = function setupRemoteStart(deps) {
         notify?.('Starting a client from the dashboard', `Profile: ${profile}`);
         let outcome;
         try {
-            outcome = await launchProfile(profile, { proxyId: command.proxyId || null });
+            outcome = await launchProfile(profile, {
+                proxyId: command.proxyId || null,
+                stillWanted: () => isOn() && signedInEmail() === store.email
+            });
         } catch (error) {
             outcome = { problem: { kind: 'launch-failed' } };
         }
@@ -176,15 +192,18 @@ module.exports = function setupRemoteStart(deps) {
         let delay = retryMinMs;
         while (current === generation) {
             const email = signedInEmail();
-            if (!email || !enabled) return;
+            if (!email || owner !== email) return;
             let step = 'register';
             try {
-                const store = await register(email);
-                if (current !== generation) return;
+                const store = await register(email, current);
+                if (!store || current !== generation) return;
                 step = 'sync';
                 controller = new AbortController();
+                const syncStarted = Date.now();
                 const { data } = await sync(store, true, controller.signal);
-                (Array.isArray(data?.commands) ? data.commands : [])
+                if (current !== generation) return;
+                const commands = Array.isArray(data?.commands) ? data.commands : [];
+                commands
                     .filter((command) => command?.type === 'start_client' && command.id)
                     .forEach((command) => {
                         handleStart(store, command).catch((error) =>
@@ -192,12 +211,17 @@ module.exports = function setupRemoteStart(deps) {
                         );
                     });
                 delay = retryMinMs;
+                const elapsed = Date.now() - syncStarted;
+                if (commands.length === 0 && elapsed < MIN_SYNC_GAP_MS) await sleep(MIN_SYNC_GAP_MS - elapsed);
             } catch (error) {
                 if (current !== generation) return;
                 const status = error?.response?.status;
                 if (status === 401 && step === 'sync') {
-                    log.info('The dashboard no longer knows this launcher; linking it again.');
+                    log.info('This launcher was removed from the dashboard; turned dashboard starts off.');
                     clearStore();
+                    turnOff();
+                    notify?.('Dashboard starts turned off', 'This launcher was removed from the Microbot dashboard.');
+                    return;
                 } else if (status === 401) {
                     log.info('Microbot sign-in expired; stopped listening for dashboard starts.');
                     return;
@@ -211,7 +235,7 @@ module.exports = function setupRemoteStart(deps) {
     };
 
     const start = () => {
-        if (!enabled || !signedInEmail() || !canPersist()) return;
+        if (!isOn() || !canPersist()) return;
         generation += 1;
         loop = runLoop(generation).catch((error) => log.warn(`Dashboard start loop stopped: ${error?.message || error}`));
     };
@@ -233,20 +257,26 @@ module.exports = function setupRemoteStart(deps) {
         }
     };
 
-    const saveEnabled = (value) => {
-        fs.writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), remoteStart: value }, null, 2));
-        enabled = value;
+    const saveOwner = (email) => {
+        fs.writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), remoteStartFor: email }, null, 2));
+        owner = email;
+    };
+
+    const turnOff = () => {
+        try {
+            saveOwner(null);
+        } catch (error) {
+            log.warn(`Could not save the dashboard start setting: ${error?.message || error}`);
+            owner = null;
+        }
     };
 
     background?.onDisabled?.(() => {
-        if (!enabled) return;
-        try {
-            saveEnabled(false);
-        } catch (error) {
-            log.warn(`Could not save the dashboard start setting: ${error?.message || error}`);
-            enabled = false;
-        }
+        if (owner === null) return;
+        const wasOn = isOn();
+        turnOff();
         stop();
+        if (!wasOn) return;
         log.info('Dashboard starts were turned off because the launcher no longer keeps running in the tray.');
         announceOff().catch(() => {});
     });
@@ -257,7 +287,7 @@ module.exports = function setupRemoteStart(deps) {
     });
 
     ipcMain.handle('remote-start:status', async () => ({
-        enabled,
+        enabled: isOn(),
         signedIn: Boolean(signedInEmail()),
         available: canPersist()
     }));
@@ -266,23 +296,24 @@ module.exports = function setupRemoteStart(deps) {
         const next = Boolean(value);
         try {
             if (next) {
-                if (!signedInEmail()) return { error: 'Sign in to your Microbot account first.', enabled };
-                if (!canPersist()) return { error: 'Your system has no secure storage, so this launcher cannot be linked.', enabled };
+                if (!signedInEmail()) return { error: 'Sign in to your Microbot account first.', enabled: false };
+                if (!canPersist()) return { error: 'Your system has no secure storage, so this launcher cannot be linked.', enabled: false };
                 const result = background?.enable() || {};
-                if (result.error) return { error: result.error, enabled };
-                saveEnabled(true);
+                if (result.error) return { error: result.error, enabled: isOn() };
+                saveOwner(signedInEmail());
                 stop();
                 start();
             } else {
-                saveEnabled(false);
+                const wasOn = isOn();
+                saveOwner(null);
                 stop();
-                await announceOff();
+                if (wasOn) await announceOff();
             }
         } catch (error) {
             log.warn(`Could not save the dashboard start setting: ${error?.message || error}`);
-            return { error: 'Could not save the setting.', enabled };
+            return { error: 'Could not save the setting.', enabled: isOn() };
         }
-        return { enabled };
+        return { enabled: isOn() };
     });
 
     return { start, stop, idle: () => loop };

@@ -541,9 +541,6 @@ async function openClient() {
     if (selectedAccount) {
         try {
             await recordClientUse(version);
-            await window.electron.overwriteCredentialProperties(
-                selectedAccount
-            );
             const launchResult = await window.electron.openClient(
                 version,
                 proxy,
