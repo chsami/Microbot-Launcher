@@ -104,7 +104,7 @@ module.exports = function setupProfileLauncher(deps) {
         return { proxies: proxies.map(({ id, label }) => ({ id, label })), suggested };
     };
 
-    const launchNow = async (profile, proxyId) => {
+    const launchNow = async (profile, proxyId, attempt) => {
         const target = findAccount(profile);
         if (target.problem) return target;
         const properties = readProperties();
@@ -118,6 +118,7 @@ module.exports = function setupProfileLauncher(deps) {
         }
         const resolved = await resolveVersion(properties);
         if (resolved.problem) return resolved;
+        if (attempt.expired) return problem('timed-out', 'Took Too Long', 'Starting the client took too long. Check the launcher.');
         const settings = {
             version: resolved.version,
             proxy: { proxyIp },
@@ -151,7 +152,7 @@ module.exports = function setupProfileLauncher(deps) {
         }
         waiting += 1;
         const run = queue
-            .then(() => withDeadline(launchNow(profile, proxyId), profile))
+            .then(() => withDeadline((attempt) => launchNow(profile, proxyId, attempt), profile))
             .catch((error) => {
                 log.error(`Could not start profile "${profile}": ${error?.message || error}`);
                 return problem('launch-failed', 'Launch Failed', error?.message || String(error));
@@ -163,15 +164,17 @@ module.exports = function setupProfileLauncher(deps) {
         return run;
     };
 
-    const withDeadline = (work, profile) => {
+    const withDeadline = (start, profile) => {
+        const attempt = { expired: false };
         let timer = null;
         const deadline = new Promise((resolve) => {
             timer = setTimeout(() => {
+                attempt.expired = true;
                 log.warn(`Starting profile "${profile}" took too long; moving on to the next launch.`);
                 resolve(problem('timed-out', 'Took Too Long', 'Starting the client took too long. Check the launcher.'));
             }, deadlineMs);
         });
-        return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
+        return Promise.race([start(attempt), deadline]).finally(() => clearTimeout(timer));
     };
 
     return { launchProfile, listProxies };

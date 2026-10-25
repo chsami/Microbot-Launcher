@@ -216,6 +216,21 @@ describe('launching a profile without the launcher window', () => {
         await expect(next).resolves.toEqual({ started: true });
     });
 
+    test('a launch given up on during its download never writes the login file or starts later', async () => {
+        let finishDownload;
+        const { deps, events, launchProfile } = setup({ jars: [], deadlineMs: 50 });
+        deps.downloadClient.mockImplementationOnce(() => new Promise((resolve) => (finishDownload = resolve)));
+        const stuck = launchProfile('main');
+        await expect(stuck).resolves.toMatchObject({ problem: { kind: 'timed-out' } });
+        await expect(launchProfile('alt')).resolves.toEqual({ started: true });
+        finishDownload({ success: true });
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(events).toEqual([
+            ['credentials', '222'],
+            ['launch', '222']
+        ]);
+    });
+
     test('refuses more launches while three are already waiting', async () => {
         let release;
         const held = new Promise((resolve) => (release = resolve));
