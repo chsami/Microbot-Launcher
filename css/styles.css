@@ -614,6 +614,66 @@ h2 {
     color: var(--mb-muted);
 }
 
+/* Full-width strip flush under .game-logo, cancelling the sidebar's 20px padding like the header does. */
+.launcher-update-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: calc(100% + 40px);
+    box-sizing: border-box;
+    margin: -20px -20px 20px;
+    padding: 10px 20px;
+    background: linear-gradient(90deg, rgba(255, 177, 59, .22) var(--progress, 0%), rgba(255, 177, 59, .1) var(--progress, 0%));
+    border-bottom: 1px solid rgba(255, 177, 59, .45);
+    color: var(--mb-gold);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.launcher-update-banner[hidden] {
+    display: none;
+}
+
+.launcher-update-banner svg {
+    flex: none;
+}
+
+.launcher-update-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.launcher-update-btn {
+    flex: none;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    background: var(--mb-gold);
+    color: #120e0b;
+    font: 700 11px var(--mb-body);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.launcher-update-btn:hover:not(:disabled),
+.launcher-update-btn:focus-visible {
+    background: var(--mb-gold-soft);
+    outline: none;
+}
+
+.launcher-update-btn:disabled {
+    cursor: default;
+    opacity: .6;
+}
+
+.launcher-update-banner[data-state="error"] {
+    background: rgba(212, 35, 31, .12);
+    border-bottom-color: var(--mb-red-bright);
+    color: var(--mb-red-bright);
+}
+
 .refresh-btn {
     background-color: #1d1813;
     color: #e9c98f;
