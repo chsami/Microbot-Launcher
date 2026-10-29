@@ -208,7 +208,7 @@ async function createWindow() {
     await mainWindow.loadFile(path.join(__dirname, 'index.html'));
 }
 
-require(path.join(__dirname, 'libs', 'launcher-updater.js')).registerLauncherUpdater({
+const launcherUpdater = require(path.join(__dirname, 'libs', 'launcher-updater.js')).registerLauncherUpdater({
     autoUpdater,
     ipcMain,
     log,
@@ -236,13 +236,8 @@ app.whenReady().then(async () => {
     background.start();
     remoteStart?.start();
 
-    if (process.env.DEBUG !== 'true') {
-        mainWindow.show();
-        // Failures are already logged by the 'error' handler.
-        autoUpdater.checkForUpdates().catch(() => {});
-    } else {
-        mainWindow.show();
-    }
+    mainWindow.show();
+    if (process.env.DEBUG !== 'true') launcherUpdater.watch(mainWindow);
 });
 
 app.on('window-all-closed', function () {
