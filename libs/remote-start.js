@@ -24,7 +24,9 @@ module.exports = function setupRemoteStart(deps) {
         alerts,
         background,
         launchProfile,
+        launchOptions,
         listProxies,
+        startOptions,
         settingsFile,
         launcherFile,
         launcherName,
@@ -119,7 +121,7 @@ module.exports = function setupRemoteStart(deps) {
         }
     };
 
-    const report = () => {
+    const report = async () => {
         const linked = linkedProfiles();
         let choices = { proxies: [], suggested: {} };
         try {
@@ -127,7 +129,7 @@ module.exports = function setupRemoteStart(deps) {
         } catch (error) {
             log.warn(`Could not list proxies: ${error?.message || error}`);
         }
-        return {
+        const body = {
             version,
             clients: Object.entries(linked)
                 .slice(0, MAX_CLIENTS)
@@ -137,12 +139,20 @@ module.exports = function setupRemoteStart(deps) {
                 })),
             proxies: choices.proxies.slice(0, MAX_PROXIES).map((proxy) => ({ id: proxy.id, label: String(proxy.label).slice(0, MAX_LABEL_LENGTH) }))
         };
+        if (startOptions) {
+            try {
+                body.startOptions = await startOptions(linked, body.proxies);
+            } catch (error) {
+                log.warn(`Could not list the start options: ${error?.message || error}`);
+            }
+        }
+        return body;
     };
 
-    const sync = (store, startAllowed, signal) =>
+    const sync = async (store, startAllowed, signal) =>
         axios.post(
             `${auth.baseUrl}/api/launchers/sync?wait=${startAllowed ? SYNC_WAIT_SECONDS : 0}`,
-            { startAllowed, ...report() },
+            { startAllowed, ...(await report()) },
             { headers: { [HEADER]: store.token }, timeout: startAllowed ? SYNC_TIMEOUT_MS : REQUEST_TIMEOUT_MS, signal }
         );
 
@@ -164,7 +174,40 @@ module.exports = function setupRemoteStart(deps) {
         log.warn('Could not report a dashboard start result.');
     };
 
+    const handleOptionsStart = async (store, command) => {
+        if (!isOn()) {
+            await sendResult(store, command.id, false, 'disabled');
+            return;
+        }
+        if (!launchOptions) {
+            await sendResult(store, command.id, false, 'unknown-option');
+            return;
+        }
+        let outcome;
+        try {
+            outcome = await launchOptions(command.options, {
+                stillWanted: () => isOn() && signedInEmail() === store.email,
+                onAccepted: ({ profile, account }) => {
+                    log.info(`The dashboard asked to start profile "${profile}" ${account ? 'with a Jagex account' : 'without a Jagex account'}.`);
+                    try {
+                        notify?.('Starting a client from the dashboard', account ? `${account} on profile ${profile}` : `Profile: ${profile}`);
+                    } catch (error) {
+                        log.warn(`Could not show the start notification: ${error?.message || error}`);
+                    }
+                }
+            });
+        } catch (error) {
+            outcome = { problem: { kind: 'launch-failed' } };
+        }
+        if (outcome?.problem?.kind === 'unknown-option') log.warn(`Refused a dashboard start: ${outcome.problem.message}`);
+        await sendResult(store, command.id, outcome?.started === true, outcome?.problem?.kind);
+    };
+
     const handleStart = async (store, command) => {
+        if (command.options != null) {
+            await handleOptionsStart(store, command);
+            return;
+        }
         const profile = Object.entries(linkedProfiles()).find(([, id]) => id === String(command.clientLinkId))?.[0];
         if (!isOn()) {
             await sendResult(store, command.id, false, 'disabled');

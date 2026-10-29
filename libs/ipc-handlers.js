@@ -363,7 +363,7 @@ module.exports = async function (deps) {
      * and filter out profiles with negative ID, returning the name strings
      * so that the frontend can populate the profile select element
      */
-    ipcMain.handle('list-profiles', async () => {
+    function readProfileNames(report = () => {}) {
         const user = process.env.USERPROFILE || process.env.HOME;
         const profilesPath = path.join(
             user,
@@ -382,14 +382,16 @@ module.exports = async function (deps) {
                     )
                     .map((profile) => profile.name);
             } catch (error) {
-                log.error(`Error reading profiles file: ${error}`);
+                report(`Error reading profiles file: ${error}`);
                 return { error: error.message };
             }
         } else {
-            log.error('Profiles file does not exist');
+            report('Profiles file does not exist');
             return { error: 'Profiles file does not exist' };
         }
-    });
+    }
+
+    ipcMain.handle('list-profiles', async () => readProfileNames((message) => log.error(message)));
 
     ipcMain.handle('read-non-jagex-profile', async () => {
         const profileFilePath = path.join(
@@ -533,6 +535,11 @@ module.exports = async function (deps) {
             const result = await updateClientJarTTL(version);
             if (result?.error) throw new Error(result.error);
         },
-        proxyChoices: require(path.join(projectDir, 'libs', 'proxy-choices.js'))({ fs, path, microbotDir })
+        proxyChoices: require(path.join(projectDir, 'libs', 'proxy-choices.js'))({ fs, path, microbotDir }),
+        listProfiles: () => readProfileNames(),
+        listVersions: () =>
+            listClientJars(fs, microbotDir)
+                .filter((entry) => entry.kind === 'official')
+                .map((entry) => entry.version)
     });
 };

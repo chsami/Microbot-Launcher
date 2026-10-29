@@ -1,9 +1,22 @@
-const DEFAULT_PROFILE = 'default';
+const {
+    DEFAULT_PROFILE,
+    STABLE_VERSION_PATTERN,
+    buildStartOptions,
+    profileNames,
+    ramChoicesFor
+} = require('./start-options.js');
+
 const MAX_PROFILE_LENGTH = 128;
 const MAX_WAITING = 3;
 const LAUNCH_DEADLINE_MS = 10 * 60 * 1000;
+const LATEST_TTL_MS = 5 * 60 * 1000;
+const LATEST_TIMEOUT_MS = 10 * 1000;
+const CHANNELS = ['stable', 'nightly'];
 
 const problem = (kind, title, message) => ({ problem: { kind, title, message } });
+const refuse = (message) => problem('unknown-option', 'Unknown Option', message);
+const tooManyLaunches = () =>
+    problem('too-many-launches', 'Too Many Launches', 'Other clients are still starting. Try again in a minute.');
 
 module.exports = function setupProfileLauncher(deps) {
     const {
@@ -18,12 +31,15 @@ module.exports = function setupProfileLauncher(deps) {
         prepareNightly,
         fetchLatestVersion,
         recordClientUse,
-        proxyChoices
+        proxyChoices,
+        listProfiles,
+        listVersions
     } = deps;
 
     const deadlineMs = deps.deadlineMs || LAUNCH_DEADLINE_MS;
     const launchQueue = deps.launchQueue || require('./launch-queue.js')();
     let waiting = 0;
+    let latest = { value: null, at: -Infinity };
 
     const readJson = (name, fallback) => {
         const file = path.join(microbotDir, name);
@@ -46,6 +62,24 @@ module.exports = function setupProfileLauncher(deps) {
         return Array.isArray(value) ? value.filter((account) => typeof account?.accountId === 'string') : [];
     };
 
+    const readNonJagexProfile = () => {
+        const value = readJson('non-jagex-preferred-profile.json', null)?.profile;
+        return typeof value === 'string' ? value : null;
+    };
+
+    const listOf = (what, read) => {
+        try {
+            const value = read?.();
+            return Array.isArray(value) ? value : [];
+        } catch (error) {
+            log.warn(`Could not list ${what}: ${error?.message || error}`);
+            return [];
+        }
+    };
+
+    const currentProfiles = (accounts) =>
+        profileNames({ profiles: listOf('profiles', listProfiles), accounts, nonJagexProfile: readNonJagexProfile() });
+
     const profileName = (value) => (typeof value === 'string' && value.trim()) || DEFAULT_PROFILE;
 
     const findAccount = (profile) => {
@@ -67,8 +101,33 @@ module.exports = function setupProfileLauncher(deps) {
         return { version };
     };
 
-    const resolveVersion = async (properties) => {
-        if (properties.client_channel === 'nightly') {
+    const latestStable = async () => {
+        const value = await fetchLatestVersion();
+        return typeof value === 'string' ? value.replace(/^microbot-/, '').replace(/\.jar$/, '').trim() : '';
+    };
+
+    const cachedLatest = async () => {
+        if (Date.now() - latest.at < LATEST_TTL_MS) return latest.value;
+        let timer = null;
+        try {
+            const value = await Promise.race([
+                latestStable(),
+                new Promise((_resolve, reject) => {
+                    timer = setTimeout(() => reject(new Error('the lookup timed out')), LATEST_TIMEOUT_MS);
+                })
+            ]);
+            latest = { value: value || null, at: Date.now() };
+        } catch (error) {
+            log.warn(`Could not look up the latest client: ${error?.message || error}`);
+            latest = { value: latest.value, at: Date.now() };
+        } finally {
+            clearTimeout(timer);
+        }
+        return latest.value;
+    };
+
+    const resolveVersion = async (channel, preferred) => {
+        if (channel === 'nightly') {
             const result = await prepareNightly();
             const build = result?.info?.build;
             if (result?.error || !build) {
@@ -76,11 +135,10 @@ module.exports = function setupProfileLauncher(deps) {
             }
             return { version: build };
         }
-        let version = typeof properties.version_pref === 'string' ? properties.version_pref.trim() : '';
+        let version = typeof preferred === 'string' ? preferred.trim() : '';
         if (!version || version === '0.0.0') {
             try {
-                const latest = await fetchLatestVersion();
-                version = typeof latest === 'string' ? latest.replace(/^microbot-/, '').replace(/\.jar$/, '').trim() : '';
+                version = await latestStable();
             } catch (error) {
                 return problem('version-unavailable', 'No Client Version', `Could not look up the latest client: ${error.message}`);
             }
@@ -104,6 +162,116 @@ module.exports = function setupProfileLauncher(deps) {
         return { proxies: proxies.map(({ id, label }) => ({ id, label })), suggested };
     };
 
+    const startOptions = async (linked = {}, proxies = []) => {
+        const accounts = readAccounts();
+        return buildStartOptions({
+            accounts,
+            profiles: listOf('profiles', listProfiles),
+            properties: readProperties(),
+            nonJagexProfile: readNonJagexProfile(),
+            versions: listOf('client versions', listVersions),
+            latestVersion: await cachedLatest(),
+            linked,
+            proxies,
+            ids: { account: proxyChoices.accountIdFor, profile: proxyChoices.profileIdFor, proxy: proxyChoices.idFor }
+        });
+    };
+
+    const chooseOptions = (options) => {
+        if (!options || typeof options !== 'object' || Array.isArray(options)) return refuse('The start options could not be read.');
+        const properties = readProperties();
+        const accounts = readAccounts();
+        const profile =
+            typeof options.profileId === 'string'
+                ? currentProfiles(accounts).find((name) => proxyChoices.profileIdFor(name) === options.profileId)
+                : undefined;
+        if (!profile) return refuse('That profile is no longer in the launcher on this PC.');
+        let account = null;
+        if (options.accountId != null) {
+            account =
+                typeof options.accountId === 'string'
+                    ? accounts.find((entry) => proxyChoices.accountIdFor(entry.accountId) === options.accountId)
+                    : undefined;
+            if (!account) return refuse('That Jagex account is no longer logged in to the launcher on this PC.');
+        }
+        if (!CHANNELS.includes(options.channel)) return refuse('The client channel must be Stable or Nightly.');
+        let version = null;
+        if (options.version != null) {
+            if (options.channel !== 'stable') return refuse('A client version can only be chosen on the Stable channel.');
+            if (
+                typeof options.version !== 'string' ||
+                !STABLE_VERSION_PATTERN.test(options.version) ||
+                !isSafeClientVersion(options.version)
+            ) {
+                return refuse('That client version is not one the launcher can start.');
+            }
+            version = options.version;
+        }
+        if (typeof options.ram !== 'string' || !ramChoicesFor(properties).includes(options.ram)) {
+            return refuse('That client RAM amount is not one of the launcher\'s choices.');
+        }
+        if (typeof options.hwidSpoof !== 'boolean') return refuse('Spoof hardware IDs must be on or off.');
+        let proxyIp = '';
+        if (options.proxyId != null) {
+            const chosen =
+                typeof options.proxyId === 'string'
+                    ? choosableProxies(properties).find((proxy) => proxy.id === options.proxyId)
+                    : undefined;
+            if (!chosen) return refuse('That proxy is no longer saved in the launcher on this PC.');
+            proxyIp = chosen.address;
+        }
+        return {
+            choice: { profile, account, channel: options.channel, version, ram: options.ram, hwidSpoof: options.hwidSpoof, proxyIp }
+        };
+    };
+
+    const resolveChosenVersion = async ({ channel, version }) => {
+        if (channel === 'nightly' || version === null) return resolveVersion(channel, null);
+        if (!listOf('client versions', listVersions).includes(version)) {
+            let newest;
+            try {
+                newest = await latestStable();
+            } catch (error) {
+                return problem('version-unavailable', 'No Client Version', `Could not look up the latest client: ${error.message}`);
+            }
+            if (newest !== version) return refuse(`Client version ${version} is no longer downloaded on this PC.`);
+        }
+        return ensureDownloaded(version);
+    };
+
+    const startClient = async (profile, account, settings) => {
+        if (!settings.version.startsWith('nightly-')) {
+            try {
+                await recordClientUse(settings.version);
+            } catch (error) {
+                log.warn(`Could not record client use: ${error?.message || error}`);
+            }
+        }
+        log.info(`Starting profile "${profile}" ${account ? 'with a Jagex account' : 'without a Jagex account'}.`);
+        if (account) {
+            writeCredentials(account);
+            return launch({ ...settings, account: profileName(account.profile) === profile ? account : { ...account, profile } });
+        }
+        return launch({ ...settings, noJagexProfile: profile });
+    };
+
+    const launchChosen = async (options, attempt, stillWanted) => {
+        if (!stillWanted()) return problem('disabled', 'Start Cancelled', 'Starting from the dashboard was turned off.');
+        const chosen = chooseOptions(options);
+        if (chosen.problem) return chosen;
+        const { choice } = chosen;
+        const resolved = await resolveChosenVersion(choice);
+        if (resolved.problem) return resolved;
+        if (attempt.expired) return problem('timed-out', 'Took Too Long', 'Starting the client took too long. Check the launcher.');
+        if (!stillWanted()) return problem('disabled', 'Start Cancelled', 'Starting from the dashboard was turned off.');
+        return startClient(choice.profile, choice.account, {
+            version: resolved.version,
+            proxy: { proxyIp: choice.proxyIp },
+            ramPreference: choice.ram,
+            hwidSpoof: choice.hwidSpoof
+        });
+    };
+
     const launchNow = async (profile, proxyId, attempt, stillWanted) => {
         if (!stillWanted()) return problem('disabled', 'Start Cancelled', 'Starting from the dashboard was turned off.');
         const target = findAccount(profile);
@@ -117,29 +285,16 @@ module.exports = function setupProfileLauncher(deps) {
             }
             proxyIp = chosen.address;
         }
-        const resolved = await resolveVersion(properties);
+        const resolved = await resolveVersion(properties.client_channel === 'nightly' ? 'nightly' : 'stable', properties.version_pref);
         if (resolved.problem) return resolved;
         if (attempt.expired) return problem('timed-out', 'Took Too Long', 'Starting the client took too long. Check the launcher.');
         if (!stillWanted()) return problem('disabled', 'Start Cancelled', 'Starting from the dashboard was turned off.');
-        const settings = {
+        return startClient(profile, target.account, {
             version: resolved.version,
             proxy: { proxyIp },
             ramPreference: typeof properties.client_ram === 'string' ? properties.client_ram : '',
             hwidSpoof: properties.hwid_spoof !== 'false'
-        };
-        if (!resolved.version.startsWith('nightly-')) {
-            try {
-                await recordClientUse(resolved.version);
-            } catch (error) {
-                log.warn(`Could not record client use: ${error?.message || error}`);
-            }
-        }
-        log.info(`Starting profile "${profile}" ${target.account ? 'with its Jagex account' : 'without a Jagex account'}.`);
-        if (target.account) {
-            writeCredentials(target.account);
-            return launch({ ...settings, account: target.account });
-        }
-        return launch({ ...settings, noJagexProfile: profile });
+        });
     };
 
     const launchProfile = (rawProfile, { proxyId = null, stillWanted = () => true } = {}) => {
@@ -147,14 +302,23 @@ module.exports = function setupProfileLauncher(deps) {
         if (profile.length > MAX_PROFILE_LENGTH || /[\u0000-\u001f]/.test(profile)) {
             return Promise.resolve(problem('invalid-profile', 'Invalid Profile', 'That profile name is not valid.'));
         }
-        if (waiting >= MAX_WAITING) {
-            return Promise.resolve(
-                problem('too-many-launches', 'Too Many Launches', 'Other clients are still starting. Try again in a minute.')
-            );
-        }
+        return enqueue(profile, (attempt) => launchNow(profile, proxyId, attempt, stillWanted));
+    };
+
+    const launchOptions = (options, { stillWanted = () => true, onAccepted = () => {} } = {}) => {
+        const chosen = chooseOptions(options);
+        if (chosen.problem) return Promise.resolve(chosen);
+        if (waiting >= MAX_WAITING) return Promise.resolve(tooManyLaunches());
+        const { profile, account } = chosen.choice;
+        onAccepted({ profile, account: account ? account.displayName || 'Jagex account' : null });
+        return enqueue(profile, (attempt) => launchChosen(options, attempt, stillWanted));
+    };
+
+    const enqueue = (profile, start) => {
+        if (waiting >= MAX_WAITING) return Promise.resolve(tooManyLaunches());
         waiting += 1;
         return launchQueue
-            .run(() => withDeadline((attempt) => launchNow(profile, proxyId, attempt, stillWanted), profile))
+            .run(() => withDeadline(start, profile))
             .catch((error) => {
                 log.error(`Could not start profile "${profile}": ${error?.message || error}`);
                 return problem('launch-failed', 'Launch Failed', error?.message || String(error));
@@ -177,5 +341,5 @@ module.exports = function setupProfileLauncher(deps) {
         return Promise.race([start(attempt), deadline]).finally(() => clearTimeout(timer));
     };
 
-    return { launchProfile, listProxies };
+    return { launchProfile, launchOptions, listProxies, startOptions };
 };

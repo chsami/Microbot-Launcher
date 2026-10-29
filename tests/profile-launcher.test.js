@@ -4,7 +4,7 @@ const path = require('path');
 
 const setupProfileLauncher = require('../libs/profile-launcher.js');
 const setupProxyChoices = require('../libs/proxy-choices.js');
-const { isSafeClientVersion } = require('../libs/client-jars.js');
+const { isSafeClientVersion, listClientJars } = require('../libs/client-jars.js');
 
 const JAGEX_MAIN = { accountId: '111', sessionId: 's-1', displayName: 'Zezima', profile: 'main', proxyIp: '' };
 const JAGEX_ALT = { accountId: '222', sessionId: 's-2', displayName: 'Lynx', profile: 'alt', proxyIp: '10.0.0.2:1080:bob:hunter2' };
@@ -14,7 +14,7 @@ const SAVED_PROXIES = [
     { name: 'Broken', address: 'not a proxy' }
 ];
 
-function setup({ accounts = [JAGEX_MAIN, JAGEX_ALT], properties = {}, jars = ['2.6.43'], launchOutcome, deadlineMs } = {}) {
+function setup({ accounts = [JAGEX_MAIN, JAGEX_ALT], properties = {}, jars = ['2.6.43'], profiles = ['main', 'alt'], launchOutcome, deadlineMs } = {}) {
     const microbotDir = fs.mkdtempSync(path.join(os.tmpdir(), 'profile-launcher-'));
     fs.writeFileSync(path.join(microbotDir, 'accounts.json'), JSON.stringify(accounts));
     fs.writeFileSync(
@@ -40,10 +40,12 @@ function setup({ accounts = [JAGEX_MAIN, JAGEX_ALT], properties = {}, jars = ['2
         fetchLatestVersion: jest.fn(async () => '2.6.44'),
         recordClientUse: jest.fn(async () => {}),
         proxyChoices: setupProxyChoices({ fs, path, microbotDir }),
+        listProfiles: jest.fn(() => profiles),
+        listVersions: () => listClientJars(fs, microbotDir).map((entry) => entry.version),
         deadlineMs
     };
-    const { launchProfile, listProxies } = setupProfileLauncher(deps);
-    return { deps, events, launchProfile, listProxies };
+    const { launchProfile, launchOptions, listProxies, startOptions } = setupProfileLauncher(deps);
+    return { deps, events, launchProfile, launchOptions, listProxies, startOptions };
 }
 
 describe('launching a profile without the launcher window', () => {
@@ -272,5 +274,220 @@ describe('launching a profile without the launcher window', () => {
         await launchProfile('main');
         expect(deps.launch).toHaveBeenCalledWith(expect.objectContaining({ noJagexProfile: 'main' }));
         expect(deps.log.warn).toHaveBeenCalled();
+    });
+});
+
+describe('starting with options chosen on the dashboard', () => {
+    const readFile = (dir, name) => fs.readFileSync(path.join(dir, name), 'utf8');
+
+    async function prepare(options = {}) {
+        const context = setup(options);
+        const reported = await context.startOptions({ alt: 'link-2' }, context.listProxies().proxies);
+        const profileId = (name) => context.deps.proxyChoices.profileIdFor(name);
+        const accountId = (id) => context.deps.proxyChoices.accountIdFor(id);
+        const choose = (overrides = {}) => ({
+            accountId: accountId('111'),
+            profileId: profileId('main'),
+            channel: 'stable',
+            version: '2.6.43',
+            ram: '4g',
+            hwidSpoof: false,
+            proxyId: null,
+            ...overrides
+        });
+        return { ...context, reported, profileId, accountId, choose };
+    }
+
+    test('reports what Play would use, with ids that match the launch lookups', async () => {
+        const { reported, profileId, accountId, listProxies } = await prepare({
+            properties: { selected_account: '222', hwid_spoof: 'false' }
+        });
+        const altProxy = listProxies().suggested.alt;
+        expect(reported.accounts).toEqual([
+            { id: accountId('111'), label: 'Zezima', profileId: profileId('main'), proxyId: null },
+            { id: accountId('222'), label: 'Lynx', profileId: profileId('alt'), proxyId: altProxy }
+        ]);
+        expect(reported.profiles).toEqual([
+            { id: profileId('default'), label: 'Default', clientLinkId: null },
+            { id: profileId('main'), label: 'main', clientLinkId: null },
+            { id: profileId('alt'), label: 'alt', clientLinkId: 'link-2' }
+        ]);
+        expect(reported.versions).toEqual(['2.6.43']);
+        expect(reported.latestVersion).toBe('2.6.44');
+        expect(reported.defaults).toEqual({
+            accountId: accountId('222'),
+            profileId: profileId('alt'),
+            channel: 'stable',
+            version: '2.6.43',
+            ram: '2g',
+            hwidSpoof: false,
+            proxyId: altProxy
+        });
+        expect(reported.accounts[0].id).toMatch(/^a_[A-Za-z0-9_-]{22}$/);
+        expect(reported.profiles[0].id).toMatch(/^p_[A-Za-z0-9_-]{22}$/);
+    });
+
+    test('looks the latest version up at most every few minutes, and still reports when it cannot', async () => {
+        const { deps, startOptions } = setup();
+        await startOptions();
+        await startOptions();
+        expect(deps.fetchLatestVersion).toHaveBeenCalledTimes(1);
+        const offline = setup();
+        offline.deps.fetchLatestVersion.mockRejectedValue(new Error('offline'));
+        await expect(offline.startOptions()).resolves.toMatchObject({ latestVersion: null, versions: ['2.6.43'] });
+    });
+
+    test('starts the chosen account with an explicit stable version and the chosen settings', async () => {
+        const { deps, events, launchOptions, choose } = await prepare();
+        const accepted = jest.fn();
+        await expect(launchOptions(choose(), { onAccepted: accepted })).resolves.toEqual({ started: true });
+        expect(accepted).toHaveBeenCalledWith({ profile: 'main', account: 'Zezima' });
+        expect(events).toEqual([
+            ['credentials', '111'],
+            ['launch', '111']
+        ]);
+        expect(deps.launch).toHaveBeenCalledWith({
+            version: '2.6.43',
+            proxy: { proxyIp: '' },
+            ramPreference: '4g',
+            hwidSpoof: false,
+            account: JAGEX_MAIN
+        });
+        expect(deps.recordClientUse).toHaveBeenCalledWith('2.6.43');
+        expect(deps.downloadClient).not.toHaveBeenCalled();
+    });
+
+    test('uses the chosen profile and proxy for this start only, without saving them', async () => {
+        const { deps, launchOptions, choose, profileId, listProxies } = await prepare();
+        const germany = listProxies().proxies[0];
+        const before = ['accounts.json', 'resource_versions.json'].map((name) => readFile(deps.microbotDir, name));
+        await launchOptions(choose({ profileId: profileId('alt'), proxyId: germany.id }));
+        expect(deps.launch.mock.calls[0][0].account).toEqual({ ...JAGEX_MAIN, profile: 'alt' });
+        expect(deps.launch.mock.calls[0][0].proxy).toEqual({ proxyIp: 'socks5://amy:secret@10.0.0.7:1080' });
+        expect(deps.writeCredentials).toHaveBeenCalledWith(JAGEX_MAIN);
+        expect(['accounts.json', 'resource_versions.json'].map((name) => readFile(deps.microbotDir, name))).toEqual(before);
+        expect(fs.existsSync(path.join(deps.microbotDir, 'non-jagex-preferred-profile.json'))).toBe(false);
+    });
+
+    test('two accounts on one profile can each be started', async () => {
+        const { deps, launchOptions, choose, accountId } = await prepare({ accounts: [JAGEX_MAIN, { ...JAGEX_ALT, profile: 'main' }] });
+        await expect(launchOptions(choose({ accountId: accountId('222') }))).resolves.toEqual({ started: true });
+        expect(deps.launch.mock.calls[0][0].account.accountId).toBe('222');
+    });
+
+    test('starts the latest stable client when no version is chosen, downloading it if needed', async () => {
+        const { deps, launchOptions, choose } = await prepare();
+        await launchOptions(choose({ version: null }));
+        expect(deps.downloadClient).toHaveBeenCalledWith('2.6.44');
+        expect(deps.launch.mock.calls[0][0].version).toBe('2.6.44');
+    });
+
+    test('downloads the latest version when it is chosen by number but not downloaded yet', async () => {
+        const { deps, launchOptions, choose } = await prepare();
+        await expect(launchOptions(choose({ version: '2.6.44' }))).resolves.toEqual({ started: true });
+        expect(deps.downloadClient).toHaveBeenCalledWith('2.6.44');
+    });
+
+    test('starts the nightly build when Nightly is chosen, even when the launcher is on Stable', async () => {
+        const { deps, launchOptions, choose } = await prepare();
+        await launchOptions(choose({ channel: 'nightly', version: null }));
+        expect(deps.prepareNightly).toHaveBeenCalled();
+        expect(deps.launch.mock.calls[0][0].version).toBe('nightly-20261025');
+        expect(deps.recordClientUse).not.toHaveBeenCalled();
+    });
+
+    test('starts without a Jagex account on the chosen profile when no account is chosen', async () => {
+        const { deps, launchOptions, choose, profileId } = await prepare();
+        const accepted = jest.fn();
+        await launchOptions(choose({ accountId: null, profileId: profileId('alt'), hwidSpoof: true }), { onAccepted: accepted });
+        expect(accepted).toHaveBeenCalledWith({ profile: 'alt', account: null });
+        expect(deps.writeCredentials).not.toHaveBeenCalled();
+        expect(deps.launch).toHaveBeenCalledWith({
+            version: '2.6.43',
+            proxy: { proxyIp: '' },
+            ramPreference: '4g',
+            hwidSpoof: true,
+            noJagexProfile: 'alt'
+        });
+    });
+
+    test.each([
+        ['an account that is gone', { accountId: 'a_gone' }, /Jagex account/],
+        ['an account id that is not text', { accountId: 7 }, /Jagex account/],
+        ['a profile that is gone', { profileId: 'p_gone' }, /profile/],
+        ['a missing profile', { profileId: undefined }, /profile/],
+        ['an unknown channel', { channel: 'beta' }, /Stable or Nightly/],
+        ['a version on Nightly', { channel: 'nightly', version: '2.6.43' }, /Stable channel/],
+        ['an unsafe version', { version: '../../evil' }, /version/],
+        ['a custom version name', { version: '2.6.43-dev' }, /version/],
+        ['a RAM amount not offered', { ram: '64g' }, /RAM/],
+        ['RAM that is not text', { ram: 4 }, /RAM/],
+        ['a spoof choice that is not on or off', { hwidSpoof: 'true' }, /hardware IDs/],
+        ['a proxy that is gone', { proxyId: 'socks5://evil:1080' }, /proxy/],
+        ['a proxy id that is not text', { proxyId: { address: 'x' } }, /proxy/]
+    ])('refuses %s without starting anything', async (_name, overrides, message) => {
+        const { deps, launchOptions, choose } = await prepare();
+        const accepted = jest.fn();
+        const outcome = await launchOptions(choose(overrides), { onAccepted: accepted });
+        expect(outcome.problem.kind).toBe('unknown-option');
+        expect(outcome.problem.message).toMatch(message);
+        expect(accepted).not.toHaveBeenCalled();
+        expect(deps.launch).not.toHaveBeenCalled();
+        expect(deps.writeCredentials).not.toHaveBeenCalled();
+        expect(deps.downloadClient).not.toHaveBeenCalled();
+    });
+
+    test('refuses options that are not an object', async () => {
+        const { deps, launchOptions } = await prepare();
+        for (const options of ['start', [], 7]) {
+            await expect(launchOptions(options)).resolves.toMatchObject({ problem: { kind: 'unknown-option' } });
+        }
+        expect(deps.launch).not.toHaveBeenCalled();
+    });
+
+    test('refuses an older version that is no longer downloaded, rather than fetching it', async () => {
+        const { deps, launchOptions, choose } = await prepare();
+        const outcome = await launchOptions(choose({ version: '2.6.30' }));
+        expect(outcome.problem).toMatchObject({ kind: 'unknown-option', message: 'Client version 2.6.30 is no longer downloaded on this PC.' });
+        expect(deps.downloadClient).not.toHaveBeenCalled();
+        expect(deps.launch).not.toHaveBeenCalled();
+    });
+
+    test('checks the choices again when its turn comes', async () => {
+        let release;
+        const held = new Promise((resolve) => (release = resolve));
+        const { deps, launchOptions, choose } = await prepare({ launchOutcome: (options) => (options.account?.accountId === '222' ? held : { started: true }) });
+        const first = launchOptions(choose({ accountId: deps.proxyChoices.accountIdFor('222') }));
+        const second = launchOptions(choose());
+        await new Promise((resolve) => setImmediate(resolve));
+        fs.writeFileSync(path.join(deps.microbotDir, 'accounts.json'), JSON.stringify([JAGEX_ALT]));
+        release({ started: true });
+        await expect(first).resolves.toEqual({ started: true });
+        await expect(second).resolves.toMatchObject({ problem: { kind: 'unknown-option' } });
+        expect(deps.launch).toHaveBeenCalledTimes(1);
+    });
+
+    test('shares the launch queue limit with profile starts', async () => {
+        let release;
+        const held = new Promise((resolve) => (release = resolve));
+        const { launchProfile, launchOptions, choose } = await prepare({ launchOutcome: () => held });
+        const waiting = [launchProfile('main'), launchOptions(choose()), launchProfile('alt')];
+        const accepted = jest.fn();
+        await expect(launchOptions(choose(), { onAccepted: accepted })).resolves.toMatchObject({ problem: { kind: 'too-many-launches' } });
+        expect(accepted).not.toHaveBeenCalled();
+        release({ started: true });
+        await Promise.all(waiting);
+    });
+
+    test('a start no longer wanted when its turn comes never writes the login or starts', async () => {
+        const { deps, launchOptions, choose } = await prepare();
+        await expect(launchOptions(choose(), { stillWanted: () => false })).resolves.toMatchObject({ problem: { kind: 'disabled' } });
+        expect(deps.writeCredentials).not.toHaveBeenCalled();
+        expect(deps.launch).not.toHaveBeenCalled();
+    });
+
+    test('gives up on a start that never finishes', async () => {
+        const { launchOptions, choose } = await prepare({ deadlineMs: 50, launchOutcome: () => new Promise(() => {}) });
+        await expect(launchOptions(choose())).resolves.toMatchObject({ problem: { kind: 'timed-out' } });
     });
 });
