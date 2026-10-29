@@ -11,7 +11,7 @@ const waitFor = async (predicate) => {
     for (let i = 0; i < 200 && !predicate(); i += 1) await flush();
 };
 
-function setup({ settings = {}, signedIn = true, linked = { main: 'link-1', alt: 'link-2' }, backgroundError, proxies = [{ id: 'p1', label: 'Germany (10.0.0.7:1080)' }] } = {}) {
+function setup({ settings = {}, signedIn = true, linked = { main: 'link-1', alt: 'link-2' }, backgroundError, proxies = [{ id: 'p1', label: 'Germany (10.0.0.7:1080)' }], startOptions } = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-start-'));
     const settingsFile = path.join(dir, 'launcher-settings.json');
     const launcherFile = path.join(dir, 'launcher-link.dat');
@@ -51,6 +51,10 @@ function setup({ settings = {}, signedIn = true, linked = { main: 'link-1', alt:
     };
     const trayOff = () => backgroundListeners.forEach((listener) => listener());
     const launchProfile = jest.fn(async () => ({ started: true }));
+    const launchOptions = jest.fn(async (_options, { onAccepted }) => {
+        onAccepted({ profile: 'alt', account: 'Zezima' });
+        return { started: true };
+    });
     const notify = jest.fn();
     const log = { info: jest.fn(), warn: jest.fn() };
     const remote = setupRemoteStart({
@@ -68,7 +72,9 @@ function setup({ settings = {}, signedIn = true, linked = { main: 'link-1', alt:
         alerts: { linkedProfiles: () => linked },
         background,
         launchProfile,
+        launchOptions,
         listProxies: () => ({ proxies, suggested: { alt: 'p1' } }),
+        startOptions,
         settingsFile,
         launcherFile,
         launcherName: 'Gaming\nPC',
@@ -88,7 +94,7 @@ function setup({ settings = {}, signedIn = true, linked = { main: 'link-1', alt:
         listeners.forEach((listener) => listener({ email }));
     };
     const readSettings = () => JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-    return { remote, handlers, axios, auth, syncs, results, respond, fail, background, launchProfile, notify, log, launcherFile, readSettings, signOut, signIn, trayOff };
+    return { remote, handlers, axios, auth, syncs, results, respond, fail, background, launchProfile, launchOptions, notify, log, launcherFile, readSettings, signOut, signIn, trayOff };
 }
 
 describe('starting clients from the dashboard', () => {
@@ -283,5 +289,96 @@ describe('starting clients from the dashboard', () => {
         signIn();
         await waitFor(() => syncs.length === 2);
         remote.stop();
+    });
+
+    describe('with launcher options', () => {
+        const OPTIONS = {
+            accountId: 'a_x9',
+            profileId: 'p_k2',
+            channel: 'stable',
+            version: '2.6.44',
+            ram: '2g',
+            hwidSpoof: true,
+            proxyId: null
+        };
+        const REPORTED = { accounts: [], profiles: [], versions: [], latestVersion: null, ramChoices: ['2g'], defaults: {} };
+
+        test('sends the start options with every sync', async () => {
+            const startOptions = jest.fn(async () => REPORTED);
+            const { remote, syncs } = setup({ settings: { remoteStartFor: 'player@example.com' }, startOptions });
+            remote.start();
+            await waitFor(() => syncs.length === 1);
+            expect(startOptions).toHaveBeenCalledWith({ main: 'link-1', alt: 'link-2' }, [{ id: 'p1', label: 'Germany (10.0.0.7:1080)' }]);
+            expect(syncs[0].body).toEqual({
+                startAllowed: true,
+                version: '3.2.21',
+                clients: [
+                    { clientLinkId: 'link-1', suggestedProxyId: null },
+                    { clientLinkId: 'link-2', suggestedProxyId: 'p1' }
+                ],
+                proxies: [{ id: 'p1', label: 'Germany (10.0.0.7:1080)' }],
+                startOptions: REPORTED
+            });
+            remote.stop();
+        });
+
+        test('still syncs when the start options cannot be listed', async () => {
+            const startOptions = jest.fn(async () => {
+                throw new Error('disk');
+            });
+            const { remote, syncs, log } = setup({ settings: { remoteStartFor: 'player@example.com' }, startOptions });
+            remote.start();
+            await waitFor(() => syncs.length === 1);
+            expect(syncs[0].body.startOptions).toBeUndefined();
+            expect(syncs[0].body.clients).toHaveLength(2);
+            expect(log.warn).toHaveBeenCalledWith('Could not list the start options: disk');
+            remote.stop();
+        });
+
+        test('starts with the chosen options instead of the client link', async () => {
+            const { remote, respond, launchProfile, launchOptions, results, notify } = setup({ settings: { remoteStartFor: 'player@example.com' } });
+            respond({ commands: [{ id: 'start-1', type: 'start_client', clientLinkId: 'link-1', proxyId: null, options: OPTIONS }] });
+            remote.start();
+            await waitFor(() => results.length === 1);
+            expect(launchOptions).toHaveBeenCalledWith(OPTIONS, expect.objectContaining({ stillWanted: expect.any(Function) }));
+            expect(launchOptions.mock.calls[0][1].stillWanted()).toBe(true);
+            expect(launchProfile).not.toHaveBeenCalled();
+            expect(notify).toHaveBeenCalledWith('Starting a client from the dashboard', 'Zezima on profile alt');
+            expect(results[0].body).toEqual({ succeeded: true, reason: null });
+            remote.stop();
+        });
+
+        test('reports an option the launcher no longer has', async () => {
+            const { remote, respond, launchOptions, results, log } = setup({ settings: { remoteStartFor: 'player@example.com' } });
+            launchOptions.mockResolvedValueOnce({ problem: { kind: 'unknown-option', title: 'Unknown Option', message: 'That proxy is no longer saved in the launcher on this PC.' } });
+            respond({ commands: [{ id: 'start-1', type: 'start_client', clientLinkId: null, proxyId: null, options: OPTIONS }] });
+            remote.start();
+            await waitFor(() => results.length === 1);
+            expect(results[0].body).toEqual({ succeeded: false, reason: 'unknown-option' });
+            expect(log.warn).toHaveBeenCalledWith('Refused a dashboard start: That proxy is no longer saved in the launcher on this PC.');
+            remote.stop();
+        });
+
+        test('a start that throws is reported as a failed launch', async () => {
+            const { remote, respond, launchOptions, results } = setup({ settings: { remoteStartFor: 'player@example.com' } });
+            launchOptions.mockRejectedValueOnce(new Error('boom'));
+            respond({ commands: [{ id: 'start-1', type: 'start_client', clientLinkId: null, proxyId: null, options: OPTIONS }] });
+            remote.start();
+            await waitFor(() => results.length === 1);
+            expect(results[0].body).toEqual({ succeeded: false, reason: 'launch-failed' });
+            remote.stop();
+        });
+
+        test('a command with no options keeps using the client link', async () => {
+            const { remote, respond, launchProfile, launchOptions, results, notify } = setup({ settings: { remoteStartFor: 'player@example.com' } });
+            respond({ commands: [{ id: 'start-1', type: 'start_client', clientLinkId: 'link-2', proxyId: 'p1', options: null }] });
+            remote.start();
+            await waitFor(() => results.length === 1);
+            expect(launchOptions).not.toHaveBeenCalled();
+            expect(launchProfile).toHaveBeenCalledWith('alt', expect.objectContaining({ proxyId: 'p1' }));
+            expect(notify).toHaveBeenCalledWith('Starting a client from the dashboard', 'Profile: alt');
+            expect(results[0].body).toEqual({ succeeded: true, reason: null });
+            remote.stop();
+        });
     });
 });
