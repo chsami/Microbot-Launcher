@@ -16,6 +16,7 @@ let authUiReady = false;
 let mockAuthEnabled = false;
 let apiAuthEnabled = false;
 let currentSessionEmail = '';
+let refreshRemoteStart = null;
 
 function authAvailable() {
     return mockAuthEnabled || apiAuthEnabled;
@@ -262,6 +263,8 @@ function updateSessionEmail(email) {
     toggleClass($('signin-btn'), 'hidden', signedIn);
     toggleClass($('signout-btn'), 'hidden', !signedIn);
     toggleClass($('change-password-btn'), 'hidden', !signedIn || !mockAuthEnabled);
+    if (!signedIn) toggleClass($('remote-start-row'), 'hidden', true);
+    refreshRemoteStart?.();
 }
 
 function signinEmail() {
@@ -2121,19 +2124,23 @@ async function initUI(properties) {
     setupRefreshAccountsButton();
 }
 
-async function setupMenuToggle(item, setting, hideMenu, afterChange = () => {}) {
+async function setupMenuToggle(item, setting, hideMenu, afterChange = () => {}, mirror = null) {
     if (!item || !setting) return null;
-    const render = (enabled) => item.setAttribute('aria-checked', enabled ? 'true' : 'false');
+    const render = (enabled) => {
+        item.setAttribute('aria-checked', enabled ? 'true' : 'false');
+        if (mirror) mirror.input.checked = Boolean(enabled);
+    };
     const refresh = async () => {
         try {
-            render((await setting.status())?.enabled);
+            const status = await setting.status();
+            render(status?.enabled);
+            if (mirror) toggleClass(mirror.row, 'hidden', !status?.signedIn || status?.available === false);
         } catch (error) {
             console.error('Could not read a launcher setting:', error);
         }
     };
     await refresh();
-    const toggle = async () => {
-        const next = item.getAttribute('aria-checked') !== 'true';
+    const save = async (next) => {
         hideMenu();
         try {
             const result = await setting.setEnabled(next);
@@ -2141,9 +2148,12 @@ async function setupMenuToggle(item, setting, hideMenu, afterChange = () => {}) 
             if (result?.error) showErrorToast(result.error, { logs: false });
             else await afterChange();
         } catch (error) {
+            render(item.getAttribute('aria-checked') === 'true');
             showErrorToast('Could not save the setting.', { logs: false });
         }
     };
+    const toggle = () => save(item.getAttribute('aria-checked') !== 'true');
+    mirror?.input.addEventListener('change', () => save(mirror.input.checked));
     item.addEventListener('click', toggle);
     item.addEventListener('keydown', (event) => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -2210,8 +2220,11 @@ function setupHamburgerMenu() {
             });
         }
     }).then((refreshBackground) => {
-        setupMenuToggle(remoteItem, window.electron.remoteStart, hideMenu, () => refreshBackground?.()).then((refresh) => {
+        const mirror = { input: $('remote-start-switch'), row: $('remote-start-row') };
+        setupMenuToggle(remoteItem, window.electron.remoteStart, hideMenu, () => refreshBackground?.(),
+            mirror.input && mirror.row ? mirror : null).then((refresh) => {
             refreshRemote = refresh;
+            refreshRemoteStart = refresh;
         });
     });
 
