@@ -20,7 +20,8 @@ function setup({
     startOptions,
     accounts,
     accountLinks = {},
-    withoutAccount = []
+    withoutAccount = [],
+    alerts
 } = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-start-'));
     const settingsFile = path.join(dir, 'launcher-settings.json');
@@ -90,7 +91,7 @@ function setup({
         },
         axios,
         auth,
-        alerts: { linkedProfiles: () => linked, linkedAccounts, profilesWithoutAccount: () => withoutAccount },
+        alerts: alerts || { linkedProfiles: () => linked, linkedAccounts, profilesWithoutAccount: () => withoutAccount },
         background,
         launchProfile,
         launchAccount,
@@ -401,7 +402,7 @@ describe('starting clients from the dashboard', () => {
             remote.stop();
         });
 
-        test('a link of an account whose profile has alerts off is neither reported nor started', async () => {
+        test('a link of an account whose switch is off is neither reported nor started', async () => {
             const { remote, respond, launchAccount, launchProfile, results, syncs } = setup({
                 settings: { remoteStartFor: 'player@example.com' },
                 linked: {},
@@ -416,6 +417,71 @@ describe('starting clients from the dashboard', () => {
             expect(launchProfile).not.toHaveBeenCalled();
             expect(results[0].body).toEqual({ succeeded: false, reason: 'unknown-client' });
             remote.stop();
+        });
+
+        test('the clients and start options leave out the links whose dashboard switch is off', async () => {
+            const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-start-alerts-'));
+            const linksFile = path.join(dir, 'alert-links.dat');
+            const settingsFile = path.join(dir, 'alert-profiles.json');
+            const accountsFile = path.join(dir, 'accounts.json');
+            const reversing = {
+                isEncryptionAvailable: () => true,
+                encryptString: (value) => Buffer.from(value).reverse(),
+                decryptString: (buffer) => Buffer.from(buffer).reverse().toString()
+            };
+            const link = (id, extra = {}) => ({ id, token: `mbc_${id[5].repeat(43)}`, label: id, ...extra });
+            fs.writeFileSync(
+                linksFile,
+                reversing.encryptString(
+                    JSON.stringify({
+                        email: 'player@example.com',
+                        profiles: { main: link('link-1', { noJagex: true }), alt: link('link-2', { noJagex: true }) },
+                        accounts: { 111: link('link-zezima', { profile: 'main' }), 222: link('link-lynx', { profile: 'main' }), 333: link('link-ted', { profile: 'alt' }) },
+                        revoke: []
+                    })
+                )
+            );
+            fs.writeFileSync(accountsFile, JSON.stringify(ACCOUNTS));
+            fs.writeFileSync(settingsFile, JSON.stringify({ disabled: ['main'], accounts: { 111: true, 222: false }, accountsMigrated: true }));
+            const request = jest.fn();
+            const alerts = require('../libs/client-alerts.js')({
+                ipcMain: { handle: () => {} },
+                log: { info: jest.fn(), warn: jest.fn() },
+                fs,
+                safeStorage: reversing,
+                auth: { email: () => 'player@example.com', request },
+                linksFile,
+                settingsFile,
+                accountsFile
+            });
+            const { buildStartOptions } = require('../libs/start-options.js');
+            const startOptions = async (linked, proxies, linkedAccounts) =>
+                buildStartOptions({
+                    accounts: ACCOUNTS.map((account) => ({ accountId: account.accountId, profile: account.profile, displayName: `Account ${account.accountId}` })),
+                    profiles: ['main', 'alt'],
+                    linked,
+                    linkedAccounts,
+                    proxies,
+                    ids: { account: (id) => `a-${id}`, profile: (name) => `p-${name}`, proxy: (address) => address }
+                });
+            const { remote, syncs } = setup({ settings: { remoteStartFor: 'player@example.com' }, accounts: ACCOUNTS, alerts, startOptions });
+            remote.start();
+            await waitFor(() => syncs.length === 1);
+            remote.stop();
+            fs.rmSync(dir, { recursive: true, force: true });
+
+            expect(syncs[0].body.clients.map((client) => client.clientLinkId)).toEqual(['link-zezima', 'link-ted', 'link-2']);
+            expect(syncs[0].body.startOptions.accounts.map((account) => [account.id, account.clientLinkId])).toEqual([
+                ['a-111', 'link-zezima'],
+                ['a-222', null],
+                ['a-333', 'link-ted']
+            ]);
+            expect(syncs[0].body.startOptions.profiles.map((profile) => [profile.id, profile.clientLinkId])).toEqual([
+                ['p-default', null],
+                ['p-main', null],
+                ['p-alt', 'link-2']
+            ]);
+            expect(request).not.toHaveBeenCalled();
         });
     });
 

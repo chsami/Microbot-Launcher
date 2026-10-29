@@ -265,6 +265,7 @@ function updateSessionEmail(email) {
     toggleClass($('change-password-btn'), 'hidden', !signedIn || !mockAuthEnabled);
     if (!signedIn) toggleClass($('remote-start-row'), 'hidden', true);
     refreshRemoteStart?.();
+    refreshAccountDashboardSwitch();
 }
 
 function signinEmail() {
@@ -975,6 +976,7 @@ async function initializeLauncher() {
                 const profile = nonJagexProfile || 'default';
                 document.getElementById('profile').value = profile;
             }
+            refreshAccountDashboardSwitch();
             if (!restoringSelectedAccount) {
                 await persistSelectedAccount(selectedAccount);
             }
@@ -2119,6 +2121,7 @@ async function initUI(properties) {
 
     await setupRamInput();
     await setupHwidSpoofInput();
+    setupAccountDashboardSwitch();
     await setupProxyInput();
 
     setupRefreshAccountsButton();
@@ -2553,6 +2556,60 @@ async function setupHwidSpoofInput() {
         latestProperties['hwid_spoof'] = checkbox.checked ? 'true' : 'false';
         await window.electron.writeProperties(latestProperties);
     });
+}
+
+let accountDashboardRequest = 0;
+
+async function refreshAccountDashboardSwitch() {
+    const row = $('account-dashboard-row');
+    const input = $('account-dashboard');
+    if (!row || !input) return;
+    const request = ++accountDashboardRequest;
+    const accountId = $('character')?.value;
+    const account = accounts.find((entry) => entry.accountId === accountId);
+    if (!account || !window.electron?.alerts?.accountStatus) {
+        row.hidden = true;
+        return;
+    }
+    let status = null;
+    try {
+        status = await window.electron.alerts.accountStatus([accountId]);
+    } catch (error) {
+        status = null;
+    }
+    if (request !== accountDashboardRequest) return;
+    if (!status?.available) {
+        row.hidden = true;
+        return;
+    }
+    const name = account.displayName?.trim() || 'this Jagex account';
+    input.dataset.accountId = accountId;
+    input.checked = status.enabled?.[accountId] !== false;
+    input.setAttribute('aria-label', `Show ${name} on the Microbot dashboard`);
+    row.hidden = false;
+}
+
+function setupAccountDashboardSwitch() {
+    const input = $('account-dashboard');
+    if (!input) return;
+    input.addEventListener('change', async () => {
+        const accountId = input.dataset.accountId;
+        if (!accountId) return;
+        const wanted = input.checked;
+        input.disabled = true;
+        let result = null;
+        try {
+            result = await window.electron.alerts.setAccountEnabled(accountId, wanted);
+        } catch (error) {
+            result = { error: 'Could not save the dashboard setting.' };
+        } finally {
+            input.disabled = false;
+        }
+        if (input.dataset.accountId !== accountId) return;
+        input.checked = typeof result?.enabled === 'boolean' ? result.enabled : !wanted;
+        if (result?.error) showErrorToast(result.error, { logs: false });
+    });
+    refreshAccountDashboardSwitch();
 }
 
 /**
