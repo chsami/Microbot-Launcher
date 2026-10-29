@@ -1066,7 +1066,8 @@ h2 {
 
 /* Value reads like the selects' value: the state, then a muted line on what that state does.
    The input's role=switch already announces the state, so this is visual only. */
-.hwid-spoof-state {
+.hwid-spoof-state,
+.account-dashboard-state {
     flex: 1;
     min-width: 0;
     font-size: 14px;
@@ -1096,6 +1097,31 @@ h2 {
 
 .hwid-spoof-toggle:has(.hwid-spoof-input:checked) .hwid-spoof-state::after {
     content: 'Using a unique ID per account';
+}
+
+.account-dashboard-state::before {
+    content: 'Off';
+}
+
+.account-dashboard-state::after {
+    content: 'New clients stay off the dashboard';
+    margin-left: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+}
+
+.hwid-spoof-toggle:has(.hwid-spoof-input:checked) .account-dashboard-state::before {
+    content: 'On';
+}
+
+.hwid-spoof-toggle:has(.hwid-spoof-input:checked) .account-dashboard-state::after {
+    content: 'Its clients get a dashboard card';
+}
+
+.hwid-spoof-toggle:has(.hwid-spoof-input:disabled) {
+    cursor: progress;
+    opacity: .7;
 }
 
 .hwid-spoof-input {

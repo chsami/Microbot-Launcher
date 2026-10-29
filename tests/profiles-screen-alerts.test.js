@@ -150,9 +150,9 @@ describe('profiles screen alert name hint', () => {
         await screen.open();
 
         expect(screen.hints()).toEqual([
-            'Shows up as "Microbot client" in alerts, or as the account name when you play with a Jagex account. Rename it on the dashboard.',
-            'Shows up as "Microbot client" in alerts, or as the account name when you play with a Jagex account. Rename it on the dashboard.',
-            'Shows up as "Main PC" in alerts, or as the account name when you play with a Jagex account. Rename it on the dashboard.'
+            'Clients you play here without a Jagex account show up as "Microbot client" on the dashboard, where you can rename it. Each Jagex account has its own switch under the account list.',
+            'Clients you play here without a Jagex account show up as "Microbot client" on the dashboard, where you can rename it. Each Jagex account has its own switch under the account list.',
+            'Clients you play here without a Jagex account show up as "Main PC" on the dashboard, where you can rename it. Each Jagex account has its own switch under the account list.'
         ]);
     });
 
@@ -164,15 +164,15 @@ describe('profiles screen alert name hint', () => {
 
         expect(electron.alerts.setEnabled).toHaveBeenCalledWith('Main', false);
         expect(screen.hints()).toEqual([
-            'Shows up as "Microbot client" in alerts, or as the account name when you play with a Jagex account. Rename it on the dashboard.',
-            'Shows up as "Microbot client" in alerts, or as the account name when you play with a Jagex account. Rename it on the dashboard.'
+            'Clients you play here without a Jagex account show up as "Microbot client" on the dashboard, where you can rename it. Each Jagex account has its own switch under the account list.',
+            'Clients you play here without a Jagex account show up as "Microbot client" on the dashboard, where you can rename it. Each Jagex account has its own switch under the account list.'
         ]);
 
         electron.alerts.setEnabled.mockResolvedValue({ enabled: true, label: 'Microbot client 3' });
         await screen.click(screen.toggle('Main'));
 
         expect(electron.alerts.setEnabled).toHaveBeenLastCalledWith('Main', true);
-        expect(screen.hints()).toContain('Shows up as "Microbot client 3" in alerts, or as the account name when you play with a Jagex account. Rename it on the dashboard.');
+        expect(screen.hints()).toContain('Clients you play here without a Jagex account show up as "Microbot client 3" on the dashboard, where you can rename it. Each Jagex account has its own switch under the account list.');
     });
 
     test('signed out shows no hint', async () => {
