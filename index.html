@@ -502,6 +502,15 @@
                         <button id="change-password-btn" class="account-action hidden" type="button">Change password</button>
                         <button id="signout-btn" class="account-action hidden" type="button">Sign out</button>
                     </div>
+                    <label id="remote-start-row" class="account-remote hidden" for="remote-start-switch"
+                        title="Lets you start this PC's clients from the Microbot dashboard, with the proxy you pick there. Keeps the launcher running in the tray.">
+                        <span class="account-remote-text">
+                            <span class="account-remote-title">Start clients from the dashboard</span>
+                            <span class="account-hint">Start this PC's clients from dashboard.microbot.cloud</span>
+                        </span>
+                        <input id="remote-start-switch" class="hwid-spoof-input" type="checkbox" role="switch" />
+                        <span class="hwid-spoof-switch" aria-hidden="true"></span>
+                    </label>
                 </section>
                 <div class="play-buttons">
                     <button id="play" class="play-button loadingButton">

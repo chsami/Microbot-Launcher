@@ -292,6 +292,7 @@ webview#website {
 
 .account-card {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 12px;
     width: 100%;
@@ -410,6 +411,34 @@ webview#website {
 .account-hint {
     font-size: 12px;
     color: var(--muted);
+}
+
+.account-remote {
+    flex: 1 1 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+    cursor: pointer;
+}
+
+.account-remote.hidden {
+    display: none;
+}
+
+.account-remote-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.account-remote-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-strong);
 }
 
 .account-actions {
