@@ -170,7 +170,7 @@
     const buildAlertsHint = (name) => {
         const hint = document.createElement('p');
         hint.className = 'profile-alerts-hint';
-        hint.textContent = `Shows up as "${alertsLabel(name)}" in alerts. Rename it on the dashboard.`;
+        hint.textContent = `Shows up as "${alertsLabel(name)}" in alerts, or as the account name when you play with a Jagex account. Rename it on the dashboard.`;
         return hint;
     };
 

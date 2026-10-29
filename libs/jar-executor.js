@@ -91,7 +91,7 @@ module.exports = async function (deps) {
             label: noJagex ? 'non-Jagex client' : 'client'
         });
         if (built.error) return built;
-        const token = await alertToken(noJagex ? profile : account && account.profile);
+        const token = await alertToken(noJagex ? profile : account && account.profile, noJagex ? null : account);
         return {
             commandArgs: built.commandArgs,
             secrets: withToken(noJagex ? [] : accountSecrets(account), token),
@@ -189,10 +189,10 @@ module.exports = async function (deps) {
         }
     }
 
-    async function alertToken(profile) {
+    async function alertToken(profile, account) {
         if (!deps.alerts) return null;
         try {
-            return await deps.alerts.tokenForProfile(profile);
+            return await deps.alerts.tokenForLaunch(profile, account || null);
         } catch (error) {
             log.warn(`Could not prepare bot alerts: ${error.message}`);
             return null;

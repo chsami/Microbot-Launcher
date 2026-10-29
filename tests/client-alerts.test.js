@@ -26,8 +26,12 @@ const safeStorage = {
 
 const FIRST_TOKEN = `mbc_${'A'.repeat(43)}`;
 const SECOND_TOKEN = `mbc_${'B'.repeat(43)}`;
+const THIRD_TOKEN = `mbc_${'C'.repeat(43)}`;
 const FIRST_ID = '11111111-1111-1111-1111-111111111111';
 const SECOND_ID = '22222222-2222-2222-2222-222222222222';
+const THIRD_ID = '33333333-3333-3333-3333-333333333333';
+const ZEZIMA = { accountId: '1001', displayName: 'Zezima', profile: 'Main' };
+const LYNX = { accountId: '1002', displayName: 'Lynx', profile: 'Main' };
 
 const httpError = (status) => Object.assign(new Error(`HTTP ${status}`), { response: { status } });
 
@@ -67,6 +71,12 @@ describe('client-alerts', () => {
                     serverLinks = serverLinks.filter((id) => config.path !== `/api/alerts/client-links/${id}`);
                     return { status: 204 };
                 }
+                if (config.method === 'patch') {
+                    const id = serverLinks.find((linkId) => config.path === `/api/alerts/client-links/${linkId}`);
+                    if (!id) throw httpError(404);
+                    serverLabels[id] = config.data.label;
+                    return { data: linkRow(id, config.data.label) };
+                }
                 const next = created.shift();
                 serverLinks.push(next.id);
                 return { data: { id: next.id, label: config.data.label, token: next.token, createdAt: '2026-10-21T10:00:00Z' } };
@@ -80,7 +90,12 @@ describe('client-alerts', () => {
 
     const posts = () => auth.request.mock.calls.filter(([config]) => config.method === 'post');
     const deletes = () => auth.request.mock.calls.filter(([config]) => config.method === 'delete').map(([config]) => config.path);
+    const patches = () => auth.request.mock.calls.filter(([config]) => config.method === 'patch').map(([config]) => [config.path, config.data.label]);
     const stored = () => JSON.parse(safeStorage.decryptString(fs.readFileSync(linksFile)));
+    const writeOldStore = (profiles) => {
+        fs.writeFileSync(linksFile, safeStorage.encryptString(JSON.stringify({ email, profiles, revoke: [] })));
+        serverLinks = Object.values(profiles).map((link) => link.id);
+    };
 
     test('creates a link once per profile and reuses it on later launches', async () => {
         const { alerts } = setup();
@@ -289,7 +304,7 @@ describe('client-alerts', () => {
 
         expect(deletes()).toEqual([`/api/alerts/client-links/${FIRST_ID}`]);
         expect(serverLinks).toEqual([SECOND_ID]);
-        expect(stored().profiles).toEqual({ Ironman: { id: SECOND_ID, token: SECOND_TOKEN, label: 'Microbot client 2' } });
+        expect(stored().profiles).toEqual({ Ironman: { id: SECOND_ID, token: SECOND_TOKEN, label: 'Microbot client 2', noJagex: true } });
         expect(stored().revoke).toEqual([]);
         expect(await alerts.tokenForProfile('Main')).toBeNull();
         const logged = JSON.stringify([log.info.mock.calls, log.warn.mock.calls, log.error.mock.calls]);
@@ -349,7 +364,7 @@ describe('client-alerts', () => {
         expect(await alerts.tokenForProfile('Main')).toBe(SECOND_TOKEN);
         expect(posts()).toHaveLength(2);
         expect(posts()[1][0]).toMatchObject({ path: '/api/alerts/client-links', data: { label: 'Microbot client' } });
-        expect(stored().profiles.Main).toEqual({ id: SECOND_ID, token: SECOND_TOKEN, label: 'Microbot client' });
+        expect(stored().profiles.Main).toEqual({ id: SECOND_ID, token: SECOND_TOKEN, label: 'Microbot client', noJagex: true });
     });
 
     test('status returns the dashboard name of each linked profile', async () => {
@@ -419,6 +434,264 @@ describe('client-alerts', () => {
         expect(await launch).toBeNull();
         expect(deletes()).toEqual([`/api/alerts/client-links/${FIRST_ID}`]);
         expect(stored().profiles).toEqual({});
+    });
+
+    describe('a link per Jagex account', () => {
+        test('each Jagex account gets its own link named after the account, even on one profile', async () => {
+            const { alerts } = setup();
+
+            expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBe(FIRST_TOKEN);
+            expect(await alerts.tokenForLaunch('Main', LYNX)).toBe(SECOND_TOKEN);
+            expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBe(FIRST_TOKEN);
+            expect(await setup().alerts.tokenForLaunch('Main', LYNX)).toBe(SECOND_TOKEN);
+
+            expect(posts().map(([config]) => config.data.label)).toEqual(['Zezima', 'Lynx']);
+            expect(stored().accounts).toEqual({
+                1001: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Zezima', profile: 'Main' },
+                1002: { id: SECOND_ID, token: SECOND_TOKEN, label: 'Lynx', profile: 'Main' }
+            });
+            expect(stored().profiles).toEqual({});
+        });
+
+        test('an account without a usable name gets the default name', async () => {
+            const { alerts } = setup();
+
+            await alerts.tokenForLaunch('Main', { accountId: '1003', displayName: ' \u0007 ' });
+
+            expect(posts()[0][0].data.label).toBe('Microbot client');
+        });
+
+        test('the account name and id never reach the log', async () => {
+            const { alerts } = setup();
+
+            await alerts.tokenForLaunch('Main', ZEZIMA);
+
+            const logged = JSON.stringify([log.info.mock.calls, log.warn.mock.calls, log.error.mock.calls]);
+            expect(logged).not.toMatch(/Zezima|1001/);
+        });
+
+        test('a launch without a Jagex account keeps the profile link next to the account links', async () => {
+            const { alerts } = setup();
+            created.push({ id: THIRD_ID, token: THIRD_TOKEN });
+
+            expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
+            expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBe(SECOND_TOKEN);
+            expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
+            expect(await alerts.tokenForLaunch('Main', LYNX)).toBe(THIRD_TOKEN);
+
+            expect(posts().map(([config]) => config.data.label)).toEqual(['Microbot client', 'Zezima', 'Lynx']);
+            expect(stored().profiles.Main.id).toBe(FIRST_ID);
+            expect(patches()).toEqual([]);
+        });
+
+        test('the first account on a profile takes over its old link and its name, the next account gets a new one', async () => {
+            writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Microbot client' }, Ironman: { id: THIRD_ID, token: THIRD_TOKEN, label: 'Iron PC' } });
+            created = [{ id: SECOND_ID, token: SECOND_TOKEN }];
+            const { alerts } = setup();
+
+            expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBe(FIRST_TOKEN);
+
+            expect(posts()).toHaveLength(0);
+            expect(patches()).toEqual([[`/api/alerts/client-links/${FIRST_ID}`, 'Zezima']]);
+            expect(stored().accounts).toEqual({ 1001: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Zezima', profile: 'Main' } });
+            expect(stored().profiles).toEqual({ Ironman: { id: THIRD_ID, token: THIRD_TOKEN, label: 'Iron PC' } });
+
+            expect(await alerts.tokenForLaunch('Main', LYNX)).toBe(SECOND_TOKEN);
+            expect(posts().map(([config]) => config.data.label)).toEqual(['Lynx']);
+            expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBe(FIRST_TOKEN);
+            expect(patches()).toHaveLength(1);
+            expect(serverLinks).toContain(FIRST_ID);
+        });
+
+        test('a launch without an account after the takeover gets a fresh profile link that no account takes over later', async () => {
+            writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Microbot client' } });
+            created = [{ id: SECOND_ID, token: SECOND_TOKEN }, { id: THIRD_ID, token: THIRD_TOKEN }];
+            const { alerts } = setup();
+
+            await alerts.tokenForLaunch('Main', ZEZIMA);
+            expect(await alerts.tokenForProfile('Main')).toBe(SECOND_TOKEN);
+            expect(stored().profiles.Main).toEqual({ id: SECOND_ID, token: SECOND_TOKEN, label: 'Microbot client', noJagex: true });
+
+            expect(await alerts.tokenForLaunch('Main', LYNX)).toBe(THIRD_TOKEN);
+            expect(stored().profiles.Main.id).toBe(SECOND_ID);
+            expect(await alerts.tokenForProfile('Main')).toBe(SECOND_TOKEN);
+        });
+
+        test('a client still running with the old profile link keeps working after the takeover', async () => {
+            writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Main PC' } });
+            const { alerts } = setup();
+
+            await alerts.tokenForLaunch('Main', ZEZIMA);
+
+            expect(deletes()).toEqual([]);
+            expect(stored().revoke).toEqual([]);
+            expect(serverLinks).toEqual([FIRST_ID]);
+        });
+
+        test('accounts launched at the same time never share the old profile link', async () => {
+            writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Microbot client' } });
+            created = [{ id: SECOND_ID, token: SECOND_TOKEN }, { id: THIRD_ID, token: THIRD_TOKEN }];
+            const { alerts } = setup();
+
+            const tokens = await Promise.all([
+                alerts.tokenForLaunch('Main', ZEZIMA),
+                alerts.tokenForLaunch('Main', LYNX),
+                alerts.tokenForProfile('Main'),
+                alerts.tokenForLaunch('Main', ZEZIMA)
+            ]);
+
+            expect(tokens[0]).toBe(FIRST_TOKEN);
+            expect(tokens[3]).toBe(FIRST_TOKEN);
+            expect(new Set(tokens.slice(0, 3)).size).toBe(3);
+            expect(tokens).not.toContain(null);
+            expect(Object.values(stored().accounts).map((link) => link.id).sort()).toEqual(
+                [FIRST_ID, tokens[1] === SECOND_TOKEN ? SECOND_ID : THIRD_ID].sort()
+            );
+            expect(stored().profiles.Main.noJagex).toBe(true);
+        });
+
+        test('a profile link already checked when an account takes it over is not handed to the launch without an account', async () => {
+            writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Microbot client' } });
+            created = [{ id: SECOND_ID, token: SECOND_TOKEN }];
+            const online = auth.request.getMockImplementation();
+            let releaseCheck;
+            auth.request.mockImplementationOnce(async (config) => {
+                await new Promise((resolve) => {
+                    releaseCheck = resolve;
+                });
+                return online(config);
+            });
+            const { alerts } = setup();
+
+            const plain = alerts.tokenForProfile('Main');
+            await new Promise((resolve) => setImmediate(resolve));
+            expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBe(FIRST_TOKEN);
+            releaseCheck();
+
+            expect(await plain).toBe(SECOND_TOKEN);
+            expect(stored().profiles.Main.id).toBe(SECOND_ID);
+            expect(stored().accounts[1001].id).toBe(FIRST_ID);
+        });
+
+        test('a failed rename keeps the old name and is tried again at the next launch', async () => {
+            writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Microbot client' } });
+            const online = auth.request.getMockImplementation();
+            auth.request.mockImplementation(async (config) => {
+                if (config.method === 'patch') throw new Error('ECONNREFUSED');
+                return online(config);
+            });
+            const { alerts } = setup();
+
+            expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBe(FIRST_TOKEN);
+            expect(stored().accounts[1001]).toMatchObject({ label: 'Microbot client', renameTo: 'Zezima' });
+
+            auth.request.mockImplementation(online);
+            expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBe(FIRST_TOKEN);
+            expect(stored().accounts[1001]).toEqual({ id: FIRST_ID, token: FIRST_TOKEN, label: 'Zezima', profile: 'Main' });
+            expect(serverLabels[FIRST_ID]).toBe('Zezima');
+        });
+
+        test('a rename the dashboard refuses is not tried again', async () => {
+            writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Main PC' } });
+            const online = auth.request.getMockImplementation();
+            auth.request.mockImplementation(async (config) => {
+                if (config.method === 'patch') throw httpError(400);
+                return online(config);
+            });
+            const { alerts } = setup();
+
+            await alerts.tokenForLaunch('Main', ZEZIMA);
+            await alerts.tokenForLaunch('Main', ZEZIMA);
+
+            expect(patches()).toHaveLength(1);
+            expect(stored().accounts[1001]).toEqual({ id: FIRST_ID, token: FIRST_TOKEN, label: 'Main PC', profile: 'Main' });
+        });
+
+        test('an old link revoked on the dashboard is replaced by a new one named after the account', async () => {
+            writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Microbot client' } });
+            serverLinks = [];
+            created = [{ id: SECOND_ID, token: SECOND_TOKEN }];
+            const { alerts } = setup();
+
+            expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBe(SECOND_TOKEN);
+
+            expect(posts()[0][0].data.label).toBe('Zezima');
+            expect(patches()).toEqual([]);
+            expect(stored().accounts).toEqual({ 1001: { id: SECOND_ID, token: SECOND_TOKEN, label: 'Zezima', profile: 'Main' } });
+            expect(stored().profiles).toEqual({});
+        });
+
+        test('alerts off for the launch profile gives no token and takes over nothing', async () => {
+            writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Microbot client' } });
+            fs.writeFileSync(settingsFile, JSON.stringify({ disabled: ['Main'] }));
+            const { alerts } = setup();
+
+            expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBeNull();
+
+            expect(auth.request).not.toHaveBeenCalled();
+            expect(stored()).toEqual({ email, profiles: { Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Microbot client' } }, revoke: [] });
+        });
+
+        test('turning alerts off for a profile revokes the links of the accounts launched on it', async () => {
+            const { alerts, ipcMain } = setup();
+            created.push({ id: THIRD_ID, token: THIRD_TOKEN });
+            await alerts.tokenForLaunch('Main', ZEZIMA);
+            await alerts.tokenForLaunch('Main', LYNX);
+            await alerts.tokenForLaunch('Ironman', { accountId: '1003', displayName: 'Iron Ted' });
+
+            await ipcMain.invoke('alerts:set-enabled', 'Main', false);
+
+            expect(deletes().sort()).toEqual([`/api/alerts/client-links/${FIRST_ID}`, `/api/alerts/client-links/${SECOND_ID}`]);
+            expect(Object.keys(stored().accounts)).toEqual(['1003']);
+            expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBeNull();
+        });
+
+        test('an account moved to another profile follows that profile\'s switch', async () => {
+            const { alerts, ipcMain } = setup();
+            await alerts.tokenForLaunch('Main', ZEZIMA);
+
+            expect(await alerts.tokenForLaunch('Ironman', { ...ZEZIMA, profile: 'Ironman' })).toBe(FIRST_TOKEN);
+            expect(stored().accounts[1001].profile).toBe('Ironman');
+
+            await ipcMain.invoke('alerts:set-enabled', 'Ironman', false);
+            expect(deletes()).toEqual([`/api/alerts/client-links/${FIRST_ID}`]);
+        });
+
+        test('linked accounts lists the links of accounts still logged in whose profile has alerts on', async () => {
+            const { alerts } = setup();
+            created.push({ id: THIRD_ID, token: THIRD_TOKEN });
+            await alerts.tokenForLaunch('Main', ZEZIMA);
+            await alerts.tokenForLaunch('Main', LYNX);
+            await alerts.tokenForLaunch(undefined, { accountId: '1003', displayName: 'Iron Ted' });
+            fs.writeFileSync(settingsFile, JSON.stringify({ disabled: ['default'] }));
+
+            expect(
+                alerts.linkedAccounts([
+                    { accountId: '1001', profile: 'Main' },
+                    { accountId: '1003', profile: 'default' },
+                    { accountId: '1004', profile: 'Main' },
+                    { accountId: 'constructor', profile: 'Main' }
+                ])
+            ).toEqual({ 1001: FIRST_ID });
+            expect(alerts.linkedProfiles()).toEqual({});
+            email = null;
+            expect(alerts.linkedAccounts([{ accountId: '1001', profile: 'Main' }])).toEqual({});
+        });
+
+        test('a user without Jagex accounts keeps one link per profile', async () => {
+            writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Main PC' } });
+            created = [{ id: SECOND_ID, token: SECOND_TOKEN }];
+            const { alerts } = setup();
+
+            expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
+            expect(await alerts.tokenForLaunch('Ironman', null)).toBe(SECOND_TOKEN);
+
+            expect(stored().profiles.Main).toEqual({ id: FIRST_ID, token: FIRST_TOKEN, label: 'Main PC' });
+            expect(stored().accounts).toEqual({});
+            expect(alerts.linkedProfiles()).toEqual({ Main: FIRST_ID, Ironman: SECOND_ID });
+            expect(alerts.linkedAccounts([])).toEqual({});
+            expect(patches()).toEqual([]);
+        });
     });
 
     test('the renderer never gets the token or the link id', async () => {
@@ -503,12 +776,13 @@ describe('jar-executor alert token', () => {
     };
 
     test('the token reaches the client only through MICROBOT_CLIENT_TOKEN', async () => {
-        const alerts = { tokenForProfile: jest.fn().mockResolvedValue(FIRST_TOKEN) };
+        const alerts = { tokenForLaunch: jest.fn().mockResolvedValue(FIRST_TOKEN) };
         const harness = createHarness(alerts);
+        const account = { accountId: '1001', profile: 'Main', displayName: 'Hero' };
 
-        expect(await launch(harness, { profile: 'Main', displayName: 'Hero' })).toEqual({ success: true });
+        expect(await launch(harness, account)).toEqual({ success: true });
 
-        expect(alerts.tokenForProfile).toHaveBeenCalledWith('Main');
+        expect(alerts.tokenForLaunch).toHaveBeenCalledWith('Main', account);
         expect(harness.launches).toHaveLength(1);
         const [{ args, options }] = harness.launches;
         expect(options.env).toEqual({ ...process.env, MICROBOT_CLIENT_TOKEN: FIRST_TOKEN });
@@ -518,7 +792,7 @@ describe('jar-executor alert token', () => {
     });
 
     test('the no-Jagex launch passes the preferred profile token the same way', async () => {
-        const alerts = { tokenForProfile: jest.fn().mockResolvedValue(FIRST_TOKEN) };
+        const alerts = { tokenForLaunch: jest.fn().mockResolvedValue(FIRST_TOKEN) };
         const harness = createHarness(alerts);
         fs.writeFileSync(path.join(harness.deps.microbotDir, 'non-jagex-preferred-profile.json'), JSON.stringify({ profile: 'Ironman' }));
         await require('../libs/jar-executor')(harness.deps);
@@ -527,7 +801,7 @@ describe('jar-executor alert token', () => {
         await waitFor(() => harness.launches.length > 0);
         fs.rmSync(harness.deps.microbotDir, { recursive: true, force: true });
 
-        expect(alerts.tokenForProfile).toHaveBeenCalledWith('Ironman');
+        expect(alerts.tokenForLaunch).toHaveBeenCalledWith('Ironman', null);
         expect(harness.launches[0].options.env.MICROBOT_CLIENT_TOKEN).toBe(FIRST_TOKEN);
         expect(harness.launches[0].args.join(' ')).not.toContain(FIRST_TOKEN);
     });
@@ -556,7 +830,7 @@ describe('jar-executor alert token', () => {
     });
 
     test('a failing alert setup never blocks the launch', async () => {
-        const alerts = { tokenForProfile: jest.fn().mockRejectedValue(new Error('boom')) };
+        const alerts = { tokenForLaunch: jest.fn().mockRejectedValue(new Error('boom')) };
         const harness = createHarness(alerts);
 
         expect(await launch(harness, { profile: 'Main' })).toEqual({ success: true });

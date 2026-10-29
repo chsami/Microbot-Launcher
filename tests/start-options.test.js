@@ -33,9 +33,9 @@ describe('start options sent to the dashboard', () => {
     test('lists accounts, profiles, versions and RAM, with what Play would use as defaults', () => {
         expect(build()).toEqual({
             accounts: [
-                { id: 'a_111', label: 'Zezima', profileId: 'p_default', proxyId: null },
-                { id: 'a_222', label: 'Lynx', profileId: 'p_default', proxyId: 'x_25' },
-                { id: 'a_333', label: 'Iron Ted', profileId: 'p_alt', proxyId: null }
+                { id: 'a_111', label: 'Zezima', profileId: 'p_default', proxyId: null, clientLinkId: null },
+                { id: 'a_222', label: 'Lynx', profileId: 'p_default', proxyId: 'x_25', clientLinkId: null },
+                { id: 'a_333', label: 'Iron Ted', profileId: 'p_alt', proxyId: null, clientLinkId: null }
             ],
             profiles: [
                 { id: 'p_default', label: 'Default', clientLinkId: null },
@@ -55,6 +55,14 @@ describe('start options sent to the dashboard', () => {
                 proxyId: 'x_13'
             }
         });
+    });
+
+    test('each account carries its own dashboard link and profiles keep the link of clients without an account', () => {
+        const { accounts, profiles } = build({ linked: { default: 'link-0' }, linkedAccounts: { 222: 'link-lynx', 333: 'link-ted', 999: 'link-gone' } });
+
+        expect(accounts.map((account) => account.clientLinkId)).toEqual([null, 'link-lynx', 'link-ted']);
+        expect(profiles.map((profile) => profile.clientLinkId)).toEqual(['link-0', null, null]);
+        expect(JSON.stringify(accounts)).not.toContain('link-gone');
     });
 
     test('never sends addresses, credentials or session ids', () => {

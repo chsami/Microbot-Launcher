@@ -60,6 +60,11 @@ function playProxyAddress(account, properties) {
     return typeof properties.proxyip === 'string' ? properties.proxyip.trim() : '';
 }
 
+function linkIdOf(links, key) {
+    const value = links && Object.prototype.hasOwnProperty.call(links, key) ? links[key] : null;
+    return typeof value === 'string' && value ? value : null;
+}
+
 function buildStartOptions({
     accounts = [],
     profiles = [],
@@ -68,6 +73,7 @@ function buildStartOptions({
     versions = [],
     latestVersion = null,
     linked = {},
+    linkedAccounts = {},
     proxies = [],
     ids
 }) {
@@ -91,12 +97,13 @@ function buildStartOptions({
             id: ids.account(entry.accountId),
             label: cleanLabel(entry.displayName, 'Jagex account'),
             profileId: profileIdOf(entry.profile),
-            proxyId: proxyIdOf(entry.proxyIp)
+            proxyId: proxyIdOf(entry.proxyIp),
+            clientLinkId: linkIdOf(linkedAccounts, entry.accountId)
         })),
         profiles: names.map((name) => ({
             id: ids.profile(name),
             label: name === DEFAULT_PROFILE ? 'Default' : cleanLabel(name, name),
-            clientLinkId: typeof linked[name] === 'string' && linked[name] ? linked[name] : null
+            clientLinkId: linkIdOf(linked, name)
         })),
         versions: [...new Set(versions.map(stableVersion).filter(Boolean))].slice(0, MAX_VERSIONS),
         latestVersion: stableVersion(latestVersion),

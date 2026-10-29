@@ -11,7 +11,16 @@ const waitFor = async (predicate) => {
     for (let i = 0; i < 200 && !predicate(); i += 1) await flush();
 };
 
-function setup({ settings = {}, signedIn = true, linked = { main: 'link-1', alt: 'link-2' }, backgroundError, proxies = [{ id: 'p1', label: 'Germany (10.0.0.7:1080)' }], startOptions } = {}) {
+function setup({
+    settings = {},
+    signedIn = true,
+    linked = { main: 'link-1', alt: 'link-2' },
+    backgroundError,
+    proxies = [{ id: 'p1', label: 'Germany (10.0.0.7:1080)' }],
+    startOptions,
+    accounts,
+    accountLinks = {}
+} = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-start-'));
     const settingsFile = path.join(dir, 'launcher-settings.json');
     const launcherFile = path.join(dir, 'launcher-link.dat');
@@ -55,6 +64,17 @@ function setup({ settings = {}, signedIn = true, linked = { main: 'link-1', alt:
         onAccepted({ profile: 'alt', account: 'Zezima' });
         return { started: true };
     });
+    const launchAccount = jest.fn(async (_accountId, { onAccepted }) => {
+        onAccepted({ profile: 'main', account: 'Lynx' });
+        return { started: true };
+    });
+    const linkedAccounts = jest.fn((list) => {
+        const linked = {};
+        list.forEach((account) => {
+            if (accountLinks[account.accountId]) linked[account.accountId] = accountLinks[account.accountId];
+        });
+        return linked;
+    });
     const notify = jest.fn();
     const log = { info: jest.fn(), warn: jest.fn() };
     const remote = setupRemoteStart({
@@ -69,11 +89,12 @@ function setup({ settings = {}, signedIn = true, linked = { main: 'link-1', alt:
         },
         axios,
         auth,
-        alerts: { linkedProfiles: () => linked },
+        alerts: { linkedProfiles: () => linked, linkedAccounts },
         background,
         launchProfile,
+        launchAccount,
         launchOptions,
-        listProxies: () => ({ proxies, suggested: { alt: 'p1' } }),
+        listProxies: () => ({ proxies, suggested: { alt: 'p1' }, ...(accounts ? { accounts } : {}) }),
         startOptions,
         settingsFile,
         launcherFile,
@@ -94,7 +115,7 @@ function setup({ settings = {}, signedIn = true, linked = { main: 'link-1', alt:
         listeners.forEach((listener) => listener({ email }));
     };
     const readSettings = () => JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-    return { remote, handlers, axios, auth, syncs, results, respond, fail, background, launchProfile, launchOptions, notify, log, launcherFile, readSettings, signOut, signIn, trayOff };
+    return { remote, handlers, axios, auth, syncs, results, respond, fail, background, launchProfile, launchAccount, launchOptions, linkedAccounts, notify, log, launcherFile, readSettings, signOut, signIn, trayOff };
 }
 
 describe('starting clients from the dashboard', () => {
@@ -291,6 +312,89 @@ describe('starting clients from the dashboard', () => {
         remote.stop();
     });
 
+    describe('with a dashboard link per Jagex account', () => {
+        const ACCOUNTS = [
+            { accountId: '111', profile: 'main', proxyId: null },
+            { accountId: '222', profile: 'main', proxyId: 'p1' },
+            { accountId: '333', profile: 'alt', proxyId: null }
+        ];
+        const ACCOUNT_LINKS = { 111: 'link-zezima', 222: 'link-lynx' };
+
+        test('reports every linked account with its own proxy, then the links of clients without an account', async () => {
+            const startOptions = jest.fn(async () => ({ accounts: [] }));
+            const { remote, syncs, linkedAccounts } = setup({
+                settings: { remoteStartFor: 'player@example.com' },
+                linked: { alt: 'link-2' },
+                accounts: ACCOUNTS,
+                accountLinks: ACCOUNT_LINKS,
+                startOptions
+            });
+            remote.start();
+            await waitFor(() => syncs.length === 1);
+
+            expect(linkedAccounts).toHaveBeenCalledWith(ACCOUNTS);
+            expect(syncs[0].body.clients).toEqual([
+                { clientLinkId: 'link-zezima', suggestedProxyId: null },
+                { clientLinkId: 'link-lynx', suggestedProxyId: 'p1' },
+                { clientLinkId: 'link-2', suggestedProxyId: 'p1' }
+            ]);
+            expect(startOptions).toHaveBeenCalledWith({ alt: 'link-2' }, [{ id: 'p1', label: 'Germany (10.0.0.7:1080)' }], ACCOUNT_LINKS);
+            expect(JSON.stringify(syncs[0].body)).not.toMatch(/"111"|"222"|"333"/);
+            remote.stop();
+        });
+
+        test('an older dashboard starting an account link starts that account on its own profile', async () => {
+            const { remote, respond, launchProfile, launchAccount, results, notify } = setup({
+                settings: { remoteStartFor: 'player@example.com' },
+                linked: {},
+                accounts: ACCOUNTS,
+                accountLinks: ACCOUNT_LINKS
+            });
+            respond({ commands: [{ id: 'start-1', type: 'start_client', clientLinkId: 'link-lynx', proxyId: 'p1' }] });
+            remote.start();
+            await waitFor(() => results.length === 1);
+
+            expect(launchAccount).toHaveBeenCalledWith('222', expect.objectContaining({ proxyId: 'p1' }));
+            expect(launchAccount.mock.calls[0][1].stillWanted()).toBe(true);
+            expect(launchProfile).not.toHaveBeenCalled();
+            expect(notify).toHaveBeenCalledWith('Starting a client from the dashboard', 'Lynx on profile main');
+            expect(results[0].body).toEqual({ succeeded: true, reason: null });
+            remote.stop();
+        });
+
+        test('an account start that fails is reported with its reason', async () => {
+            const { remote, respond, launchAccount, results } = setup({
+                settings: { remoteStartFor: 'player@example.com' },
+                accounts: ACCOUNTS,
+                accountLinks: ACCOUNT_LINKS
+            });
+            launchAccount.mockResolvedValueOnce({ problem: { kind: 'unknown-client' } });
+            respond({ commands: [{ id: 'start-1', type: 'start_client', clientLinkId: 'link-zezima', proxyId: null }] });
+            remote.start();
+            await waitFor(() => results.length === 1);
+            expect(launchAccount).toHaveBeenCalledWith('111', expect.objectContaining({ proxyId: null }));
+            expect(results[0].body).toEqual({ succeeded: false, reason: 'unknown-client' });
+            remote.stop();
+        });
+
+        test('a link of an account whose profile has alerts off is neither reported nor started', async () => {
+            const { remote, respond, launchAccount, launchProfile, results, syncs } = setup({
+                settings: { remoteStartFor: 'player@example.com' },
+                linked: {},
+                accounts: ACCOUNTS,
+                accountLinks: {}
+            });
+            respond({ commands: [{ id: 'start-1', type: 'start_client', clientLinkId: 'link-lynx', proxyId: null }] });
+            remote.start();
+            await waitFor(() => results.length === 1);
+            expect(syncs[0].body.clients).toEqual([]);
+            expect(launchAccount).not.toHaveBeenCalled();
+            expect(launchProfile).not.toHaveBeenCalled();
+            expect(results[0].body).toEqual({ succeeded: false, reason: 'unknown-client' });
+            remote.stop();
+        });
+    });
+
     describe('with launcher options', () => {
         const OPTIONS = {
             accountId: 'a_x9',
@@ -308,7 +412,7 @@ describe('starting clients from the dashboard', () => {
             const { remote, syncs } = setup({ settings: { remoteStartFor: 'player@example.com' }, startOptions });
             remote.start();
             await waitFor(() => syncs.length === 1);
-            expect(startOptions).toHaveBeenCalledWith({ main: 'link-1', alt: 'link-2' }, [{ id: 'p1', label: 'Germany (10.0.0.7:1080)' }]);
+            expect(startOptions).toHaveBeenCalledWith({ main: 'link-1', alt: 'link-2' }, [{ id: 'p1', label: 'Germany (10.0.0.7:1080)' }], {});
             expect(syncs[0].body).toEqual({
                 startAllowed: true,
                 version: '3.2.21',
