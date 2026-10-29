@@ -19,7 +19,8 @@ function setup({
     proxies = [{ id: 'p1', label: 'Germany (10.0.0.7:1080)' }],
     startOptions,
     accounts,
-    accountLinks = {}
+    accountLinks = {},
+    withoutAccount = []
 } = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-start-'));
     const settingsFile = path.join(dir, 'launcher-settings.json');
@@ -89,7 +90,7 @@ function setup({
         },
         axios,
         auth,
-        alerts: { linkedProfiles: () => linked, linkedAccounts },
+        alerts: { linkedProfiles: () => linked, linkedAccounts, profilesWithoutAccount: () => withoutAccount },
         background,
         launchProfile,
         launchAccount,
@@ -374,6 +375,29 @@ describe('starting clients from the dashboard', () => {
             await waitFor(() => results.length === 1);
             expect(launchAccount).toHaveBeenCalledWith('111', expect.objectContaining({ proxyId: null }));
             expect(results[0].body).toEqual({ succeeded: false, reason: 'unknown-client' });
+            remote.stop();
+        });
+
+        test('an older dashboard starting the link of clients without an account starts the profile without one', async () => {
+            const { remote, respond, launchProfile, launchAccount, results } = setup({
+                settings: { remoteStartFor: 'player@example.com' },
+                linked: { main: 'link-1', alt: 'link-2' },
+                accounts: ACCOUNTS,
+                accountLinks: ACCOUNT_LINKS,
+                withoutAccount: ['main']
+            });
+            respond({
+                commands: [
+                    { id: 'start-1', type: 'start_client', clientLinkId: 'link-1', proxyId: null },
+                    { id: 'start-2', type: 'start_client', clientLinkId: 'link-2', proxyId: 'p1' }
+                ]
+            });
+            remote.start();
+            await waitFor(() => results.length === 2);
+
+            expect(launchAccount).not.toHaveBeenCalled();
+            expect(launchProfile).toHaveBeenCalledWith('main', expect.objectContaining({ proxyId: null, withoutAccount: true }));
+            expect(launchProfile).toHaveBeenCalledWith('alt', expect.objectContaining({ proxyId: 'p1', withoutAccount: false }));
             remote.stop();
         });
 

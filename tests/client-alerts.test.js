@@ -678,6 +678,18 @@ describe('client-alerts', () => {
             expect(alerts.linkedAccounts([{ accountId: '1001', profile: 'Main' }])).toEqual({});
         });
 
+        test('only profile links made for clients without an account are listed as such', async () => {
+            writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Main PC' } });
+            created = [{ id: SECOND_ID, token: SECOND_TOKEN }];
+            const { alerts } = setup();
+
+            expect(alerts.profilesWithoutAccount()).toEqual([]);
+            await alerts.tokenForProfile('Ironman');
+            expect(alerts.profilesWithoutAccount()).toEqual(['Ironman']);
+            email = null;
+            expect(alerts.profilesWithoutAccount()).toEqual([]);
+        });
+
         test('a user without Jagex accounts keeps one link per profile', async () => {
             writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Main PC' } });
             created = [{ id: SECOND_ID, token: SECOND_TOKEN }];

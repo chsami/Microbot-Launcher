@@ -282,9 +282,9 @@ module.exports = function setupProfileLauncher(deps) {
         return account ? { account } : accountGone();
     };
 
-    const launchNow = async (profile, proxyId, attempt, stillWanted, accountId = null) => {
+    const launchNow = async (profile, proxyId, attempt, stillWanted, accountId = null, withoutAccount = false) => {
         if (!stillWanted()) return problem('disabled', 'Start Cancelled', 'Starting from the dashboard was turned off.');
-        const target = accountId ? findAccountById(accountId) : findAccount(profile);
+        const target = withoutAccount ? { account: null } : accountId ? findAccountById(accountId) : findAccount(profile);
         if (target.problem) return target;
         const properties = readProperties();
         let proxyIp = '';
@@ -307,12 +307,12 @@ module.exports = function setupProfileLauncher(deps) {
         });
     };
 
-    const launchProfile = (rawProfile, { proxyId = null, stillWanted = () => true } = {}) => {
+    const launchProfile = (rawProfile, { proxyId = null, stillWanted = () => true, withoutAccount = false } = {}) => {
         const profile = profileName(rawProfile);
         if (profile.length > MAX_PROFILE_LENGTH || /[\u0000-\u001f]/.test(profile)) {
             return Promise.resolve(problem('invalid-profile', 'Invalid Profile', 'That profile name is not valid.'));
         }
-        return enqueue(profile, (attempt) => launchNow(profile, proxyId, attempt, stillWanted));
+        return enqueue(profile, (attempt) => launchNow(profile, proxyId, attempt, stillWanted, null, withoutAccount === true));
     };
 
     const launchAccount = (accountId, { proxyId = null, stillWanted = () => true, onAccepted = () => {} } = {}) => {

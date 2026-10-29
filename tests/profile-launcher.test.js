@@ -175,6 +175,14 @@ describe('launching a profile without the launcher window', () => {
         expect(deps.launch.mock.calls[0][0].account).toBeUndefined();
     });
 
+    test('a start without an account never logs in the Jagex account that uses the profile', async () => {
+        const { deps, launchProfile } = setup({ accounts: [JAGEX_MAIN, { ...JAGEX_ALT, profile: 'main' }] });
+        await expect(launchProfile('main', { withoutAccount: true })).resolves.toEqual({ started: true });
+        expect(deps.writeCredentials).not.toHaveBeenCalled();
+        expect(deps.launch).toHaveBeenCalledWith(expect.objectContaining({ noJagexProfile: 'main' }));
+        expect(deps.launch.mock.calls[0][0].account).toBeUndefined();
+    });
+
     test('accounts without a profile count as the default profile', async () => {
         const { deps, launchProfile } = setup({ accounts: [{ ...JAGEX_MAIN, profile: undefined }] });
         await launchProfile('');

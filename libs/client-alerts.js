@@ -378,6 +378,14 @@ module.exports = function setupClientAlerts(deps) {
         return linked;
     };
 
+    const profilesWithoutAccount = () => {
+        const email = signedInEmail();
+        if (!email || !canPersist()) return [];
+        return Object.entries(readLinks(email))
+            .filter(([, link]) => link?.id && link.noJagex === true)
+            .map(([profile]) => profile);
+    };
+
     const linkedAccounts = (accounts) => {
         const email = signedInEmail();
         if (!email || !canPersist()) return {};
@@ -390,7 +398,7 @@ module.exports = function setupClientAlerts(deps) {
         return linked;
     };
 
-    return { tokenForLaunch, tokenForProfile, retryRevokes, linkedProfiles, linkedAccounts };
+    return { tokenForLaunch, tokenForProfile, retryRevokes, linkedProfiles, linkedAccounts, profilesWithoutAccount };
 };
 
 function ownEntry(links, key) {

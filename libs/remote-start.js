@@ -136,6 +136,16 @@ module.exports = function setupRemoteStart(deps) {
         }
     };
 
+    const profilesWithoutAccount = () => {
+        try {
+            const profiles = alerts?.profilesWithoutAccount?.();
+            return Array.isArray(profiles) ? profiles : [];
+        } catch (error) {
+            log.warn(`Could not read the links of clients without an account: ${error?.message || error}`);
+            return [];
+        }
+    };
+
     const linkedAccounts = (accounts) => {
         try {
             return alerts?.linkedAccounts?.(accounts) || {};
@@ -210,7 +220,7 @@ module.exports = function setupRemoteStart(deps) {
     const findLinked = (clientLinkId) => {
         const id = String(clientLinkId);
         const profile = Object.entries(linkedProfiles()).find(([, linkId]) => linkId === id)?.[0];
-        if (profile) return { profile };
+        if (profile) return { profile, withoutAccount: profilesWithoutAccount().includes(profile) };
         if (!launchAccount) return null;
         const accountLinks = linkedAccounts(readChoices().accounts);
         const accountId = Object.entries(accountLinks).find(([, linkId]) => linkId === id)?.[0];
@@ -261,7 +271,11 @@ module.exports = function setupRemoteStart(deps) {
             } else {
                 log.info(`The dashboard asked to start profile "${target.profile}".`);
                 notify?.('Starting a client from the dashboard', `Profile: ${target.profile}`);
-                outcome = await launchProfile(target.profile, { proxyId: command.proxyId || null, stillWanted });
+                outcome = await launchProfile(target.profile, {
+                    proxyId: command.proxyId || null,
+                    stillWanted,
+                    withoutAccount: target.withoutAccount
+                });
             }
         } catch (error) {
             outcome = { problem: { kind: 'launch-failed' } };
