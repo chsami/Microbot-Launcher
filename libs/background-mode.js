@@ -146,6 +146,7 @@ module.exports = function setupBackgroundMode(deps) {
         start,
         attachWindow,
         close,
+        showWindow,
         allowQuit: () => {
             quitting = true;
         },
