@@ -7,6 +7,8 @@ function registerLauncherUpdater({
     ipcMain,
     log,
     send,
+    Notification,
+    showWindow = () => {},
     beforeInstall = () => {},
     now = Date.now,
     every = setInterval
@@ -18,10 +20,31 @@ function registerLauncherUpdater({
     let downloaded = false;
     let checking = false;
     let lastCheck = 0;
+    let watched = null;
+    let notice = null;
+    const notified = new Set();
 
-    autoUpdater.on('update-available', (info) =>
-        send({ state: 'available', version: info.version, current: autoUpdater.currentVersion.version })
-    );
+    const notifyIfHidden = (version) => {
+        if (!watched || watched.isDestroyed() || notified.has(version)) return;
+        if (watched.isVisible() && !watched.isMinimized()) return;
+        if (!Notification?.isSupported?.()) return;
+        notified.add(version);
+        try {
+            notice = new Notification({
+                title: `Microbot Launcher ${version} is available`,
+                body: 'Open the launcher to update.'
+            });
+            notice.on('click', showWindow);
+            notice.show();
+        } catch (error) {
+            log.warn(`Could not show the update notice: ${error?.message || error}`);
+        }
+    };
+
+    autoUpdater.on('update-available', (info) => {
+        send({ state: 'available', version: info.version, current: autoUpdater.currentVersion.version });
+        notifyIfHidden(info.version);
+    });
     autoUpdater.on('download-progress', (progress) =>
         send({ state: 'downloading', percent: Math.round(progress.percent) })
     );
@@ -61,6 +84,7 @@ function registerLauncherUpdater({
     };
 
     const watch = (win) => {
+        watched = win;
         check();
         const recheck = () => check({ unlessCheckedWithin: SHOWN_RECHECK_AFTER_MS });
         win.on('show', recheck);

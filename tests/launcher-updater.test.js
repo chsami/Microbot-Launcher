@@ -16,7 +16,15 @@ function setup(beforeInstall) {
     const handlers = {};
     const ipcMain = { handle: (channel, fn) => (handlers[channel] = fn) };
     const send = jest.fn();
-    const log = { error: jest.fn() };
+    const log = { error: jest.fn(), warn: jest.fn() };
+    const notices = [];
+    const Notification = jest.fn(function (options) {
+        const notice = Object.assign(new EventEmitter(), { options, show: jest.fn() });
+        notices.push(notice);
+        return notice;
+    });
+    Notification.isSupported = jest.fn(() => true);
+    const showWindow = jest.fn();
     const clock = { now: 1_000_000 };
     const timers = [];
     const every = jest.fn((fn, ms) => {
@@ -28,11 +36,21 @@ function setup(beforeInstall) {
         ipcMain,
         log,
         send,
+        Notification,
+        showWindow,
         beforeInstall,
         now: () => clock.now,
         every
     });
-    return { autoUpdater, handlers, send, log, updater, clock, timers };
+    return { autoUpdater, handlers, send, log, updater, clock, timers, Notification, notices, showWindow };
+}
+
+function windowThatIs({ visible = true, minimized = false } = {}) {
+    return Object.assign(new EventEmitter(), {
+        isVisible: () => visible,
+        isMinimized: () => minimized,
+        isDestroyed: () => false
+    });
 }
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -141,5 +159,64 @@ describe('launcher updater', () => {
         updater.check();
         await settle();
         expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2);
+    });
+
+    test('tells a player running in the tray about a new version with a desktop notification', () => {
+        const { autoUpdater, updater, notices } = setup();
+        updater.watch(windowThatIs({ visible: false }));
+        autoUpdater.emit('update-available', { version: '3.2.17' });
+        expect(notices).toHaveLength(1);
+        expect(notices[0].options).toEqual({
+            title: 'Microbot Launcher 3.2.17 is available',
+            body: 'Open the launcher to update.'
+        });
+        expect(notices[0].show).toHaveBeenCalled();
+    });
+
+    test('also notifies when the window is minimised', () => {
+        const { autoUpdater, updater, notices } = setup();
+        updater.watch(windowThatIs({ minimized: true }));
+        autoUpdater.emit('update-available', { version: '3.2.17' });
+        expect(notices).toHaveLength(1);
+    });
+
+    test('leaves it to the banner when the window is open', () => {
+        const { autoUpdater, updater, send, Notification } = setup();
+        updater.watch(windowThatIs());
+        autoUpdater.emit('update-available', { version: '3.2.17' });
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ state: 'available', version: '3.2.17' }));
+        expect(Notification).not.toHaveBeenCalled();
+    });
+
+    test('notifies once per version, however often the tray rechecks', () => {
+        const { autoUpdater, updater, notices } = setup();
+        updater.watch(windowThatIs({ visible: false }));
+        autoUpdater.emit('update-available', { version: '3.2.17' });
+        autoUpdater.emit('update-available', { version: '3.2.17' });
+        autoUpdater.emit('update-available', { version: '3.2.17' });
+        expect(notices).toHaveLength(1);
+        autoUpdater.emit('update-available', { version: '3.2.18' });
+        expect(notices.map((notice) => notice.options.title)).toEqual([
+            'Microbot Launcher 3.2.17 is available',
+            'Microbot Launcher 3.2.18 is available'
+        ]);
+    });
+
+    test('clicking the notification brings the launcher back, where the banner offers the update', () => {
+        const { autoUpdater, updater, notices, showWindow } = setup();
+        updater.watch(windowThatIs({ visible: false }));
+        autoUpdater.emit('update-available', { version: '3.2.17' });
+        expect(showWindow).not.toHaveBeenCalled();
+        notices[0].emit('click');
+        expect(showWindow).toHaveBeenCalledTimes(1);
+    });
+
+    test('stays quiet when the system has no notifications or the window is not being watched', () => {
+        const { autoUpdater, updater, Notification } = setup();
+        autoUpdater.emit('update-available', { version: '3.2.17' });
+        Notification.isSupported.mockReturnValue(false);
+        updater.watch(windowThatIs({ visible: false }));
+        autoUpdater.emit('update-available', { version: '3.2.18' });
+        expect(Notification).not.toHaveBeenCalled();
     });
 });
