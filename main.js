@@ -135,6 +135,7 @@ async function loadLibraries() {
                         alerts: deps.alerts,
                         background,
                         launchProfile: launcher.launchProfile,
+                        launchAccount: launcher.launchAccount,
                         launchOptions: launcher.launchOptions,
                         listProxies: launcher.listProxies,
                         startOptions: launcher.startOptions,

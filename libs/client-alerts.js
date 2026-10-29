@@ -6,6 +6,7 @@ const LAUNCH_BUDGET_MS = 5000;
 const DEFAULT_LABEL = 'Microbot client';
 const DEFAULT_PROFILE = 'default';
 const TOKEN_PATTERN = /^mbc_[A-Za-z0-9_-]{43}$/;
+const MAX_LABEL_LENGTH = 60;
 
 module.exports = function setupClientAlerts(deps) {
     const { ipcMain, log, fs, safeStorage, auth, linksFile, settingsFile } = deps;
@@ -51,23 +52,24 @@ module.exports = function setupClientAlerts(deps) {
     };
 
     const readStore = (email) => {
-        const empty = { profiles: {}, revoke: [] };
+        const empty = { profiles: {}, accounts: {}, revoke: [] };
         try {
             if (!canPersist() || !fs.existsSync(linksFile)) return empty;
             const value = JSON.parse(safeStorage.decryptString(fs.readFileSync(linksFile)));
             if (value?.email !== email || !value?.profiles || typeof value.profiles !== 'object') return empty;
             const revoke = Array.isArray(value.revoke) ? value.revoke.filter((id) => typeof id === 'string') : [];
-            return { profiles: value.profiles, revoke };
+            const accounts = value.accounts && typeof value.accounts === 'object' && !Array.isArray(value.accounts) ? value.accounts : {};
+            return { profiles: value.profiles, accounts, revoke };
         } catch (error) {
             log.warn(`Could not read alert links: ${error?.message || error}`);
             return empty;
         }
     };
 
-    const writeStore = (email, { profiles, revoke }) => {
+    const writeStore = (email, { profiles, accounts = {}, revoke }) => {
         if (!canPersist()) return;
         try {
-            fs.writeFileSync(linksFile, safeStorage.encryptString(JSON.stringify({ email, profiles, revoke })), { mode: 0o600 });
+            fs.writeFileSync(linksFile, safeStorage.encryptString(JSON.stringify({ email, profiles, accounts, revoke })), { mode: 0o600 });
             fs.chmodSync(linksFile, 0o600);
         } catch (error) {
             log.warn(`Could not save alert links: ${error?.message || error}`);
@@ -77,6 +79,16 @@ module.exports = function setupClientAlerts(deps) {
     const readLinks = (email) => readStore(email).profiles;
 
     const writeLinks = (email, profiles) => writeStore(email, { ...readStore(email), profiles });
+
+    const readEntry = (email, slot) => ownEntry(readStore(email)[slot.kind], slot.key);
+
+    const writeEntry = (email, slot, entry) => {
+        const store = readStore(email);
+        const links = { ...store[slot.kind] };
+        if (entry) links[slot.key] = entry;
+        else delete links[slot.key];
+        writeStore(email, { ...store, [slot.kind]: links });
+    };
 
     const linkStillActive = async (stored) => {
         try {
@@ -92,15 +104,16 @@ module.exports = function setupClientAlerts(deps) {
     };
 
     const nextLabel = (email) => {
-        const used = new Set(Object.values(readLinks(email)).map((link) => link?.label));
+        const store = readStore(email);
+        const used = new Set([...Object.values(store.profiles), ...Object.values(store.accounts)].map((link) => link?.label));
         if (!used.has(DEFAULT_LABEL)) return DEFAULT_LABEL;
         let number = 2;
         while (used.has(`${DEFAULT_LABEL} ${number}`)) number += 1;
         return `${DEFAULT_LABEL} ${number}`;
     };
 
-    const createLink = async (email) => {
-        const label = nextLabel(email);
+    const createLink = async (email, wanted) => {
+        const label = wanted || nextLabel(email);
         const { data } = await auth.request({
             method: 'post',
             path: LINKS_PATH,
@@ -113,29 +126,74 @@ module.exports = function setupClientAlerts(deps) {
         return { id: data.id, token: data.token, label: typeof data.label === 'string' ? data.label : label };
     };
 
-    const resolveToken = async (profile, email) => {
-        const links = readLinks(email);
-        const stored = links[profile];
+    const adoptProfileLink = (email, slot) => {
+        if (slot.kind !== 'accounts') return;
+        const store = readStore(email);
+        if (ownEntry(store.accounts, slot.key)) return;
+        const legacy = ownEntry(store.profiles, slot.profile);
+        if (!legacy?.id || legacy.noJagex) return;
+        const profiles = { ...store.profiles };
+        delete profiles[slot.profile];
+        const adopted = { id: legacy.id, token: legacy.token, label: legacy.label, profile: slot.profile };
+        if (slot.label) adopted.renameTo = slot.label;
+        writeStore(email, { ...store, profiles, accounts: { ...store.accounts, [slot.key]: adopted } });
+        log.info(`The alert link of profile "${slot.profile}" now belongs to the Jagex account launched on it.`);
+    };
+
+    const renameAdopted = async (email, slot, entry) => {
+        let label = entry.renameTo;
+        try {
+            const { data } = await auth.request({
+                method: 'patch',
+                path: `${LINKS_PATH}/${encodeURIComponent(entry.id)}`,
+                data: { label },
+                timeout: REQUEST_TIMEOUT_MS
+            });
+            if (typeof data?.label === 'string' && data.label) label = data.label;
+        } catch (error) {
+            const status = error?.response?.status;
+            if (!status || status >= 500 || status === 401 || status === 429) {
+                log.warn(`Could not rename the alert link; will retry at the next launch: ${error?.message || error}`);
+                return;
+            }
+            log.warn(`The dashboard refused the new alert link name; keeping the old one: ${error?.message || error}`);
+            label = entry.label;
+        }
+        const current = readEntry(email, slot);
+        if (current?.id !== entry.id) return;
+        const { renameTo, ...rest } = current;
+        writeEntry(email, slot, { ...rest, label });
+    };
+
+    const keepEntryCurrent = async (email, slot, entry) => {
+        if (slot.kind !== 'accounts') return;
+        if (entry.profile !== slot.profile) writeEntry(email, slot, { ...entry, profile: slot.profile });
+        if (typeof entry.renameTo === 'string' && entry.renameTo) await renameAdopted(email, slot, readEntry(email, slot));
+    };
+
+    const resolveToken = async (slot, email) => {
+        adoptProfileLink(email, slot);
+        const stored = readEntry(email, slot);
         if (stored && TOKEN_PATTERN.test(String(stored.token))) {
             const active = await linkStillActive(stored);
-            if (!isEnabled(profile)) return null;
-            if (active) return stored.token;
-            log.info(`Alert link for profile "${profile}" was revoked; creating a new one.`);
+            if (!isEnabled(slot.profile)) return null;
+            const current = readEntry(email, slot);
+            if (active && current?.id === stored.id) {
+                await keepEntryCurrent(email, slot, current);
+                return stored.token;
+            }
+            if (!active) log.info(`The alert link for ${describe(slot)} was revoked; creating a new one.`);
         }
-        if (stored) {
-            const current = readLinks(email);
-            delete current[profile];
-            writeLinks(email, current);
-        }
-        const created = await createLink(email);
-        if (!isEnabled(profile)) {
+        if (stored && readEntry(email, slot)?.id === stored.id) writeEntry(email, slot, null);
+        const created = await createLink(email, slot.label);
+        if (!isEnabled(slot.profile)) {
             queueRevoke(email, String(created.id));
             retryRevokes();
-            log.info(`Alerts were turned off for profile "${profile}" while it was being linked; revoking the new link.`);
+            log.info(`Alerts were turned off for profile "${slot.profile}" while it was being linked; revoking the new link.`);
             return null;
         }
-        writeLinks(email, { ...readLinks(email), [profile]: created });
-        log.info(`Linked profile "${profile}" for bot alerts.`);
+        writeEntry(email, slot, slot.kind === 'accounts' ? { ...created, profile: slot.profile } : { ...created, noJagex: true });
+        log.info(`Linked ${describe(slot)} for bot alerts.`);
         return created.token;
     };
 
@@ -170,11 +228,24 @@ module.exports = function setupClientAlerts(deps) {
         const email = signedInEmail();
         if (!email || !canPersist()) return;
         const store = readStore(email);
-        const stored = store.profiles[profile];
-        if (!stored) return;
-        delete store.profiles[profile];
-        writeStore(email, store);
-        if (stored.id) queueRevoke(email, String(stored.id));
+        const profiles = { ...store.profiles };
+        const accounts = { ...store.accounts };
+        const removed = [];
+        const stored = ownEntry(profiles, profile);
+        if (stored) {
+            delete profiles[profile];
+            removed.push(stored);
+        }
+        Object.keys(accounts).forEach((accountId) => {
+            if (accounts[accountId]?.profile !== profile) return;
+            removed.push(accounts[accountId]);
+            delete accounts[accountId];
+        });
+        if (!removed.length) return;
+        writeStore(email, { ...store, profiles, accounts });
+        removed.forEach((link) => {
+            if (link?.id) queueRevoke(email, String(link.id));
+        });
         log.info(`Unlinked profile "${profile}" from bot alerts.`);
     };
 
@@ -216,7 +287,7 @@ module.exports = function setupClientAlerts(deps) {
         return labels;
     };
 
-    const tokenForProfile = async (rawProfile) => {
+    const tokenForLaunch = async (rawProfile, account) => {
         const profile = profileName(rawProfile);
         const email = signedInEmail();
         if (!email || !auth || !isEnabled(profile)) return null;
@@ -225,28 +296,34 @@ module.exports = function setupClientAlerts(deps) {
             return null;
         }
         retryRevokes();
-        const key = `${email}\n${profile}`;
+        const accountId = typeof account?.accountId === 'string' && account.accountId ? account.accountId : null;
+        const slot = accountId
+            ? { kind: 'accounts', key: accountId, profile, label: accountLabel(account) }
+            : { kind: 'profiles', key: profile, profile, label: null };
+        const key = `${email}\n${slot.kind}\n${slot.key}`;
         if (!pending.has(key)) {
             pending.set(
                 key,
-                resolveToken(profile, email)
+                resolveToken(slot, email)
                     .catch((error) => {
                         const status = error?.response?.status;
                         if (status === 401) {
                             log.info('Microbot sign-in expired; launching without alerts.');
                         } else {
-                            log.warn(`Could not link profile "${profile}" for bot alerts: ${error?.message || error}`);
+                            log.warn(`Could not link ${describe(slot)} for bot alerts: ${error?.message || error}`);
                         }
                         return null;
                     })
                     .finally(() => pending.delete(key))
             );
         }
-        return withinBudget(pending.get(key), () => storedToken(email, profile));
+        return withinBudget(pending.get(key), () => storedToken(email, slot));
     };
 
-    const storedToken = (email, profile) => {
-        const stored = readLinks(email)[profile];
+    const tokenForProfile = (rawProfile) => tokenForLaunch(rawProfile, null);
+
+    const storedToken = (email, slot) => {
+        const stored = readEntry(email, slot);
         return stored && TOKEN_PATTERN.test(String(stored.token)) ? stored.token : null;
     };
 
@@ -301,8 +378,41 @@ module.exports = function setupClientAlerts(deps) {
         return linked;
     };
 
-    return { tokenForProfile, retryRevokes, linkedProfiles };
+    const profilesWithoutAccount = () => {
+        const email = signedInEmail();
+        if (!email || !canPersist()) return [];
+        return Object.entries(readLinks(email))
+            .filter(([, link]) => link?.id && link.noJagex === true)
+            .map(([profile]) => profile);
+    };
+
+    const linkedAccounts = (accounts) => {
+        const email = signedInEmail();
+        if (!email || !canPersist()) return {};
+        const stored = readStore(email).accounts;
+        const linked = {};
+        (Array.isArray(accounts) ? accounts : []).forEach((account) => {
+            const link = typeof account?.accountId === 'string' ? ownEntry(stored, account.accountId) : null;
+            if (link?.id && isEnabled(profileName(account.profile))) linked[account.accountId] = String(link.id);
+        });
+        return linked;
+    };
+
+    return { tokenForLaunch, tokenForProfile, retryRevokes, linkedProfiles, linkedAccounts, profilesWithoutAccount };
 };
+
+function ownEntry(links, key) {
+    return links && Object.prototype.hasOwnProperty.call(links, key) ? links[key] : undefined;
+}
+
+function describe(slot) {
+    return slot.kind === 'accounts' ? `the Jagex account on profile "${slot.profile}"` : `profile "${slot.profile}"`;
+}
+
+function accountLabel(account) {
+    const name = typeof account?.displayName === 'string' ? account.displayName.replace(/[\u0000-\u001f\u007f]/g, '').trim() : '';
+    return name ? name.slice(0, MAX_LABEL_LENGTH) : null;
+}
 
 function defaultLabel() {
     return DEFAULT_LABEL;
