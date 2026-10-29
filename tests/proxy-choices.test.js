@@ -50,4 +50,17 @@ describe('proxy choices', () => {
         expect(fs.readFileSync(path.join(microbotDir, 'proxy-id-key'), 'utf8')).toMatch(/^[0-9a-f]{64}$/);
         expect(setupProxyChoices({ fs, path, microbotDir }).idFor('10.0.0.8:1080')).toBe(id);
     });
+
+    test('account and profile ids use the same key, stay stable and never collide with proxy ids', () => {
+        const microbotDir = tempDir();
+        const choices = setupProxyChoices({ fs, path, microbotDir });
+        const again = setupProxyChoices({ fs, path, microbotDir });
+        expect(choices.accountIdFor('123')).toMatch(/^a_[A-Za-z0-9_-]{22}$/);
+        expect(choices.profileIdFor('main')).toMatch(/^p_[A-Za-z0-9_-]{22}$/);
+        expect(again.accountIdFor('123')).toBe(choices.accountIdFor('123'));
+        expect(again.profileIdFor('main')).toBe(choices.profileIdFor('main'));
+        expect(choices.profileIdFor('123').slice(2)).not.toBe(choices.accountIdFor('123').slice(2));
+        expect(choices.accountIdFor('123').slice(2)).not.toBe(choices.idFor('123'));
+        expect(setupProxyChoices({ fs, path, microbotDir: tempDir() }).profileIdFor('main')).not.toBe(choices.profileIdFor('main'));
+    });
 });

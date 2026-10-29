@@ -49,7 +49,13 @@ module.exports = function setupProxyChoices({ fs, path, microbotDir }) {
         return key;
     };
 
-    const idFor = (address) => crypto.createHmac('sha256', loadKey()).update(address.trim()).digest('base64url').slice(0, 22);
+    const hmacId = (value) => crypto.createHmac('sha256', loadKey()).update(value).digest('base64url').slice(0, 22);
+
+    const idFor = (address) => hmacId(address.trim());
+
+    const accountIdFor = (accountId) => `a_${hmacId(`account:${accountId}`)}`;
+
+    const profileIdFor = (name) => `p_${hmacId(`profile:${name}`)}`;
 
     const savedProxies = (properties, accounts) => {
         const proxies = [];
@@ -68,7 +74,7 @@ module.exports = function setupProxyChoices({ fs, path, microbotDir }) {
         return proxies.map((proxy) => ({ ...proxy, id: idFor(proxy.address) }));
     };
 
-    return { savedProxies, idFor };
+    return { savedProxies, idFor, accountIdFor, profileIdFor };
 };
 
 module.exports.parseProxyEndpoint = parseProxyEndpoint;
