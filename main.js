@@ -116,7 +116,8 @@ async function loadLibraries() {
                 safeStorage,
                 auth: apiAuth,
                 linksFile: path.join(microbotDir, 'alert-links.dat'),
-                settingsFile: path.join(microbotDir, 'alert-profiles.json')
+                settingsFile: path.join(microbotDir, 'alert-profiles.json'),
+                accountsFile: path.join(microbotDir, 'accounts.json')
             });
         } catch (alertsError) {
             log.error('Error setting up bot alerts:', alertsError);

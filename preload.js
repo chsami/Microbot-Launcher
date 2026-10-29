@@ -105,7 +105,10 @@ contextBridge.exposeInMainWorld('electron', {
     alerts: {
         status: (profiles) => ipcRenderer.invoke('alerts:status', profiles),
         setEnabled: (profile, enabled) =>
-            ipcRenderer.invoke('alerts:set-enabled', profile, enabled)
+            ipcRenderer.invoke('alerts:set-enabled', profile, enabled),
+        accountStatus: (accountIds) => ipcRenderer.invoke('alerts:accounts', accountIds),
+        setAccountEnabled: (accountId, enabled) =>
+            ipcRenderer.invoke('alerts:set-account-enabled', accountId, enabled)
     },
     ipcRenderer: {
         send: (channel, data) => ipcRenderer.send(channel, data),

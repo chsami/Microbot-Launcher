@@ -7,9 +7,10 @@ const DEFAULT_LABEL = 'Microbot client';
 const DEFAULT_PROFILE = 'default';
 const TOKEN_PATTERN = /^mbc_[A-Za-z0-9_-]{43}$/;
 const MAX_LABEL_LENGTH = 60;
+const MAX_ACCOUNT_ID_LENGTH = 128;
 
 module.exports = function setupClientAlerts(deps) {
-    const { ipcMain, log, fs, safeStorage, auth, linksFile, settingsFile } = deps;
+    const { ipcMain, log, fs, safeStorage, auth, linksFile, settingsFile, accountsFile } = deps;
     const launchBudgetMs = deps.launchBudgetMs || LAUNCH_BUDGET_MS;
 
     const pending = new Map();
@@ -32,24 +33,89 @@ module.exports = function setupClientAlerts(deps) {
         }
     };
 
-    const readDisabled = () => {
+    const readSettings = () => {
         try {
-            if (!fs.existsSync(settingsFile)) return [];
+            if (!fs.existsSync(settingsFile)) return {};
             const value = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-            return Array.isArray(value?.disabled) ? value.disabled.filter((name) => typeof name === 'string') : [];
+            return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
         } catch (error) {
             log.warn(`Could not read alert settings: ${error?.message || error}`);
-            return [];
+            return {};
         }
     };
+
+    const writeSettings = ({ disabled, accounts, accountsMigrated }) => {
+        fs.writeFileSync(settingsFile, JSON.stringify({ disabled, accounts, accountsMigrated }, null, 2));
+    };
+
+    const readAccountProfiles = () => {
+        if (!accountsFile) return null;
+        try {
+            if (!fs.existsSync(accountsFile)) return [];
+            const value = JSON.parse(fs.readFileSync(accountsFile, 'utf8'));
+            if (!Array.isArray(value)) return null;
+            return value.filter((account) => isAccountId(account?.accountId));
+        } catch (error) {
+            log.warn(`Could not read the Jagex accounts for their dashboard switches: ${error?.message || error}`);
+            return null;
+        }
+    };
+
+    const migrateAccounts = (state) => {
+        const known = readAccountProfiles();
+        if (!known) return state;
+        known.forEach((account) => {
+            if (!hasOwn(state.accounts, account.accountId)) {
+                state.accounts[account.accountId] = !state.disabled.includes(profileName(account.profile));
+            }
+        });
+        const migrated = { ...state, accountsMigrated: true };
+        try {
+            writeSettings(migrated);
+        } catch (error) {
+            log.warn(`Could not save alert settings: ${error?.message || error}`);
+        }
+        return migrated;
+    };
+
+    const settings = () => {
+        const value = readSettings();
+        const disabled = Array.isArray(value.disabled) ? value.disabled.filter((name) => typeof name === 'string') : [];
+        const accounts = Object.create(null);
+        if (value.accounts && typeof value.accounts === 'object' && !Array.isArray(value.accounts)) {
+            Object.keys(value.accounts).forEach((accountId) => {
+                if (typeof value.accounts[accountId] === 'boolean') accounts[accountId] = value.accounts[accountId];
+            });
+        }
+        const state = { disabled, accounts, accountsMigrated: value.accountsMigrated === true };
+        return state.accountsMigrated ? state : migrateAccounts(state);
+    };
+
+    const readDisabled = () => settings().disabled;
 
     const isEnabled = (profile) => !readDisabled().includes(profile);
 
     const setEnabled = (profile, enabled) => {
-        const disabled = readDisabled().filter((name) => name !== profile);
+        const state = settings();
+        const disabled = state.disabled.filter((name) => name !== profile);
         if (!enabled) disabled.push(profile);
-        fs.writeFileSync(settingsFile, JSON.stringify({ disabled }, null, 2));
+        writeSettings({ ...state, disabled });
     };
+
+    const accountOn = (state, accountId, profile) => {
+        if (hasOwn(state.accounts, accountId)) return state.accounts[accountId];
+        return state.accountsMigrated || !state.disabled.includes(profile);
+    };
+
+    const isAccountEnabled = (accountId, profile) => accountOn(settings(), accountId, profile);
+
+    const setAccountEnabled = (accountId, enabled) => {
+        const state = settings();
+        state.accounts[accountId] = enabled;
+        writeSettings(state);
+    };
+
+    const slotEnabled = (slot) => (slot.kind === 'accounts' ? isAccountEnabled(slot.key, slot.profile) : isEnabled(slot.profile));
 
     const readStore = (email) => {
         const empty = { profiles: {}, accounts: {}, revoke: [] };
@@ -176,7 +242,7 @@ module.exports = function setupClientAlerts(deps) {
         const stored = readEntry(email, slot);
         if (stored && TOKEN_PATTERN.test(String(stored.token))) {
             const active = await linkStillActive(stored);
-            if (!isEnabled(slot.profile)) return null;
+            if (!slotEnabled(slot)) return null;
             const current = readEntry(email, slot);
             if (active && current?.id === stored.id) {
                 await keepEntryCurrent(email, slot, current);
@@ -186,13 +252,11 @@ module.exports = function setupClientAlerts(deps) {
         }
         if (stored && readEntry(email, slot)?.id === stored.id) writeEntry(email, slot, null);
         const created = await createLink(email, slot.label);
-        if (!isEnabled(slot.profile)) {
-            queueRevoke(email, String(created.id));
-            retryRevokes();
-            log.info(`Alerts were turned off for profile "${slot.profile}" while it was being linked; revoking the new link.`);
+        writeEntry(email, slot, slot.kind === 'accounts' ? { ...created, profile: slot.profile } : { ...created, noJagex: true });
+        if (!slotEnabled(slot)) {
+            log.info(`The dashboard switch for ${describe(slot)} was turned off while it was being linked; keeping the link for later.`);
             return null;
         }
-        writeEntry(email, slot, slot.kind === 'accounts' ? { ...created, profile: slot.profile } : { ...created, noJagex: true });
         log.info(`Linked ${describe(slot)} for bot alerts.`);
         return created.token;
     };
@@ -217,36 +281,6 @@ module.exports = function setupClientAlerts(deps) {
     const retryRevokes = () => {
         revoking = revoking.then(revokeQueued, revokeQueued);
         return revoking;
-    };
-
-    const queueRevoke = (email, id) => {
-        const store = readStore(email);
-        if (!store.revoke.includes(id)) writeStore(email, { ...store, revoke: [...store.revoke, id] });
-    };
-
-    const unlinkProfile = (profile) => {
-        const email = signedInEmail();
-        if (!email || !canPersist()) return;
-        const store = readStore(email);
-        const profiles = { ...store.profiles };
-        const accounts = { ...store.accounts };
-        const removed = [];
-        const stored = ownEntry(profiles, profile);
-        if (stored) {
-            delete profiles[profile];
-            removed.push(stored);
-        }
-        Object.keys(accounts).forEach((accountId) => {
-            if (accounts[accountId]?.profile !== profile) return;
-            removed.push(accounts[accountId]);
-            delete accounts[accountId];
-        });
-        if (!removed.length) return;
-        writeStore(email, { ...store, profiles, accounts });
-        removed.forEach((link) => {
-            if (link?.id) queueRevoke(email, String(link.id));
-        });
-        log.info(`Unlinked profile "${profile}" from bot alerts.`);
     };
 
     const linkLabels = async (email, profiles) => {
@@ -290,16 +324,17 @@ module.exports = function setupClientAlerts(deps) {
     const tokenForLaunch = async (rawProfile, account) => {
         const profile = profileName(rawProfile);
         const email = signedInEmail();
-        if (!email || !auth || !isEnabled(profile)) return null;
+        if (!email || !auth) return null;
+        const accountId = isAccountId(account?.accountId) ? account.accountId : null;
+        const slot = accountId
+            ? { kind: 'accounts', key: accountId, profile, label: accountLabel(account) }
+            : { kind: 'profiles', key: profile, profile, label: null };
+        if (!slotEnabled(slot)) return null;
         if (!canPersist()) {
             log.info('Bot alerts need secure storage, which is not available; launching without alerts.');
             return null;
         }
         retryRevokes();
-        const accountId = typeof account?.accountId === 'string' && account.accountId ? account.accountId : null;
-        const slot = accountId
-            ? { kind: 'accounts', key: accountId, profile, label: accountLabel(account) }
-            : { kind: 'profiles', key: profile, profile, label: null };
         const key = `${email}\n${slot.kind}\n${slot.key}`;
         if (!pending.has(key)) {
             pending.set(
@@ -361,19 +396,37 @@ module.exports = function setupClientAlerts(deps) {
             log.warn(`Could not save alert settings: ${error?.message || error}`);
             return { error: 'Could not save the alert setting.', enabled: isEnabled(profile) };
         }
-        if (!enabled) {
-            unlinkProfile(profile);
-            await retryRevokes();
-        }
         return { enabled: isEnabled(profile), label: defaultLabel(profile) };
+    });
+
+    ipcMain.handle('alerts:accounts', async (_event, accountIds) => {
+        const email = signedInEmail();
+        const signedIn = Boolean(email);
+        const state = settings();
+        const ids = (Array.isArray(accountIds) ? accountIds : []).filter(isAccountId);
+        const known = readAccountProfiles() || [];
+        const enabled = Object.fromEntries(ids.map((accountId) => [accountId, accountOn(state, accountId, accountProfile(known, accountId))]));
+        return { signedIn, available: signedIn && Boolean(auth) && canPersist(), enabled };
+    });
+
+    ipcMain.handle('alerts:set-account-enabled', async (_event, accountId, enabled) => {
+        if (!isAccountId(accountId)) return { error: 'That Jagex account could not be found.' };
+        try {
+            setAccountEnabled(accountId, Boolean(enabled));
+        } catch (error) {
+            log.warn(`Could not save alert settings: ${error?.message || error}`);
+            return { error: 'Could not save the dashboard setting.', enabled: isAccountEnabled(accountId, accountProfile(readAccountProfiles() || [], accountId)) };
+        }
+        return { enabled: isAccountEnabled(accountId, DEFAULT_PROFILE) };
     });
 
     const linkedProfiles = () => {
         const email = signedInEmail();
         if (!email || !canPersist()) return {};
+        const disabled = readDisabled();
         const linked = {};
         Object.entries(readLinks(email)).forEach(([profile, link]) => {
-            if (link?.id && isEnabled(profile)) linked[profile] = String(link.id);
+            if (link?.id && !disabled.includes(profile)) linked[profile] = String(link.id);
         });
         return linked;
     };
@@ -390,10 +443,11 @@ module.exports = function setupClientAlerts(deps) {
         const email = signedInEmail();
         if (!email || !canPersist()) return {};
         const stored = readStore(email).accounts;
+        const state = settings();
         const linked = {};
         (Array.isArray(accounts) ? accounts : []).forEach((account) => {
-            const link = typeof account?.accountId === 'string' ? ownEntry(stored, account.accountId) : null;
-            if (link?.id && isEnabled(profileName(account.profile))) linked[account.accountId] = String(link.id);
+            const link = isAccountId(account?.accountId) ? ownEntry(stored, account.accountId) : null;
+            if (link?.id && accountOn(state, account.accountId, profileName(account.profile))) linked[account.accountId] = String(link.id);
         });
         return linked;
     };
@@ -401,8 +455,20 @@ module.exports = function setupClientAlerts(deps) {
     return { tokenForLaunch, tokenForProfile, retryRevokes, linkedProfiles, linkedAccounts, profilesWithoutAccount };
 };
 
+function hasOwn(object, key) {
+    return Boolean(object) && Object.prototype.hasOwnProperty.call(object, key);
+}
+
 function ownEntry(links, key) {
-    return links && Object.prototype.hasOwnProperty.call(links, key) ? links[key] : undefined;
+    return hasOwn(links, key) ? links[key] : undefined;
+}
+
+function accountProfile(accounts, accountId) {
+    return profileName(accounts.find((account) => account.accountId === accountId)?.profile);
+}
+
+function isAccountId(value) {
+    return typeof value === 'string' && value.length > 0 && value.length <= MAX_ACCOUNT_ID_LENGTH;
 }
 
 function describe(slot) {

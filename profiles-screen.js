@@ -136,7 +136,7 @@
         if (alertsOn(name) && isSaved(name)) {
             const alerts = document.createElement('span');
             alerts.className = 'alerts-chip';
-            alerts.title = 'You get a Discord or email alert when a bot on this profile stops';
+            alerts.title = 'You get a Discord or email alert when a bot you play without a Jagex account on this profile stops';
             alerts.append(icon(ICONS.bell), document.createTextNode('Alerts on'));
             meta.appendChild(alerts);
         }
@@ -150,8 +150,10 @@
             'aria-checked': on ? 'true' : 'false',
             'data-action': 'alerts',
             'data-name': name,
-            'aria-label': `Alerts for ${displayName(name)}`,
-            title: on ? `Turn off alerts for ${displayName(name)}` : `Turn on alerts for ${displayName(name)}`,
+            'aria-label': `Alerts for ${displayName(name)} without a Jagex account`,
+            title: on
+                ? `Turn off alerts for clients you play without a Jagex account on ${displayName(name)}. Each Jagex account has its own switch under the account list.`
+                : `Turn on alerts for clients you play without a Jagex account on ${displayName(name)}. Each Jagex account has its own switch under the account list.`,
         });
         const knob = document.createElement('span');
         knob.className = 'profile-alerts-switch';
@@ -170,7 +172,7 @@
     const buildAlertsHint = (name) => {
         const hint = document.createElement('p');
         hint.className = 'profile-alerts-hint';
-        hint.textContent = `Shows up as "${alertsLabel(name)}" in alerts, or as the account name when you play with a Jagex account. Rename it on the dashboard.`;
+        hint.textContent = `Clients you play here without a Jagex account show up as "${alertsLabel(name)}" on the dashboard, where you can rename it. Each Jagex account has its own switch under the account list.`;
         return hint;
     };
 

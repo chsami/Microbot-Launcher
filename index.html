@@ -556,6 +556,15 @@
                         </button>
                     </div>
                     <select id="character" class="account-select-hidden" aria-hidden="true" tabindex="-1"></select>
+                    <div id="account-dashboard-row" hidden>
+                        <label for="account-dashboard">Show this account on the dashboard</label>
+                        <label class="hwid-spoof-toggle" for="account-dashboard"
+                            title="Clients you play with this Jagex account get their own card on dashboard.microbot.cloud, with alerts when a bot stops. Off keeps the card and its history, but new clients of this account are not linked to it. Remove a card on the dashboard's Bot Alerts page. Applies on next launch.">
+                            <span class="account-dashboard-state" aria-hidden="true"></span>
+                            <input id="account-dashboard" class="hwid-spoof-input" type="checkbox" role="switch" />
+                            <span class="hwid-spoof-switch" aria-hidden="true"></span>
+                        </label>
+                    </div>
 
                     <label for="profile">Profile</label>
                     <div class="profile-select-row">
