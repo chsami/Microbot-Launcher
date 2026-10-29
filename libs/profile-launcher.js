@@ -155,14 +155,15 @@ module.exports = function setupProfileLauncher(deps) {
         const accounts = readAccounts();
         const proxies = proxyChoices.savedProxies(readProperties(), accounts);
         const suggested = {};
-        accounts.forEach((account) => {
+        const ownProxies = accounts.map((account) => {
             const own = typeof account.proxyIp === 'string' ? account.proxyIp.trim() : '';
             if (own) suggested[profileName(account.profile)] = proxyChoices.idFor(own);
+            return { accountId: account.accountId, profile: profileName(account.profile), proxyId: own ? proxyChoices.idFor(own) : null };
         });
-        return { proxies: proxies.map(({ id, label }) => ({ id, label })), suggested };
+        return { proxies: proxies.map(({ id, label }) => ({ id, label })), suggested, accounts: ownProxies };
     };
 
-    const startOptions = async (linked = {}, proxies = []) => {
+    const startOptions = async (linked = {}, proxies = [], linkedAccounts = {}) => {
         const accounts = readAccounts();
         return buildStartOptions({
             accounts,
@@ -172,6 +173,7 @@ module.exports = function setupProfileLauncher(deps) {
             versions: listOf('client versions', listVersions),
             latestVersion: await cachedLatest(),
             linked,
+            linkedAccounts,
             proxies,
             ids: { account: proxyChoices.accountIdFor, profile: proxyChoices.profileIdFor, proxy: proxyChoices.idFor }
         });
@@ -272,9 +274,17 @@ module.exports = function setupProfileLauncher(deps) {
         });
     };
 
-    const launchNow = async (profile, proxyId, attempt, stillWanted) => {
+    const accountGone = () =>
+        problem('unknown-client', 'Unknown Account', 'That Jagex account is no longer logged in to the launcher on this PC.');
+
+    const findAccountById = (accountId) => {
+        const account = readAccounts().find((entry) => entry.accountId === accountId);
+        return account ? { account } : accountGone();
+    };
+
+    const launchNow = async (profile, proxyId, attempt, stillWanted, accountId = null, withoutAccount = false) => {
         if (!stillWanted()) return problem('disabled', 'Start Cancelled', 'Starting from the dashboard was turned off.');
-        const target = findAccount(profile);
+        const target = withoutAccount ? { account: null } : accountId ? findAccountById(accountId) : findAccount(profile);
         if (target.problem) return target;
         const properties = readProperties();
         let proxyIp = '';
@@ -297,12 +307,24 @@ module.exports = function setupProfileLauncher(deps) {
         });
     };
 
-    const launchProfile = (rawProfile, { proxyId = null, stillWanted = () => true } = {}) => {
+    const launchProfile = (rawProfile, { proxyId = null, stillWanted = () => true, withoutAccount = false } = {}) => {
         const profile = profileName(rawProfile);
         if (profile.length > MAX_PROFILE_LENGTH || /[\u0000-\u001f]/.test(profile)) {
             return Promise.resolve(problem('invalid-profile', 'Invalid Profile', 'That profile name is not valid.'));
         }
-        return enqueue(profile, (attempt) => launchNow(profile, proxyId, attempt, stillWanted));
+        return enqueue(profile, (attempt) => launchNow(profile, proxyId, attempt, stillWanted, null, withoutAccount === true));
+    };
+
+    const launchAccount = (accountId, { proxyId = null, stillWanted = () => true, onAccepted = () => {} } = {}) => {
+        const found = typeof accountId === 'string' && accountId ? findAccountById(accountId) : accountGone();
+        if (found.problem) return Promise.resolve(found);
+        const profile = profileName(found.account.profile);
+        if (profile.length > MAX_PROFILE_LENGTH || /[\u0000-\u001f]/.test(profile)) {
+            return Promise.resolve(problem('invalid-profile', 'Invalid Profile', 'That profile name is not valid.'));
+        }
+        if (waiting >= MAX_WAITING) return Promise.resolve(tooManyLaunches());
+        onAccepted({ profile, account: found.account.displayName || 'Jagex account' });
+        return enqueue(profile, (attempt) => launchNow(profile, proxyId, attempt, stillWanted, accountId));
     };
 
     const launchOptions = (options, { stillWanted = () => true, onAccepted = () => {} } = {}) => {
@@ -341,5 +363,5 @@ module.exports = function setupProfileLauncher(deps) {
         return Promise.race([start(attempt), deadline]).finally(() => clearTimeout(timer));
     };
 
-    return { launchProfile, launchOptions, listProxies, startOptions };
+    return { launchProfile, launchAccount, launchOptions, listProxies, startOptions };
 };

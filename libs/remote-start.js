@@ -24,6 +24,7 @@ module.exports = function setupRemoteStart(deps) {
         alerts,
         background,
         launchProfile,
+        launchAccount,
         launchOptions,
         listProxies,
         startOptions,
@@ -121,27 +122,60 @@ module.exports = function setupRemoteStart(deps) {
         }
     };
 
-    const report = async () => {
-        const linked = linkedProfiles();
-        let choices = { proxies: [], suggested: {} };
+    const readChoices = () => {
         try {
-            choices = listProxies();
+            const choices = listProxies();
+            return {
+                proxies: Array.isArray(choices?.proxies) ? choices.proxies : [],
+                suggested: choices?.suggested || {},
+                accounts: Array.isArray(choices?.accounts) ? choices.accounts : []
+            };
         } catch (error) {
             log.warn(`Could not list proxies: ${error?.message || error}`);
+            return { proxies: [], suggested: {}, accounts: [] };
         }
+    };
+
+    const profilesWithoutAccount = () => {
+        try {
+            const profiles = alerts?.profilesWithoutAccount?.();
+            return Array.isArray(profiles) ? profiles : [];
+        } catch (error) {
+            log.warn(`Could not read the links of clients without an account: ${error?.message || error}`);
+            return [];
+        }
+    };
+
+    const linkedAccounts = (accounts) => {
+        try {
+            return alerts?.linkedAccounts?.(accounts) || {};
+        } catch (error) {
+            log.warn(`Could not read linked accounts: ${error?.message || error}`);
+            return {};
+        }
+    };
+
+    const report = async () => {
+        const linked = linkedProfiles();
+        const choices = readChoices();
+        const accountLinks = linkedAccounts(choices.accounts);
+        const clients = [
+            ...choices.accounts
+                .filter((account) => accountLinks[account.accountId])
+                .map((account) => ({ clientLinkId: accountLinks[account.accountId], suggestedProxyId: account.proxyId || null })),
+            ...Object.entries(linked).map(([profile, clientLinkId]) => ({
+                clientLinkId,
+                suggestedProxyId: choices.suggested[profile] || null
+            }))
+        ];
         const body = {
             version,
-            clients: Object.entries(linked)
-                .slice(0, MAX_CLIENTS)
-                .map(([profile, clientLinkId]) => ({
-                    clientLinkId,
-                    suggestedProxyId: choices.suggested[profile] || null
-                })),
+            clients: clients.slice(0, MAX_CLIENTS),
             proxies: choices.proxies.slice(0, MAX_PROXIES).map((proxy) => ({ id: proxy.id, label: String(proxy.label).slice(0, MAX_LABEL_LENGTH) }))
         };
         if (startOptions) {
             try {
-                body.startOptions = await startOptions(linked, body.proxies);
+                body.startOptions = await startOptions(linked, body.proxies, accountLinks);
             } catch (error) {
                 log.warn(`Could not list the start options: ${error?.message || error}`);
             }
@@ -174,6 +208,25 @@ module.exports = function setupRemoteStart(deps) {
         log.warn('Could not report a dashboard start result.');
     };
 
+    const announce = ({ profile, account }) => {
+        log.info(`The dashboard asked to start profile "${profile}" ${account ? 'with a Jagex account' : 'without a Jagex account'}.`);
+        try {
+            notify?.('Starting a client from the dashboard', account ? `${account} on profile ${profile}` : `Profile: ${profile}`);
+        } catch (error) {
+            log.warn(`Could not show the start notification: ${error?.message || error}`);
+        }
+    };
+
+    const findLinked = (clientLinkId) => {
+        const id = String(clientLinkId);
+        const profile = Object.entries(linkedProfiles()).find(([, linkId]) => linkId === id)?.[0];
+        if (profile) return { profile, withoutAccount: profilesWithoutAccount().includes(profile) };
+        if (!launchAccount) return null;
+        const accountLinks = linkedAccounts(readChoices().accounts);
+        const accountId = Object.entries(accountLinks).find(([, linkId]) => linkId === id)?.[0];
+        return accountId ? { accountId } : null;
+    };
+
     const handleOptionsStart = async (store, command) => {
         if (!isOn()) {
             await sendResult(store, command.id, false, 'disabled');
@@ -187,14 +240,7 @@ module.exports = function setupRemoteStart(deps) {
         try {
             outcome = await launchOptions(command.options, {
                 stillWanted: () => isOn() && signedInEmail() === store.email,
-                onAccepted: ({ profile, account }) => {
-                    log.info(`The dashboard asked to start profile "${profile}" ${account ? 'with a Jagex account' : 'without a Jagex account'}.`);
-                    try {
-                        notify?.('Starting a client from the dashboard', account ? `${account} on profile ${profile}` : `Profile: ${profile}`);
-                    } catch (error) {
-                        log.warn(`Could not show the start notification: ${error?.message || error}`);
-                    }
-                }
+                onAccepted: announce
             });
         } catch (error) {
             outcome = { problem: { kind: 'launch-failed' } };
@@ -208,23 +254,29 @@ module.exports = function setupRemoteStart(deps) {
             await handleOptionsStart(store, command);
             return;
         }
-        const profile = Object.entries(linkedProfiles()).find(([, id]) => id === String(command.clientLinkId))?.[0];
+        const target = findLinked(command.clientLinkId);
         if (!isOn()) {
             await sendResult(store, command.id, false, 'disabled');
             return;
         }
-        if (!profile) {
+        if (!target) {
             await sendResult(store, command.id, false, 'unknown-client');
             return;
         }
-        log.info(`The dashboard asked to start profile "${profile}".`);
-        notify?.('Starting a client from the dashboard', `Profile: ${profile}`);
+        const stillWanted = () => isOn() && signedInEmail() === store.email;
         let outcome;
         try {
-            outcome = await launchProfile(profile, {
-                proxyId: command.proxyId || null,
-                stillWanted: () => isOn() && signedInEmail() === store.email
-            });
+            if (target.accountId) {
+                outcome = await launchAccount(target.accountId, { proxyId: command.proxyId || null, stillWanted, onAccepted: announce });
+            } else {
+                log.info(`The dashboard asked to start profile "${target.profile}".`);
+                notify?.('Starting a client from the dashboard', `Profile: ${target.profile}`);
+                outcome = await launchProfile(target.profile, {
+                    proxyId: command.proxyId || null,
+                    stillWanted,
+                    withoutAccount: target.withoutAccount
+                });
+            }
         } catch (error) {
             outcome = { problem: { kind: 'launch-failed' } };
         }

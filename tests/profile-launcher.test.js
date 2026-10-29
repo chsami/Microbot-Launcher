@@ -44,8 +44,8 @@ function setup({ accounts = [JAGEX_MAIN, JAGEX_ALT], properties = {}, jars = ['2
         listVersions: () => listClientJars(fs, microbotDir).map((entry) => entry.version),
         deadlineMs
     };
-    const { launchProfile, launchOptions, listProxies, startOptions } = setupProfileLauncher(deps);
-    return { deps, events, launchProfile, launchOptions, listProxies, startOptions };
+    const { launchProfile, launchAccount, launchOptions, listProxies, startOptions } = setupProfileLauncher(deps);
+    return { deps, events, launchProfile, launchAccount, launchOptions, listProxies, startOptions };
 }
 
 describe('launching a profile without the launcher window', () => {
@@ -86,6 +86,63 @@ describe('launching a profile without the launcher window', () => {
         expect(suggested).toEqual({ alt: proxies[3].id });
     });
 
+    test('lists each Jagex account with its profile and the proxy it logged in through, without addresses', () => {
+        const { listProxies } = setup();
+        const { proxies, accounts } = listProxies();
+        expect(accounts).toEqual([
+            { accountId: '111', profile: 'main', proxyId: null },
+            { accountId: '222', profile: 'alt', proxyId: proxies[3].id }
+        ]);
+        expect(JSON.stringify(accounts)).not.toMatch(/hunter2|bob|10\.0\.0/);
+    });
+
+    test('starts one Jagex account on its own profile even when another account shares it', async () => {
+        const { deps, events, launchAccount } = setup({ accounts: [JAGEX_MAIN, { ...JAGEX_ALT, profile: 'main' }] });
+        const onAccepted = jest.fn();
+
+        await expect(launchAccount('222', { onAccepted })).resolves.toEqual({ started: true });
+
+        expect(onAccepted).toHaveBeenCalledWith({ profile: 'main', account: 'Lynx' });
+        expect(events).toEqual([
+            ['credentials', '222'],
+            ['launch', '222']
+        ]);
+        expect(deps.launch).toHaveBeenCalledWith({
+            version: '2.6.43',
+            proxy: { proxyIp: '' },
+            ramPreference: '2g',
+            hwidSpoof: true,
+            account: { ...JAGEX_ALT, profile: 'main' }
+        });
+    });
+
+    test('starts a Jagex account through the chosen proxy', async () => {
+        const { deps, launchAccount, listProxies } = setup();
+        const germany = listProxies().proxies[0];
+        await launchAccount('111', { proxyId: germany.id });
+        expect(deps.launch.mock.calls[0][0].proxy).toEqual({ proxyIp: 'socks5://amy:secret@10.0.0.7:1080' });
+    });
+
+    test('refuses a Jagex account that is no longer logged in', async () => {
+        const { deps, launchAccount } = setup();
+        const outcome = await launchAccount('999');
+        expect(outcome.problem.kind).toBe('unknown-client');
+        expect(deps.launch).not.toHaveBeenCalled();
+    });
+
+    test('looks the Jagex account up again when its turn comes', async () => {
+        const { deps, launchAccount } = setup();
+        const outcome = await launchAccount('222', {
+            stillWanted: () => {
+                fs.writeFileSync(path.join(deps.microbotDir, 'accounts.json'), JSON.stringify([JAGEX_MAIN]));
+                return true;
+            }
+        });
+        expect(outcome.problem.kind).toBe('unknown-client');
+        expect(deps.writeCredentials).not.toHaveBeenCalled();
+        expect(deps.launch).not.toHaveBeenCalled();
+    });
+
     test('starts through the chosen proxy, looked up on this PC', async () => {
         const { deps, launchProfile, listProxies } = setup();
         const germany = listProxies().proxies[0];
@@ -115,6 +172,14 @@ describe('launching a profile without the launcher window', () => {
         await launchProfile('ironman');
         expect(deps.writeCredentials).not.toHaveBeenCalled();
         expect(deps.launch).toHaveBeenCalledWith(expect.objectContaining({ noJagexProfile: 'ironman' }));
+        expect(deps.launch.mock.calls[0][0].account).toBeUndefined();
+    });
+
+    test('a start without an account never logs in the Jagex account that uses the profile', async () => {
+        const { deps, launchProfile } = setup({ accounts: [JAGEX_MAIN, { ...JAGEX_ALT, profile: 'main' }] });
+        await expect(launchProfile('main', { withoutAccount: true })).resolves.toEqual({ started: true });
+        expect(deps.writeCredentials).not.toHaveBeenCalled();
+        expect(deps.launch).toHaveBeenCalledWith(expect.objectContaining({ noJagexProfile: 'main' }));
         expect(deps.launch.mock.calls[0][0].account).toBeUndefined();
     });
 
@@ -304,8 +369,8 @@ describe('starting with options chosen on the dashboard', () => {
         });
         const altProxy = listProxies().suggested.alt;
         expect(reported.accounts).toEqual([
-            { id: accountId('111'), label: 'Zezima', profileId: profileId('main'), proxyId: null },
-            { id: accountId('222'), label: 'Lynx', profileId: profileId('alt'), proxyId: altProxy }
+            { id: accountId('111'), label: 'Zezima', profileId: profileId('main'), proxyId: null, clientLinkId: null },
+            { id: accountId('222'), label: 'Lynx', profileId: profileId('alt'), proxyId: altProxy, clientLinkId: null }
         ]);
         expect(reported.profiles).toEqual([
             { id: profileId('default'), label: 'Default', clientLinkId: null },
