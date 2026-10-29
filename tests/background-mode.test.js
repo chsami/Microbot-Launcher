@@ -148,6 +148,18 @@ describe('background mode', () => {
         expect(win.focus).toHaveBeenCalledTimes(2);
     });
 
+    test('other features open the launcher the same way the tray does', () => {
+        const { background, trays, win } = setup({ settings: '{"runInBackground":true}' });
+        background.start();
+        const openItem = trays[0].menu.find((item) => item.label === 'Open Microbot Launcher');
+        expect(openItem.click).toBe(background.showWindow);
+        win.isMinimized.mockReturnValue(true);
+        background.showWindow();
+        expect(win.restore).toHaveBeenCalled();
+        expect(win.show).toHaveBeenCalledTimes(1);
+        expect(win.focus).toHaveBeenCalledTimes(1);
+    });
+
     test('a second launcher hands over to the one already running in the background', () => {
         const { background, log } = setup({ settings: '{"runInBackground":true}', lockAvailable: false });
         expect(background.claimInstance()).toBe(false);

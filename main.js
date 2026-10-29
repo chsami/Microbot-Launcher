@@ -217,6 +217,8 @@ const launcherUpdater = require(path.join(__dirname, 'libs', 'launcher-updater.j
     ipcMain,
     log,
     send: (status) => mainWindow?.webContents.send('launcher-update', status),
+    Notification,
+    showWindow: () => background.showWindow(),
     beforeInstall: () => background.allowQuit()
 });
 
