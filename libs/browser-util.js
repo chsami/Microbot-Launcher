@@ -12,20 +12,32 @@ const SUPPORTED_BROWSERS = [
     'Vivaldi'
 ];
 
-function drivableBrowser(browser) {
-    if (path.win32.basename(browser.executable).toLowerCase() !== 'launcher.exe') {
-        return browser;
-    }
-    const sibling = path.win32.join(path.win32.dirname(browser.executable), 'opera.exe');
-    return fs.existsSync(sibling) ? { ...browser, executable: sibling } : null;
+function isOperaLauncherStub(browser) {
+    return (
+        browser.browser === 'Opera' &&
+        path.win32.basename(browser.executable).toLowerCase() === 'launcher.exe'
+    );
 }
 
 async function getAvailableBrowsers() {
-    const browsers = await detect.getAvailableBrowsers();
-    return browsers
-        .filter((b) => SUPPORTED_BROWSERS.includes(b.browser))
-        .map(drivableBrowser)
-        .filter(Boolean);
+    const browsers = (await detect.getAvailableBrowsers()).filter((b) =>
+        SUPPORTED_BROWSERS.includes(b.browser)
+    );
+    const drivable = [];
+    const lastResort = [];
+    for (const browser of browsers) {
+        if (!isOperaLauncherStub(browser)) {
+            drivable.push(browser);
+            continue;
+        }
+        const operaBinary = path.win32.join(path.win32.dirname(browser.executable), 'opera.exe');
+        if (fs.existsSync(operaBinary)) {
+            drivable.push({ ...browser, executable: operaBinary });
+        } else {
+            lastResort.push(browser);
+        }
+    }
+    return [...drivable, ...lastResort];
 }
 
 /**

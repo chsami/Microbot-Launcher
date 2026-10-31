@@ -40,11 +40,29 @@ describe('browser-util', () => {
         await expect(getAvailableBrowsers()).resolves.toEqual([edge, { browser: 'Opera', executable: operaBinary }]);
     });
 
-    test('skips a launcher.exe stub when there is no browser binary next to it', async () => {
+    test('tries the Opera launcher.exe stub last when there is no opera.exe next to it', async () => {
         const operaLauncher = { browser: 'Opera', executable: 'C:\\Users\\bob\\AppData\\Local\\Programs\\Opera\\launcher.exe' };
         jest.spyOn(fs, 'existsSync').mockReturnValue(false);
         detect.getAvailableBrowsers.mockResolvedValue([operaLauncher, edge]);
 
-        await expect(getAvailableBrowsers()).resolves.toEqual([edge]);
+        await expect(getAvailableBrowsers()).resolves.toEqual([edge, operaLauncher]);
+    });
+
+    test('keeps the Opera launcher.exe stub for an Opera-only player', async () => {
+        const operaLauncher = { browser: 'Opera', executable: 'C:\\Users\\bob\\AppData\\Local\\Programs\\Opera\\launcher.exe' };
+        jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+        detect.getAvailableBrowsers.mockResolvedValue([operaLauncher]);
+
+        await expect(getAvailableBrowsers()).resolves.toEqual([operaLauncher]);
+        await expect(getAvailableBrowser()).resolves.toEqual(operaLauncher);
+    });
+
+    test('leaves a launcher.exe that does not belong to Opera alone', async () => {
+        const vivaldi = { browser: 'Vivaldi', executable: 'C:\\Programs\\Vivaldi\\launcher.exe' };
+        const existsSync = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+        detect.getAvailableBrowsers.mockResolvedValue([vivaldi, edge]);
+
+        await expect(getAvailableBrowsers()).resolves.toEqual([vivaldi, edge]);
+        expect(existsSync).not.toHaveBeenCalled();
     });
 });
