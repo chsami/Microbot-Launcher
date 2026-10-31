@@ -1,4 +1,7 @@
 const { EventEmitter } = require('events');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const {
     registerLauncherUpdater,
@@ -6,7 +9,7 @@ const {
     SHOWN_RECHECK_AFTER_MS
 } = require('../libs/launcher-updater.js');
 
-function setup(beforeInstall) {
+function setup(beforeInstall, { env = {}, platform = 'linux' } = {}) {
     const autoUpdater = Object.assign(new EventEmitter(), {
         currentVersion: { version: '3.2.16' },
         downloadUpdate: jest.fn(),
@@ -40,7 +43,9 @@ function setup(beforeInstall) {
         showWindow,
         beforeInstall,
         now: () => clock.now,
-        every
+        every,
+        env,
+        platform
     });
     return { autoUpdater, handlers, send, log, updater, clock, timers, Notification, notices, showWindow };
 }
@@ -69,6 +74,52 @@ describe('launcher updater', () => {
         autoUpdater.emit('update-downloaded', { version: '3.2.17' });
         handlers['launcher-update:install']();
         expect(order).toEqual(['allow quit', 'install']);
+    });
+
+    test('shows the failure when Restart now cannot install, instead of leaving the button dead', () => {
+        const { autoUpdater, handlers, send } = setup();
+        autoUpdater.emit('update-downloaded', { version: '3.2.27' });
+        autoUpdater.quitAndInstall.mockImplementation(() => autoUpdater.emit('error', new Error('ENOENT')));
+        handlers['launcher-update:install']();
+        expect(send.mock.calls.map(([status]) => status.state)).toEqual(['ready', 'error']);
+    });
+
+    test('keeps hiding to the tray after a restart that did not happen', () => {
+        const undo = jest.fn();
+        const { autoUpdater, handlers } = setup(() => undo);
+        autoUpdater.emit('update-downloaded', { version: '3.2.27' });
+        handlers['launcher-update:install']();
+        expect(undo).not.toHaveBeenCalled();
+        autoUpdater.quitAndInstall.mockImplementation(() => autoUpdater.emit('error', new Error('ENOENT')));
+        handlers['launcher-update:install']();
+        expect(undo).toHaveBeenCalledTimes(1);
+    });
+
+    test('installs next to the AppImage the player deleted while it was running', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'launcher-updater-'));
+        const appImage = path.join(dir, 'Microbot Launcher-3.2.24.AppImage');
+        const { autoUpdater, handlers } = setup(undefined, { env: { APPIMAGE: appImage } });
+        autoUpdater.quitAndInstall.mockImplementation(() => fs.unlinkSync(appImage));
+        autoUpdater.emit('update-downloaded', { version: '3.2.27' });
+        handlers['launcher-update:install']();
+        expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('never touches an AppImage that is still in place, or other platforms', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'launcher-updater-'));
+        const appImage = path.join(dir, 'Microbot Launcher-3.2.24.AppImage');
+        fs.writeFileSync(appImage, 'launcher');
+        const linux = setup(undefined, { env: { APPIMAGE: appImage } });
+        linux.autoUpdater.emit('update-downloaded', { version: '3.2.27' });
+        linux.handlers['launcher-update:install']();
+        expect(fs.readFileSync(appImage, 'utf8')).toBe('launcher');
+        const missing = path.join(dir, 'gone.AppImage');
+        const windows = setup(undefined, { env: { APPIMAGE: missing }, platform: 'win32' });
+        windows.autoUpdater.emit('update-downloaded', { version: '3.2.27' });
+        windows.handlers['launcher-update:install']();
+        expect(fs.existsSync(missing)).toBe(false);
+        fs.rmSync(dir, { recursive: true, force: true });
     });
 
     test('keeps hiding to the tray when there is no update to install yet', () => {
