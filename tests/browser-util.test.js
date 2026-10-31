@@ -1,5 +1,6 @@
 jest.mock('detect-browsers', () => ({ getAvailableBrowsers: jest.fn() }));
 
+const fs = require('fs');
 const detect = require('detect-browsers');
 const { getAvailableBrowser, getAvailableBrowsers } = require('../libs/browser-util.js');
 
@@ -28,5 +29,22 @@ describe('browser-util', () => {
 
         await expect(getAvailableBrowsers()).resolves.toEqual([]);
         await expect(getAvailableBrowser()).resolves.toBeNull();
+    });
+
+    test('drives the Opera binary next to its launcher.exe stub', async () => {
+        const operaLauncher = { browser: 'Opera', executable: 'C:\\Users\\bob\\AppData\\Local\\Programs\\Opera\\launcher.exe' };
+        const operaBinary = 'C:\\Users\\bob\\AppData\\Local\\Programs\\Opera\\opera.exe';
+        jest.spyOn(fs, 'existsSync').mockImplementation((file) => file === operaBinary);
+        detect.getAvailableBrowsers.mockResolvedValue([edge, operaLauncher]);
+
+        await expect(getAvailableBrowsers()).resolves.toEqual([edge, { browser: 'Opera', executable: operaBinary }]);
+    });
+
+    test('skips a launcher.exe stub when there is no browser binary next to it', async () => {
+        const operaLauncher = { browser: 'Opera', executable: 'C:\\Users\\bob\\AppData\\Local\\Programs\\Opera\\launcher.exe' };
+        jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+        detect.getAvailableBrowsers.mockResolvedValue([operaLauncher, edge]);
+
+        await expect(getAvailableBrowsers()).resolves.toEqual([edge]);
     });
 });

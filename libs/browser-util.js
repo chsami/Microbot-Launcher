@@ -1,4 +1,6 @@
 const detect = require('detect-browsers');
+const fs = require('fs');
+const path = require('path');
 
 const SUPPORTED_BROWSERS = [
     'Google Chrome',
@@ -10,9 +12,20 @@ const SUPPORTED_BROWSERS = [
     'Vivaldi'
 ];
 
+function drivableBrowser(browser) {
+    if (path.win32.basename(browser.executable).toLowerCase() !== 'launcher.exe') {
+        return browser;
+    }
+    const sibling = path.win32.join(path.win32.dirname(browser.executable), 'opera.exe');
+    return fs.existsSync(sibling) ? { ...browser, executable: sibling } : null;
+}
+
 async function getAvailableBrowsers() {
     const browsers = await detect.getAvailableBrowsers();
-    return browsers.filter((b) => SUPPORTED_BROWSERS.includes(b.browser));
+    return browsers
+        .filter((b) => SUPPORTED_BROWSERS.includes(b.browser))
+        .map(drivableBrowser)
+        .filter(Boolean);
 }
 
 /**

@@ -101,6 +101,7 @@ describe('startAuthFlow proxy routing', () => {
         expect(chromium.launch).toHaveBeenCalledWith({
             headless: false,
             executablePath: '/usr/bin/google-chrome',
+            timeout: 60000,
             env: expect.any(Object),
             proxy: { server: 'http://127.0.0.1:5555' },
             args: [
@@ -120,6 +121,7 @@ describe('startAuthFlow proxy routing', () => {
         const error = await failureAfterRetries(startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } }));
 
         expect(error.message).toContain('Could not open the Jagex login window in Google Chrome.');
+        expect(error.message).not.toContain('install Google Chrome');
         expect(chromium.launch).toHaveBeenCalledTimes(2);
         expect(loginProxy.close).toHaveBeenCalled();
     });
@@ -136,6 +138,7 @@ describe('startAuthFlow proxy routing', () => {
         expect(chromium.launch).toHaveBeenCalledWith({
             headless: false,
             executablePath: '/usr/bin/google-chrome',
+            timeout: 60000,
             env: expect.any(Object),
             args: ['--edge-skip-compat-layer-relaunch']
         });
@@ -388,6 +391,43 @@ describe('login browser launch', () => {
 
         expect(await failureAfterRetries(flow)).toMatchObject({ code: 'CANCELLED' });
         expect(chromium.launch).toHaveBeenCalledTimes(1);
+        expect(loginProxy.close).toHaveBeenCalled();
+    });
+
+    test('a browser that times out is not retried and the next one is tried', async () => {
+        const { browser } = fakeBrowser(new Error('net::ERR_TUNNEL_CONNECTION_FAILED'));
+        const timeout = new Error('browserType.launch: Timeout 60000ms exceeded.');
+        timeout.name = 'TimeoutError';
+        chromium.launch.mockRejectedValueOnce(timeout).mockResolvedValueOnce(browser);
+
+        const error = await failureAfterRetries(startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } }));
+
+        expect(error.message).toContain('Could not reach Jagex through the proxy');
+        expect(chromium.launch.mock.calls.map(([options]) => options.executablePath)).toEqual([
+            edge.executable,
+            opera.executable
+        ]);
+        expect(chromium.launch.mock.calls[0][0].timeout).toBe(60000);
+    });
+
+    test('cancelling during the last attempt does not report a launch failure', async () => {
+        getAvailableBrowsers.mockResolvedValue([edge]);
+        let failLastLaunch;
+        chromium.launch
+            .mockRejectedValueOnce(new Error(closedError))
+            .mockReturnValueOnce(new Promise((resolve, reject) => (failLastLaunch = reject)));
+
+        const flow = startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } });
+        const failure = flow.then(() => null, (error) => error);
+        await new Promise((resolve) => setImmediate(resolve));
+        await jest.advanceTimersByTimeAsync(1000);
+        expect(chromium.launch).toHaveBeenCalledTimes(2);
+        expect(cancelAuthFlow()).toBe(true);
+        failLastLaunch(new Error(closedError));
+
+        expect(await failure).toMatchObject({ code: 'CANCELLED' });
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(log.error).not.toHaveBeenCalledWith(expect.stringContaining('Could not start any login browser'));
         expect(loginProxy.close).toHaveBeenCalled();
     });
 });

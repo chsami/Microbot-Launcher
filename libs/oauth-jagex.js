@@ -323,6 +323,7 @@ async function writeAccountsToFile(sessionId, httpOptions = {}, accountFields = 
 const COMPAT_LAYER_VAR = '__COMPAT_LAYER';
 const LAUNCH_ATTEMPTS_PER_BROWSER = 2;
 const LAUNCH_RETRY_DELAY_MS = 1000;
+const LAUNCH_TIMEOUT_MS = 60000;
 
 function isCompatLayerKey(key) {
     return key.toUpperCase() === COMPAT_LAYER_VAR;
@@ -366,6 +367,7 @@ async function launchLoginBrowser(browsers, loginProxy, isCancelled) {
                 return await chromium.launch({
                     headless: false,
                     executablePath: candidate.executable,
+                    timeout: LAUNCH_TIMEOUT_MS,
                     env,
                     args,
                     ...(loginProxy && { proxy: { server: loginProxy.url } })
@@ -375,12 +377,14 @@ async function launchLoginBrowser(browsers, loginProxy, isCancelled) {
                     `Login browser ${candidate.browser} (${candidate.executable}) failed to start, ` +
                     `attempt ${attempt}/${LAUNCH_ATTEMPTS_PER_BROWSER}: ${error.message}`
                 );
+                if (error.name === 'TimeoutError') break;
                 if (attempt < LAUNCH_ATTEMPTS_PER_BROWSER) {
                     await new Promise((resolve) => setTimeout(resolve, LAUNCH_RETRY_DELAY_MS));
                 }
             }
         }
     }
+    if (isCancelled()) return null;
     const message = browserLaunchFailedMessage(browsers);
     log.error(`Could not start any login browser. ${message}`);
     throw new Error(message);
