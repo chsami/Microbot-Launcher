@@ -583,15 +583,19 @@ window.electron.ipcRenderer.receive('launcher-update', (event, status) => {
     if (status.state === 'error' && !launcherUpdateState) {
         return;
     }
-    launcherUpdateState = status.state;
+    launcherUpdateState = status.state === 'error' && status.stage === 'install' ? 'install-error' : status.state;
     launcherUpdateVersion = status.version || launcherUpdateVersion;
     const percent = status.percent ?? 0;
     const [text, button] = {
         available: [`Launcher out of date (v${status.current})`, `Update to v${launcherUpdateVersion}`],
         downloading: [`Downloading v${launcherUpdateVersion}… ${percent}%`, 'Downloading'],
         ready: [`v${launcherUpdateVersion} is ready to install`, 'Restart now'],
-        error: ['Launcher update failed', 'Retry']
-    }[status.state];
+        error: ['Launcher update failed', 'Retry'],
+        'install-error': [
+            `Could not restart to update. Quit the launcher and install v${launcherUpdateVersion} from themicrobot.com`,
+            'Open download page'
+        ]
+    }[launcherUpdateState];
     banner.hidden = false;
     banner.dataset.state = status.state;
     // Hold screen-reader announcements until the download settles instead of reading every percent.
@@ -603,9 +607,19 @@ window.electron.ipcRenderer.receive('launcher-update', (event, status) => {
     btn.disabled = status.state === 'downloading';
 });
 
-document.getElementById('launcher-update-btn')?.addEventListener('click', () => {
-    if (launcherUpdateState === 'ready') {
-        window.electron.ipcRenderer.invoke('launcher-update:install').catch(() => {});
+document.getElementById('launcher-update-btn')?.addEventListener('click', (event) => {
+    if (launcherUpdateState === 'install-error') {
+        window.electron.openHelpLink('launcherDownload').catch(() => {});
+    } else if (launcherUpdateState === 'ready') {
+        const btn = event.currentTarget;
+        launcherUpdateState = 'installing';
+        btn.disabled = true;
+        window.electron.ipcRenderer.invoke('launcher-update:install').catch(() => {
+            launcherUpdateState = 'ready';
+            btn.disabled = false;
+        });
+    } else if (launcherUpdateState === 'installing') {
+        return;
     } else {
         launcherUpdateState = 'downloading';
         // Failures reach the banner through the 'error' status event.
