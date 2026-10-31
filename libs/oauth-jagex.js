@@ -5,7 +5,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const http = require('http');
 const log = require('electron-log');
-const { getAvailableBrowser } = require('./browser-util.js');
+const { getAvailableBrowsers, isOperaLauncherStub } = require('./browser-util.js');
 const { toProxyUri, startLoginProxy } = require('./login-proxy.js');
 const { microbotDirName } = require('./dir-module.js');
 
@@ -320,6 +320,95 @@ async function writeAccountsToFile(sessionId, httpOptions = {}, accountFields = 
     }
 }
 
+const COMPAT_LAYER_VAR = '__COMPAT_LAYER';
+const LAUNCH_ATTEMPTS_PER_BROWSER = 2;
+const LAUNCH_RETRY_DELAY_MS = 1000;
+const LAUNCH_TIMEOUT_MS = 60000;
+
+function isCompatLayerKey(key) {
+    return key.toUpperCase() === COMPAT_LAYER_VAR;
+}
+
+function browserLaunchEnv() {
+    return Object.fromEntries(
+        Object.entries(process.env).filter(([key]) => !isCompatLayerKey(key))
+    );
+}
+
+function joinNames(names, conjunction) {
+    if (names.length < 2) return names.join('');
+    return `${names.slice(0, -1).join(', ')} ${conjunction} ${names[names.length - 1]}`;
+}
+
+function browserLaunchFailedMessage(browsers) {
+    const names = [...new Set(browsers.map((b) => b.browser))];
+    const steps = [];
+    if (browsers.some(isOperaLauncherStub)) {
+        steps.push('Close any empty browser windows the launcher opened.');
+    }
+    if (process.platform === 'win32') {
+        steps.push(
+            'If the Microbot Launcher runs as administrator or in compatibility mode, turn that off ' +
+            '(right-click its shortcut → Properties → Compatibility) and restart the launcher.'
+        );
+    } else {
+        steps.push(`Close all ${joinNames(names, 'and')} windows, restart the launcher and try again.`);
+    }
+    if (!names.includes('Google Chrome')) {
+        steps.push('Install Google Chrome and try again.');
+    }
+    return [
+        `Could not open the Jagex login window in ${joinNames(names, 'or')}.`,
+        '',
+        ...steps.map((step, index) => `${index + 1}. ${step}`),
+        '',
+        'If it still fails, ask for help in the Microbot Discord.'
+    ].join('\n');
+}
+
+async function launchLoginBrowser(browsers, loginProxy, isCancelled) {
+    const compatLayerSet = Object.keys(process.env).some(isCompatLayerKey);
+    log.info(
+        `Login browser candidates: ${browsers.map((b) => b.browser).join(', ')}. ` +
+        `${COMPAT_LAYER_VAR} ${compatLayerSet ? 'is set, removing it for the login browser' : 'is not set'}.`
+    );
+    const env = browserLaunchEnv();
+    const args = ['--edge-skip-compat-layer-relaunch'];
+    if (loginProxy) args.push('--force-webrtc-ip-handling-policy=disable_non_proxied_udp');
+
+    for (const candidate of browsers) {
+        for (let attempt = 1; attempt <= LAUNCH_ATTEMPTS_PER_BROWSER; attempt++) {
+            if (isCancelled()) return null;
+            log.info(
+                `Starting the login browser ${candidate.browser} (${candidate.executable}), ` +
+                `attempt ${attempt}/${LAUNCH_ATTEMPTS_PER_BROWSER}.`
+            );
+            try {
+                return await chromium.launch({
+                    headless: false,
+                    executablePath: candidate.executable,
+                    timeout: LAUNCH_TIMEOUT_MS,
+                    env,
+                    args,
+                    ...(loginProxy && { proxy: { server: loginProxy.url } })
+                });
+            } catch (error) {
+                log.warn(
+                    `Login browser ${candidate.browser} (${candidate.executable}) failed to start, ` +
+                    `attempt ${attempt}/${LAUNCH_ATTEMPTS_PER_BROWSER}: ${error.message}`
+                );
+                if (error.name === 'TimeoutError') break;
+                if (attempt < LAUNCH_ATTEMPTS_PER_BROWSER) {
+                    await new Promise((resolve) => setTimeout(resolve, LAUNCH_RETRY_DELAY_MS));
+                }
+            }
+        }
+    }
+    if (isCancelled()) return null;
+    log.error(`Could not start any login browser: ${browsers.map((b) => b.browser).join(', ')}.`);
+    throw new Error(browserLaunchFailedMessage(browsers));
+}
+
 async function createSessionAndSaveAccounts(idToken, httpOptions, accountFields) {
     const sessionId = await getSessionId(idToken, httpOptions);
     if (!sessionId) throw new Error('Could not create a game session.');
@@ -363,10 +452,10 @@ async function startPatchrightAuthFlow(loginProxy = null, accountFields = { prox
         };
 
         try {
-            const availableBrowser = await getAvailableBrowser();
+            const availableBrowsers = await getAvailableBrowsers();
             if (finished) return;
 
-            if (!availableBrowser) {
+            if (availableBrowsers.length === 0) {
                 return fail(
                     new Error(
                         'No supported browser found on the system, please have a Chromium-based browser installed.'
@@ -375,16 +464,9 @@ async function startPatchrightAuthFlow(loginProxy = null, accountFields = { prox
             }
 
             try {
-                browser = await chromium.launch({
-                    headless: false,
-                    executablePath: availableBrowser.executable,
-                    ...(loginProxy && {
-                        proxy: { server: loginProxy.url },
-                        args: ['--force-webrtc-ip-handling-policy=disable_non_proxied_udp']
-                    })
-                });
+                browser = await launchLoginBrowser(availableBrowsers, loginProxy, () => finished);
             } catch (error) {
-                return fail(new Error(`Could not start the login browser: ${error.message}`));
+                return fail(error);
             }
             if (finished) {
                 await closeBrowser();
