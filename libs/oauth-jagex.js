@@ -5,7 +5,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const http = require('http');
 const log = require('electron-log');
-const { getAvailableBrowsers } = require('./browser-util.js');
+const { getAvailableBrowsers, isOperaLauncherStub } = require('./browser-util.js');
 const { toProxyUri, startLoginProxy } = require('./login-proxy.js');
 const { microbotDirName } = require('./dir-module.js');
 
@@ -335,15 +335,35 @@ function browserLaunchEnv() {
     );
 }
 
+function joinNames(names, conjunction) {
+    if (names.length < 2) return names.join('');
+    return `${names.slice(0, -1).join(', ')} ${conjunction} ${names[names.length - 1]}`;
+}
+
 function browserLaunchFailedMessage(browsers) {
     const names = [...new Set(browsers.map((b) => b.browser))];
-    const chromeTried = names.includes('Google Chrome');
-    return (
-        `Could not open the Jagex login window in ${names.join(' or ')}. ` +
-        "If the Microbot Launcher is set to 'Run as administrator' or a compatibility mode " +
-        '(right-click its shortcut → Properties → Compatibility), turn that off, ' +
-        `restart the launcher and try again${chromeTried ? '' : ', or install Google Chrome'}.`
-    );
+    const steps = [];
+    if (browsers.some(isOperaLauncherStub)) {
+        steps.push('Close any empty browser windows the launcher opened.');
+    }
+    if (process.platform === 'win32') {
+        steps.push(
+            'If the Microbot Launcher runs as administrator or in compatibility mode, turn that off ' +
+            '(right-click its shortcut → Properties → Compatibility) and restart the launcher.'
+        );
+    } else {
+        steps.push(`Close all ${joinNames(names, 'and')} windows, restart the launcher and try again.`);
+    }
+    if (!names.includes('Google Chrome')) {
+        steps.push('Install Google Chrome and try again.');
+    }
+    return [
+        `Could not open the Jagex login window in ${joinNames(names, 'or')}.`,
+        '',
+        ...steps.map((step, index) => `${index + 1}. ${step}`),
+        '',
+        'If it still fails, ask for help in the Microbot Discord.'
+    ].join('\n');
 }
 
 async function launchLoginBrowser(browsers, loginProxy, isCancelled) {
@@ -385,9 +405,8 @@ async function launchLoginBrowser(browsers, loginProxy, isCancelled) {
         }
     }
     if (isCancelled()) return null;
-    const message = browserLaunchFailedMessage(browsers);
-    log.error(`Could not start any login browser. ${message}`);
-    throw new Error(message);
+    log.error(`Could not start any login browser: ${browsers.map((b) => b.browser).join(', ')}.`);
+    throw new Error(browserLaunchFailedMessage(browsers));
 }
 
 async function createSessionAndSaveAccounts(idToken, httpOptions, accountFields) {

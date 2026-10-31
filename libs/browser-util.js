@@ -57,5 +57,6 @@ async function getAvailableBrowser() {
 
 module.exports = {
     getAvailableBrowser,
-    getAvailableBrowsers
+    getAvailableBrowsers,
+    isOperaLauncherStub
 };

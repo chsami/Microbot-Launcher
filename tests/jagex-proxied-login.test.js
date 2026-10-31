@@ -15,6 +15,7 @@ jest.mock('http', () => ({
     })
 }));
 jest.mock('../libs/browser-util.js', () => ({
+    ...jest.requireActual('../libs/browser-util.js'),
     getAvailableBrowsers: jest.fn(async () => [{ browser: 'Google Chrome', executable: '/usr/bin/google-chrome' }])
 }));
 jest.mock('../libs/login-proxy.js', () => ({
@@ -365,21 +366,100 @@ describe('login browser launch', () => {
         ]);
     });
 
-    test('shows the player a message they can act on once every browser fails', async () => {
-        chromium.launch.mockRejectedValue(new Error(closedError));
+    const adminStep =
+        'If the Microbot Launcher runs as administrator or in compatibility mode, turn that off ' +
+        '(right-click its shortcut → Properties → Compatibility) and restart the launcher.';
+    const helpLine = 'If it still fails, ask for help in the Microbot Discord.';
+    const chrome = { browser: 'Google Chrome', executable: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' };
+    const brave = { browser: 'Brave Browser', executable: '/usr/bin/brave-browser' };
+    const operaStub = { browser: 'Opera', executable: 'C:\\Users\\bob\\AppData\\Local\\Programs\\Opera\\launcher.exe' };
 
-        const error = await failureAfterRetries(startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } }));
+    async function failedLoginMessage(browsers, platform) {
+        const realPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+        Object.defineProperty(process, 'platform', { value: platform });
+        try {
+            getAvailableBrowsers.mockResolvedValue(browsers);
+            chromium.launch.mockRejectedValue(new Error(closedError));
+            const error = await failureAfterRetries(startAuthFlow({ proxy: { proxyIp: '1.2.3.4:1080' } }));
+            return error.message;
+        } finally {
+            Object.defineProperty(process, 'platform', realPlatform);
+        }
+    }
 
-        expect(error.message).toBe(
-            'Could not open the Jagex login window in Microsoft Edge or Opera. ' +
-            "If the Microbot Launcher is set to 'Run as administrator' or a compatibility mode " +
-            '(right-click its shortcut → Properties → Compatibility), turn that off, ' +
-            'restart the launcher and try again, or install Google Chrome.'
+    test('shows the player numbered steps instead of the raw error once every browser fails', async () => {
+        const message = await failedLoginMessage([edge, opera], 'win32');
+
+        expect(message).toBe(
+            'Could not open the Jagex login window in Microsoft Edge or Opera.\n' +
+            '\n' +
+            `1. ${adminStep}\n` +
+            '2. Install Google Chrome and try again.\n' +
+            '\n' +
+            helpLine
         );
-        expect(error.message).not.toContain(closedError);
+        expect(message).not.toContain(closedError);
         expect(chromium.launch).toHaveBeenCalledTimes(4);
         expect(log.warn).toHaveBeenCalledWith(expect.stringContaining(closedError));
         expect(loginProxy.close).toHaveBeenCalled();
+    });
+
+    test('on Windows with only Edge it suggests the compatibility fix and Chrome', async () => {
+        expect(await failedLoginMessage([edge], 'win32')).toBe(
+            'Could not open the Jagex login window in Microsoft Edge.\n' +
+            '\n' +
+            `1. ${adminStep}\n` +
+            '2. Install Google Chrome and try again.\n' +
+            '\n' +
+            helpLine
+        );
+    });
+
+    test('drops the Chrome step when Chrome was already tried', async () => {
+        expect(await failedLoginMessage([chrome, edge], 'win32')).toBe(
+            'Could not open the Jagex login window in Google Chrome or Microsoft Edge.\n' +
+            '\n' +
+            `1. ${adminStep}\n` +
+            '\n' +
+            helpLine
+        );
+    });
+
+    test('leaves out the Windows compatibility advice on macOS and Linux', async () => {
+        for (const platform of ['darwin', 'linux']) {
+            const message = await failedLoginMessage([edge], platform);
+            expect(message).toBe(
+                'Could not open the Jagex login window in Microsoft Edge.\n' +
+                '\n' +
+                '1. Close all Microsoft Edge windows, restart the launcher and try again.\n' +
+                '2. Install Google Chrome and try again.\n' +
+                '\n' +
+                helpLine
+            );
+            expect(message).not.toContain('Compatibility');
+        }
+    });
+
+    test('lists three or more browsers as "A, B or C"', async () => {
+        expect(await failedLoginMessage([brave, { ...chrome, executable: '/usr/bin/google-chrome' }, edge], 'linux')).toBe(
+            'Could not open the Jagex login window in Brave Browser, Google Chrome or Microsoft Edge.\n' +
+            '\n' +
+            '1. Close all Brave Browser, Google Chrome and Microsoft Edge windows, restart the launcher and try again.\n' +
+            '\n' +
+            helpLine
+        );
+    });
+
+    test('asks the player to close empty windows when the Opera launcher stub was tried', async () => {
+        expect(await failedLoginMessage([edge, operaStub], 'win32')).toBe(
+            'Could not open the Jagex login window in Microsoft Edge or Opera.\n' +
+            '\n' +
+            '1. Close any empty browser windows the launcher opened.\n' +
+            `2. ${adminStep}\n` +
+            '3. Install Google Chrome and try again.\n' +
+            '\n' +
+            helpLine
+        );
     });
 
     test('cancelling between attempts stops trying other browsers', async () => {
