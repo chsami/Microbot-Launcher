@@ -9,6 +9,7 @@ module.exports = async function (deps) {
     let managedJavaReady = null;
     const { toProxyUri } = require(path.join(__dirname, 'login-proxy.js'));
     const { hwidAgentArgs } = require(path.join(__dirname, 'hwid-agent.js'));
+    const { credentialEnv, CREDENTIAL_KEYS } = require(path.join(__dirname, 'overwrite-credential-properties.js'));
     const STARTUP_WINDOW_MS = deps.startupWindowMs || 20000;
     const CLIENT_TOKEN_ENV = 'MICROBOT_CLIENT_TOKEN';
     const MAX_CAPTURED_STDERR = 64 * 1024;
@@ -95,7 +96,7 @@ module.exports = async function (deps) {
         return {
             commandArgs: built.commandArgs,
             secrets: withToken(noJagex ? [] : accountSecrets(account), token),
-            env: clientEnv(token)
+            env: clientEnv(token, noJagex ? null : jagexCredentials(account))
         };
     }
 
@@ -119,7 +120,7 @@ module.exports = async function (deps) {
                     log.error(prepared.error);
                     return { error: prepared.error };
                 }
-                const credentials = account && account.accountId && account.sessionId ? account : null;
+                const credentials = jagexCredentials(account);
                 startInTurn(event, () => {
                     if (credentials) {
                         try {
@@ -199,8 +200,17 @@ module.exports = async function (deps) {
         }
     }
 
-    function clientEnv(token) {
-        return token ? { ...process.env, [CLIENT_TOKEN_ENV]: token } : null;
+    function jagexCredentials(account) {
+        return account && account.accountId && account.sessionId ? account : null;
+    }
+
+    function clientEnv(token, credentials) {
+        const inherited = Object.entries(process.env).filter(([key]) => !CREDENTIAL_KEYS.includes(key.toUpperCase()));
+        return {
+            ...Object.fromEntries(inherited),
+            ...(credentials ? credentialEnv(credentials) : {}),
+            ...(token ? { [CLIENT_TOKEN_ENV]: token } : {})
+        };
     }
 
     function withToken(secrets, token) {

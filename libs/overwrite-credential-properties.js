@@ -1,13 +1,21 @@
+function credentialEnv(character) {
+    return {
+        JX_CHARACTER_ID: `${character.accountId}`,
+        JX_SESSION_ID: `${character.sessionId}`,
+        JX_REFRESH_TOKEN: '',
+        JX_DISPLAY_NAME: `${character.displayName}`,
+        JX_ACCESS_TOKEN: ''
+    };
+}
+
+const CREDENTIAL_KEYS = Object.keys(credentialEnv({}));
+
 function writeCredentialProperties({ fs, path, homeDir }, character) {
     const filePath = path.join(homeDir, '.runelite', 'credentials.properties');
+    const lines = Object.entries(credentialEnv(character)).map(([key, value]) => `${key}=${value}\n`);
     const fileContent = `#Do not share this file with anyone
 #${new Date().toString()}
-JX_CHARACTER_ID=${character.accountId}
-JX_SESSION_ID=${character.sessionId}
-JX_REFRESH_TOKEN=
-JX_DISPLAY_NAME=${character.displayName}
-JX_ACCESS_TOKEN=
-`;
+${lines.join('')}`;
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, fileContent, 'utf8');
 }
@@ -32,3 +40,5 @@ module.exports = async function (deps) {
 };
 
 module.exports.writeCredentialProperties = writeCredentialProperties;
+module.exports.credentialEnv = credentialEnv;
+module.exports.CREDENTIAL_KEYS = CREDENTIAL_KEYS;
