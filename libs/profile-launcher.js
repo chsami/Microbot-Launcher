@@ -251,7 +251,7 @@ module.exports = function setupProfileLauncher(deps) {
         }
         log.info(`Starting profile "${profile}" ${account ? 'with a Jagex account' : 'without a Jagex account'}.`);
         if (account) {
-            writeCredentials(account);
+            if (account.accountId && account.sessionId) writeCredentials(account);
             return launch({ ...settings, account: profileName(account.profile) === profile ? account : { ...account, profile } });
         }
         return launch({ ...settings, noJagexProfile: profile });

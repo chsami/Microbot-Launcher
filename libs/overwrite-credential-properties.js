@@ -3,7 +3,7 @@ function credentialEnv(character) {
         JX_CHARACTER_ID: `${character.accountId}`,
         JX_SESSION_ID: `${character.sessionId}`,
         JX_REFRESH_TOKEN: '',
-        JX_DISPLAY_NAME: `${character.displayName}`,
+        JX_DISPLAY_NAME: `${character.displayName ?? ''}`,
         JX_ACCESS_TOKEN: ''
     };
 }

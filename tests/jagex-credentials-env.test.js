@@ -3,6 +3,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { writeCredentialProperties, credentialEnv } = require('../libs/overwrite-credential-properties');
+const setupProfileLauncher = require('../libs/profile-launcher.js');
+const setupProxyChoices = require('../libs/proxy-choices.js');
+const { isSafeClientVersion, listClientJars } = require('../libs/client-jars.js');
 
 const VERSION = '9.9.9';
 const PROBE_OUTPUT = 'openjdk version "17.0.12"\n    java.version = 17.0.12\n    sun.arch.data.model = 64\n';
@@ -77,7 +80,7 @@ describe('Jagex character in the client environment', () => {
         };
         const executor = await require('../libs/jar-executor')(deps);
         const credentialsFile = path.join(homeDir, '.runelite', 'credentials.properties');
-        return { handlers, launches, log, executor, credentialsFile, dirs: [homeDir, microbotDir] };
+        return { deps, handlers, launches, log, executor, credentialsFile, dirs: [homeDir, microbotDir] };
     };
 
     const openClient = async (account) => {
@@ -85,6 +88,29 @@ describe('Jagex character in the client environment', () => {
         await harness.handlers['open-client']({}, VERSION, null, account, '');
         await waitFor(() => harness.launches.length > count);
         return harness.launches[count].options.env;
+    };
+
+    const dashboard = (accounts) => {
+        const { deps } = harness;
+        fs.writeFileSync(path.join(deps.microbotDir, 'accounts.json'), JSON.stringify(accounts));
+        fs.writeFileSync(path.join(deps.microbotDir, 'resource_versions.json'), JSON.stringify({ version_pref: VERSION, client_ram: '2g' }));
+        fs.writeFileSync(path.join(deps.microbotDir, `microbot-${VERSION}.jar`), '');
+        return setupProfileLauncher({
+            fs,
+            path,
+            log: deps.log,
+            microbotDir: deps.microbotDir,
+            isSafeClientVersion,
+            launch: harness.executor.launch,
+            writeCredentials: jest.fn(deps.writeCredentials),
+            downloadClient: jest.fn(async () => ({ success: true })),
+            prepareNightly: jest.fn(),
+            fetchLatestVersion: jest.fn(async () => VERSION),
+            recordClientUse: jest.fn(async () => {}),
+            proxyChoices: setupProxyChoices({ fs, path, microbotDir: deps.microbotDir }),
+            listProfiles: () => accounts.map((account) => account.profile),
+            listVersions: () => listClientJars(fs, deps.microbotDir).map((entry) => entry.version)
+        });
     };
 
     beforeEach(async () => {
@@ -149,6 +175,37 @@ describe('Jagex character in the client environment', () => {
             JX_DISPLAY_NAME: 'Zezima'
         });
         await started;
+    });
+
+    test('a dashboard start writes the file and passes the character only for an account with a game session', async () => {
+        inherit({ JX_CHARACTER_ID: '9999', JX_SESSION_ID: 'session-parent', JX_DISPLAY_NAME: 'Parent' });
+        const launcher = dashboard([ZEZIMA, { accountId: '1003', displayName: 'NoSession', profile: 'Spare' }]);
+
+        await launcher.launchProfile('Spare');
+        expect(harness.launches).toHaveLength(1);
+        expect(Object.keys(harness.launches[0].options.env).filter((key) => key.startsWith('JX_'))).toEqual([]);
+        expect(fs.existsSync(harness.credentialsFile)).toBe(false);
+
+        await launcher.launchProfile('Main');
+        expect(harness.launches).toHaveLength(2);
+        expect(characterOf(harness.launches[1].options.env)).toEqual({
+            JX_CHARACTER_ID: '1001',
+            JX_SESSION_ID: 'session-zezima',
+            JX_DISPLAY_NAME: 'Zezima'
+        });
+        const file = fs.readFileSync(harness.credentialsFile, 'utf8');
+        expect(file).toContain('JX_CHARACTER_ID=1001\n');
+        expect(file).toContain('JX_SESSION_ID=session-zezima\n');
+    });
+
+    test('a character without a display name gets an empty one, never "undefined"', async () => {
+        const env = await openClient({ accountId: '1004', sessionId: 'session-unnamed', profile: 'Main' });
+
+        expect(env.JX_DISPLAY_NAME).toBe('');
+        expect(credentialEnv({ accountId: '1004', sessionId: 'session-unnamed', displayName: null }).JX_DISPLAY_NAME).toBe('');
+        const file = fs.readFileSync(harness.credentialsFile, 'utf8');
+        expect(file).toContain('JX_DISPLAY_NAME=\n');
+        expect(file).not.toContain('undefined');
     });
 
     test('a non-Jagex start never inherits a Jagex character from the launcher', async () => {
