@@ -136,6 +136,13 @@ describe('background mode', () => {
         expect(closeWindow().preventDefault).not.toHaveBeenCalled();
     });
 
+    test('hides to the tray again when the update could not install', () => {
+        const { background, closeWindow } = setup({ settings: '{"runInBackground":true}' });
+        const undo = background.allowQuit();
+        undo();
+        expect(closeWindow().preventDefault).toHaveBeenCalled();
+    });
+
     test('opens the launcher from the tray and when it is started again', () => {
         const { app, background, trays, win } = setup({ settings: '{"runInBackground":true}' });
         background.start();

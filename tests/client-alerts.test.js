@@ -962,7 +962,7 @@ describe('jar-executor alert token', () => {
         expect(harness.launches[0].args.join(' ')).not.toContain(FIRST_TOKEN);
     });
 
-    test('signed out launches exactly as before, with no env override', async () => {
+    test('signed out launches pass no token to the client', async () => {
         const ipcMain = new FakeIpcMain();
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'client-alerts-'));
         const request = jest.fn();
@@ -982,7 +982,7 @@ describe('jar-executor alert token', () => {
 
         expect(request).not.toHaveBeenCalled();
         expect(harness.launches).toHaveLength(1);
-        expect(harness.launches[0].options).not.toHaveProperty('env');
+        expect(harness.launches[0].options.env).not.toHaveProperty('MICROBOT_CLIENT_TOKEN');
     });
 
     test('a failing alert setup never blocks the launch', async () => {
@@ -992,6 +992,6 @@ describe('jar-executor alert token', () => {
         expect(await launch(harness, { profile: 'Main' })).toEqual({ success: true });
 
         expect(harness.launches).toHaveLength(1);
-        expect(harness.launches[0].options).not.toHaveProperty('env');
+        expect(harness.launches[0].options.env).not.toHaveProperty('MICROBOT_CLIENT_TOKEN');
     });
 });

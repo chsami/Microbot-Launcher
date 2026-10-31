@@ -1,4 +1,7 @@
 const { EventEmitter } = require('events');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const {
     registerLauncherUpdater,
@@ -6,7 +9,7 @@ const {
     SHOWN_RECHECK_AFTER_MS
 } = require('../libs/launcher-updater.js');
 
-function setup(beforeInstall) {
+function setup(beforeInstall, { env = {}, platform = 'linux' } = {}) {
     const autoUpdater = Object.assign(new EventEmitter(), {
         currentVersion: { version: '3.2.16' },
         downloadUpdate: jest.fn(),
@@ -40,7 +43,9 @@ function setup(beforeInstall) {
         showWindow,
         beforeInstall,
         now: () => clock.now,
-        every
+        every,
+        env,
+        platform
     });
     return { autoUpdater, handlers, send, log, updater, clock, timers, Notification, notices, showWindow };
 }
@@ -54,6 +59,7 @@ function windowThatIs({ visible = true, minimized = false } = {}) {
 }
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
+const onLinux = process.platform === 'linux' ? test : test.skip;
 
 describe('launcher updater', () => {
     test('installs silently and relaunches, so the NSIS wizard never shows on update', () => {
@@ -69,6 +75,124 @@ describe('launcher updater', () => {
         autoUpdater.emit('update-downloaded', { version: '3.2.17' });
         handlers['launcher-update:install']();
         expect(order).toEqual(['allow quit', 'install']);
+    });
+
+    test('shows the failure when Restart now cannot install, instead of leaving the button dead', () => {
+        const { autoUpdater, handlers, send } = setup();
+        autoUpdater.emit('update-downloaded', { version: '3.2.27' });
+        autoUpdater.quitAndInstall.mockImplementation(() => autoUpdater.emit('error', new Error('ENOENT')));
+        handlers['launcher-update:install']();
+        expect(send.mock.calls.map(([status]) => status)).toEqual([
+            { state: 'ready', version: '3.2.27' },
+            { state: 'error', stage: 'install' }
+        ]);
+    });
+
+    test('still shows the failure when the stand-in AppImage cannot be written', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'launcher-updater-'));
+        const appImage = path.join(dir, 'removed-folder', 'Microbot Launcher-3.2.24.AppImage');
+        const { autoUpdater, handlers, send, log } = setup(undefined, { env: { APPIMAGE: appImage } });
+        autoUpdater.quitAndInstall.mockImplementation(() => {
+            try {
+                fs.unlinkSync(appImage);
+            } catch (error) {
+                autoUpdater.emit('error', error);
+            }
+        });
+        autoUpdater.emit('update-downloaded', { version: '3.2.27' });
+        handlers['launcher-update:install']();
+        expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('Could not prepare'));
+        expect(send).toHaveBeenLastCalledWith({ state: 'error', stage: 'install' });
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('a second Restart now click while the install is quitting leaves no empty file behind', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'launcher-updater-'));
+        const appImage = path.join(dir, 'Microbot Launcher-3.2.24.AppImage');
+        fs.writeFileSync(appImage, 'launcher');
+        const { autoUpdater, handlers } = setup(undefined, { env: { APPIMAGE: appImage } });
+        autoUpdater.quitAndInstall.mockImplementation(() => {
+            fs.unlinkSync(appImage);
+            fs.writeFileSync(path.join(dir, 'Microbot Launcher-3.2.27.AppImage'), 'new launcher');
+        });
+        autoUpdater.emit('update-downloaded', { version: '3.2.27' });
+        handlers['launcher-update:install']();
+        handlers['launcher-update:install']();
+        expect(autoUpdater.quitAndInstall).toHaveBeenCalledTimes(1);
+        expect(fs.readdirSync(dir)).toEqual(['Microbot Launcher-3.2.27.AppImage']);
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('can try again after a failed install', () => {
+        const { autoUpdater, handlers } = setup();
+        autoUpdater.emit('update-downloaded', { version: '3.2.27' });
+        autoUpdater.quitAndInstall.mockImplementationOnce(() => autoUpdater.emit('error', new Error('ENOENT')));
+        handlers['launcher-update:install']();
+        handlers['launcher-update:install']();
+        expect(autoUpdater.quitAndInstall).toHaveBeenCalledTimes(2);
+    });
+
+    onLinux('never follows a dangling link at the old AppImage path', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'launcher-updater-'));
+        const target = path.join(dir, 'elsewhere.AppImage');
+        const appImage = path.join(dir, 'Microbot Launcher-3.2.24.AppImage');
+        fs.symlinkSync(target, appImage);
+        const { autoUpdater, handlers } = setup(undefined, { env: { APPIMAGE: appImage } });
+        autoUpdater.emit('update-downloaded', { version: '3.2.27' });
+        handlers['launcher-update:install']();
+        expect(fs.existsSync(target)).toBe(false);
+        expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    onLinux('does not install into the Trash when the launcher ran from there', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'launcher-updater-'));
+        const trash = path.join(dir, '.local', 'share', 'Trash', 'files');
+        fs.mkdirSync(trash, { recursive: true });
+        const appImage = path.join(trash, 'Microbot Launcher-3.2.24.AppImage');
+        const { autoUpdater, handlers } = setup(undefined, { env: { APPIMAGE: appImage } });
+        autoUpdater.emit('update-downloaded', { version: '3.2.27' });
+        handlers['launcher-update:install']();
+        expect(fs.existsSync(appImage)).toBe(false);
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('keeps hiding to the tray after a restart that did not happen', () => {
+        const undo = jest.fn();
+        const { autoUpdater, handlers } = setup(() => undo);
+        autoUpdater.emit('update-downloaded', { version: '3.2.27' });
+        autoUpdater.quitAndInstall.mockImplementationOnce(() => autoUpdater.emit('error', new Error('ENOENT')));
+        handlers['launcher-update:install']();
+        expect(undo).toHaveBeenCalledTimes(1);
+        handlers['launcher-update:install']();
+        expect(undo).toHaveBeenCalledTimes(1);
+    });
+
+    test('installs next to the AppImage the player deleted while it was running', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'launcher-updater-'));
+        const appImage = path.join(dir, 'Microbot Launcher-3.2.24.AppImage');
+        const { autoUpdater, handlers } = setup(undefined, { env: { APPIMAGE: appImage } });
+        autoUpdater.quitAndInstall.mockImplementation(() => fs.unlinkSync(appImage));
+        autoUpdater.emit('update-downloaded', { version: '3.2.27' });
+        handlers['launcher-update:install']();
+        expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('never touches an AppImage that is still in place, or other platforms', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'launcher-updater-'));
+        const appImage = path.join(dir, 'Microbot Launcher-3.2.24.AppImage');
+        fs.writeFileSync(appImage, 'launcher');
+        const linux = setup(undefined, { env: { APPIMAGE: appImage } });
+        linux.autoUpdater.emit('update-downloaded', { version: '3.2.27' });
+        linux.handlers['launcher-update:install']();
+        expect(fs.readFileSync(appImage, 'utf8')).toBe('launcher');
+        const missing = path.join(dir, 'gone.AppImage');
+        const windows = setup(undefined, { env: { APPIMAGE: missing }, platform: 'win32' });
+        windows.autoUpdater.emit('update-downloaded', { version: '3.2.27' });
+        windows.handlers['launcher-update:install']();
+        expect(fs.existsSync(missing)).toBe(false);
+        fs.rmSync(dir, { recursive: true, force: true });
     });
 
     test('keeps hiding to the tray when there is no update to install yet', () => {
@@ -96,7 +220,7 @@ describe('launcher updater', () => {
         expect(send.mock.calls.map(([status]) => status)).toEqual([
             { state: 'available', version: '3.2.17', current: '3.2.16' },
             { state: 'downloading', percent: 42 },
-            { state: 'error' },
+            { state: 'error', stage: 'download' },
             { state: 'ready', version: '3.2.17' }
         ]);
         expect(log.error).toHaveBeenCalled();

@@ -1,5 +1,6 @@
 const HELP_LINKS = {
-    discord: 'https://discord.gg/zaGrfqFEWE'
+    discord: 'https://discord.gg/zaGrfqFEWE',
+    launcherDownload: 'https://www.themicrobot.com?source=launcher'
 };
 
 module.exports = async function (app, ipcMain, window, log, openLocation, openExternal, close = () => app?.quit()) {

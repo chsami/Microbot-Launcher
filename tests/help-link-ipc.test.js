@@ -18,6 +18,14 @@ describe('open-help-link', () => {
         expect(registerExtraHandlers.HELP_LINKS.discord).toMatch(/^https:\/\/discord\.gg\//);
     });
 
+    test('opens the launcher download page on themicrobot.com', async () => {
+        const openExternal = jest.fn().mockResolvedValue();
+        const { invoke } = await setup(openExternal);
+
+        await expect(invoke('launcherDownload')).resolves.toEqual({ success: true });
+        expect(openExternal).toHaveBeenCalledWith('https://www.themicrobot.com?source=launcher');
+    });
+
     test('refuses anything that is not a known link', async () => {
         const openExternal = jest.fn();
         const { invoke } = await setup(openExternal);
