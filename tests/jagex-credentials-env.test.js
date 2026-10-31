@@ -101,6 +101,7 @@ describe('Jagex character in the client environment', () => {
     });
 
     test('two Jagex accounts each start with their own character, while the file holds the last one', async () => {
+        inherit({ MICROBOT_TEST_KEPT: 'kept' });
         const first = await openClient(ZEZIMA);
         const second = await openClient(LYNX);
 
@@ -108,7 +109,7 @@ describe('Jagex character in the client environment', () => {
         expect(characterOf(second)).toEqual({ JX_CHARACTER_ID: '1002', JX_SESSION_ID: 'session-lynx', JX_DISPLAY_NAME: 'Lynx' });
         expect(first.JX_ACCESS_TOKEN).toBe('');
         expect(first.JX_REFRESH_TOKEN).toBe('');
-        expect(first.PATH).toBe(process.env.PATH);
+        expect(first.MICROBOT_TEST_KEPT).toBe('kept');
 
         const file = fs.readFileSync(harness.credentialsFile, 'utf8');
         expect(file).toContain('JX_CHARACTER_ID=1002\n');
@@ -151,7 +152,7 @@ describe('Jagex character in the client environment', () => {
     });
 
     test('a non-Jagex start never inherits a Jagex character from the launcher', async () => {
-        inherit({ JX_CHARACTER_ID: '9999', JX_SESSION_ID: 'session-parent', JX_DISPLAY_NAME: 'Parent', JX_REFRESH_TOKEN: 'r', jx_access_token: 'a' });
+        inherit({ JX_CHARACTER_ID: '9999', JX_SESSION_ID: 'session-parent', JX_DISPLAY_NAME: 'Parent', JX_REFRESH_TOKEN: 'r', jx_access_token: 'a', MICROBOT_TEST_KEPT: 'kept' });
 
         await harness.handlers['play-no-jagex-account']({}, VERSION, null, '');
         await waitFor(() => harness.launches.length > 0);
@@ -161,7 +162,7 @@ describe('Jagex character in the client environment', () => {
 
         for (const { options } of harness.launches) {
             expect(Object.keys(options.env).filter((key) => key.toUpperCase().startsWith('JX_'))).toEqual([]);
-            expect(options.env.PATH).toBe(process.env.PATH);
+            expect(options.env.MICROBOT_TEST_KEPT).toBe('kept');
         }
         expect(fs.existsSync(harness.credentialsFile)).toBe(false);
     });
