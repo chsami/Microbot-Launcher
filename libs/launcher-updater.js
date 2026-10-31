@@ -1,6 +1,7 @@
 // Forwards electron-updater events to the renderer's update banner and handles its button clicks.
 const RECHECK_EVERY_MS = 4 * 60 * 60 * 1000;
 const SHOWN_RECHECK_AFTER_MS = 30 * 60 * 1000;
+const TRASH_FOLDER = /(^|\/)(\.local\/share\/Trash|\.Trash(-\d+)?)\//;
 
 function registerLauncherUpdater({
     autoUpdater,
@@ -24,6 +25,7 @@ function registerLauncherUpdater({
     let checking = false;
     let installing = false;
     let installFailed = false;
+    let installStarted = false;
     let lastCheck = 0;
     let watched = null;
     let notice = null;
@@ -49,9 +51,13 @@ function registerLauncherUpdater({
     const restoreMovedAppImage = () => {
         const appImage = env.APPIMAGE;
         if (platform !== 'linux' || !appImage || fs.existsSync(appImage)) return;
+        if (TRASH_FOLDER.test(appImage)) {
+            log.warn(`The running launcher ${appImage} is in the Trash; not installing the update there.`);
+            return;
+        }
         log.warn(`The running launcher ${appImage} was moved or deleted; installing the update in its folder.`);
         try {
-            fs.writeFileSync(appImage, '');
+            fs.writeFileSync(appImage, '', { flag: 'wx' });
         } catch (error) {
             log.warn(`Could not prepare ${appImage} for the update: ${error?.message || error}`);
         }
@@ -73,8 +79,9 @@ function registerLauncherUpdater({
         log.error('Launcher update failed:', error);
         if (installing) installFailed = true;
         if (!downloading && !installing) return;
+        const stage = installing ? 'install' : 'download';
         downloading = false;
-        send({ state: 'error' });
+        send({ state: 'error', stage });
     });
 
     ipcMain.handle('launcher-update:download', () => {
@@ -83,6 +90,7 @@ function registerLauncherUpdater({
     });
     // Silent (/S) install over the existing copy, then relaunch: skips the NSIS wizard.
     ipcMain.handle('launcher-update:install', () => {
+        if (installStarted) return;
         let undoAllowQuit = null;
         if (downloaded) {
             undoAllowQuit = beforeInstall();
@@ -94,6 +102,7 @@ function registerLauncherUpdater({
             return autoUpdater.quitAndInstall(true, true);
         } finally {
             installing = false;
+            if (downloaded && !installFailed) installStarted = true;
             if (installFailed && typeof undoAllowQuit === 'function') undoAllowQuit();
         }
     });
