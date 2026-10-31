@@ -11,7 +11,10 @@ function registerLauncherUpdater({
     showWindow = () => {},
     beforeInstall = () => {},
     now = Date.now,
-    every = setInterval
+    every = setInterval,
+    fs = require('fs'),
+    env = process.env,
+    platform = process.platform
 }) {
     autoUpdater.autoDownload = false;
     autoUpdater.disableWebInstaller = true;
@@ -19,6 +22,8 @@ function registerLauncherUpdater({
     let downloading = false;
     let downloaded = false;
     let checking = false;
+    let installing = false;
+    let installFailed = false;
     let lastCheck = 0;
     let watched = null;
     let notice = null;
@@ -41,6 +46,17 @@ function registerLauncherUpdater({
         }
     };
 
+    const restoreMovedAppImage = () => {
+        const appImage = env.APPIMAGE;
+        if (platform !== 'linux' || !appImage || fs.existsSync(appImage)) return;
+        log.warn(`The running launcher ${appImage} was moved or deleted; installing the update in its folder.`);
+        try {
+            fs.writeFileSync(appImage, '');
+        } catch (error) {
+            log.warn(`Could not prepare ${appImage} for the update: ${error?.message || error}`);
+        }
+    };
+
     autoUpdater.on('update-available', (info) => {
         send({ state: 'available', version: info.version, current: autoUpdater.currentVersion.version });
         notifyIfHidden(info.version);
@@ -55,7 +71,8 @@ function registerLauncherUpdater({
     });
     autoUpdater.on('error', (error) => {
         log.error('Launcher update failed:', error);
-        if (!downloading) return;
+        if (installing) installFailed = true;
+        if (!downloading && !installing) return;
         downloading = false;
         send({ state: 'error' });
     });
@@ -66,8 +83,19 @@ function registerLauncherUpdater({
     });
     // Silent (/S) install over the existing copy, then relaunch: skips the NSIS wizard.
     ipcMain.handle('launcher-update:install', () => {
-        if (downloaded) beforeInstall();
-        return autoUpdater.quitAndInstall(true, true);
+        let undoAllowQuit = null;
+        if (downloaded) {
+            undoAllowQuit = beforeInstall();
+            restoreMovedAppImage();
+        }
+        installing = true;
+        installFailed = false;
+        try {
+            return autoUpdater.quitAndInstall(true, true);
+        } finally {
+            installing = false;
+            if (installFailed && typeof undoAllowQuit === 'function') undoAllowQuit();
+        }
     });
 
     const check = ({ unlessCheckedWithin = 0 } = {}) => {
