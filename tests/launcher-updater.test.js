@@ -59,6 +59,7 @@ function windowThatIs({ visible = true, minimized = false } = {}) {
 }
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
+const onLinux = process.platform === 'linux' ? test : test.skip;
 
 describe('launcher updater', () => {
     test('installs silently and relaunches, so the NSIS wizard never shows on update', () => {
@@ -131,7 +132,7 @@ describe('launcher updater', () => {
         expect(autoUpdater.quitAndInstall).toHaveBeenCalledTimes(2);
     });
 
-    test('never follows a dangling link at the old AppImage path', () => {
+    onLinux('never follows a dangling link at the old AppImage path', () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'launcher-updater-'));
         const target = path.join(dir, 'elsewhere.AppImage');
         const appImage = path.join(dir, 'Microbot Launcher-3.2.24.AppImage');
@@ -144,7 +145,7 @@ describe('launcher updater', () => {
         fs.rmSync(dir, { recursive: true, force: true });
     });
 
-    test('does not install into the Trash when the launcher ran from there', () => {
+    onLinux('does not install into the Trash when the launcher ran from there', () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'launcher-updater-'));
         const trash = path.join(dir, '.local', 'share', 'Trash', 'files');
         fs.mkdirSync(trash, { recursive: true });
