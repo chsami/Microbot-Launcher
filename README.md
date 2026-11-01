@@ -80,10 +80,3 @@ Run each one on the platform it builds for. Installers land in `dist/`. Windows 
 
 Questions? Join the [Discord](https://discord.gg/zaGrfqFEWE) server.
 
-## ☕ Buy Me a Coffee
-
-If you enjoy my open source work and would like to support me, consider buying me a coffee! Your support helps me stay caffeinated and motivated to keep improving and creating awesome projects.
-
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-donate-yellow)](https://www.paypal.com/paypalme/MicrobotBE?country.x=BE)
-
-Thank you for your support! 😊
