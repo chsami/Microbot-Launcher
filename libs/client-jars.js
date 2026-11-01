@@ -4,6 +4,8 @@ const CLIENT_JAR_PATTERN = /^microbot-(.+)\.jar$/;
 const OFFICIAL_VERSION_PATTERN = /^\d+(\.\d+)*$/;
 const LEADING_VERSION_PATTERN = /^(\d+(?:\.\d+)*)/;
 const DOWNLOADED_CLIENTS_FILE = 'downloaded_clients.json';
+const CUSTOM_VERSION_PREFIX = 'custom-';
+const CUSTOM_VERSION_MAX_LENGTH = 100;
 
 function isSafeClientVersion(version) {
     return (
@@ -14,6 +16,37 @@ function isSafeClientVersion(version) {
         !/[\\/:*?"<>|\u0000-\u001f]/.test(version) &&
         !version.includes('..')
     );
+}
+
+/**
+ * Turn the name of a jar the user picked into a safe version for the
+ * microbot-<version>.jar convention. Custom jars get a "custom-" prefix so
+ * they are never mistaken for a numbered official release.
+ *
+ * @param {string} filePath Path or file name of the picked jar.
+ * @returns {string|null} A safe version, or null if the name cannot be used.
+ */
+function customClientVersion(filePath) {
+    if (typeof filePath !== 'string') {
+        return null;
+    }
+    const base = path
+        .basename(filePath)
+        .replace(/\.jar$/i, '')
+        .replace(/^microbot-/i, '')
+        .replace(/^custom-/i, '');
+    const cleaned = base
+        .replace(/[^A-Za-z0-9._-]+/g, '-')
+        .replace(/-{2,}/g, '-')
+        .replace(/\.{2,}/g, '.')
+        .replace(/^[-.]+|[-.]+$/g, '')
+        .slice(0, CUSTOM_VERSION_MAX_LENGTH)
+        .replace(/[-.]+$/g, '');
+    const version =
+        cleaned.toLowerCase() === 'custom' || /^custom-/i.test(cleaned)
+            ? cleaned
+            : `${CUSTOM_VERSION_PREFIX}${cleaned || 'client'}`;
+    return isSafeClientVersion(version) ? version : null;
 }
 
 function parseClientJar(file) {
@@ -75,6 +108,9 @@ function compareClientJars(a, b) {
 
 function labelClientJar(entry, latestVersion) {
     if (entry.kind === 'custom') {
+        if (entry.version.toLowerCase().startsWith(CUSTOM_VERSION_PREFIX)) {
+            return `${entry.version.slice(CUSTOM_VERSION_PREFIX.length)} (custom)`;
+        }
         return `${entry.version} (custom)`;
     }
     if (typeof latestVersion === 'string' && entry.version === latestVersion) {
@@ -156,6 +192,7 @@ function markClientDownloaded(fs, dir, version) {
 module.exports = {
     DOWNLOADED_CLIENTS_FILE,
     isSafeClientVersion,
+    customClientVersion,
     parseClientJar,
     compareClientJars,
     labelClientJar,

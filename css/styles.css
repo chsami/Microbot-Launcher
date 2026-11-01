@@ -1045,6 +1045,36 @@ h2 {
     color: var(--text-strong);
 }
 
+.load-custom-client-btn {
+    width: 100%;
+    margin: -4px 0 10px;
+    padding: 8px 12px;
+    border: 1px dashed var(--line);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--body);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color .15s ease, color .15s ease;
+}
+
+.load-custom-client-btn:hover:not(:disabled) {
+    border-color: var(--gold);
+    color: var(--gold);
+}
+
+.load-custom-client-btn:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+}
+
+.load-custom-client-btn:disabled {
+    opacity: .5;
+    cursor: wait;
+}
+
 /* Same box as the selects (padding, border, 14px/600 value) so the toggle reads as one more field. */
 .game-info .hwid-spoof-toggle {
     position: relative;

@@ -12,6 +12,7 @@ Get the installer for Windows, macOS or Linux from [themicrobot.com](https://the
 
 - **Play with a Jagex account or a normal account.** *Login Jagex account* signs you in through Jagex so you can play your Jagex characters. *Play normal account* opens the client so you can log in with a username and password on the game's login screen.
 - **Stable or Nightly.** Stable is the tested release and right for most players. Nightly is built every night from the newest Microbot code: you get fixes sooner, but it is tested less. On Stable, keep the newest version, because older ones stop working after game updates.
+- **Custom client builds.** Press *Load custom client JAR…* under Version to add a client you built yourself. It is copied into `~/.microbot` (`%USERPROFILE%\.microbot` on Windows) and appears in the Version list as `<name> (custom)`.
 - **Profiles.** A profile holds your plugin settings, and each Jagex character remembers its own, so every account can keep its own setup. Sign in with a Microbot account to back your profiles up and use them on another PC.
 - **Client RAM.** Choose how much memory the client gets. 1 or 2 GB is enough for one client.
 - **Spoof hardware IDs.** On by default. Each account sends its own `random.dat` seed instead of your computer's.
