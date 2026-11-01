@@ -133,10 +133,19 @@ describe('client jar cleanup and listing with an isolated home', () => {
     describe('IPC handlers', () => {
         let handlers;
         let axios;
+        let dialog;
+
+        function jarBytes() {
+            const buffer = Buffer.alloc(32);
+            Buffer.from([0x50, 0x4b, 0x03, 0x04]).copy(buffer, 0);
+            Buffer.from([0x50, 0x4b, 0x05, 0x06]).copy(buffer, 24);
+            return buffer;
+        }
 
         beforeEach(async () => {
             handlers = {};
             axios = jest.fn().mockResolvedValue({ data: Buffer.from('jar') });
+            dialog = { showOpenDialog: jest.fn() };
             const ipcHandlers = require('../libs/ipc-handlers.js');
             await ipcHandlers({
                 ipcMain: {
@@ -149,7 +158,7 @@ describe('client jar cleanup and listing with an isolated home', () => {
                 packageJson: { version: '1.0.0' },
                 path,
                 log: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
-                dialog: {},
+                dialog,
                 fs,
                 projectDir: path.join(__dirname, '..'),
                 app: {}
@@ -171,6 +180,50 @@ describe('client jar cleanup and listing with an isolated home', () => {
                 (await handlers['list-client-jars']({}, '2.6.28')).map((j) => j.label)
             ).toEqual(['2.6.28 (latest)', '2.6.22 (older)', 'custom (custom)']);
             expect(await handlers['client-exists']({}, 'custom')).toBe(true);
+        });
+
+        test('load-custom-client-jar copies a picked jar under a custom version', async () => {
+            const source = path.join(homeDir, 'My Client.jar');
+            fs.writeFileSync(source, jarBytes());
+            dialog.showOpenDialog.mockResolvedValue({
+                canceled: false,
+                filePaths: [source]
+            });
+
+            const result = await handlers['load-custom-client-jar']();
+
+            expect(result).toEqual({
+                success: true,
+                file: 'microbot-custom-My-Client.jar',
+                version: 'custom-My-Client'
+            });
+            expect(exists('microbot-custom-My-Client.jar')).toBe(true);
+            expect(
+                fs.readFileSync(path.join(microbotDir, 'microbot-custom-My-Client.jar'))
+            ).toEqual(fs.readFileSync(source));
+        });
+
+        test('load-custom-client-jar leaves the folder alone when the picker is cancelled', async () => {
+            dialog.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] });
+
+            expect(await handlers['load-custom-client-jar']()).toEqual({
+                canceled: true
+            });
+            expect(fs.readdirSync(microbotDir)).toEqual([]);
+        });
+
+        test('load-custom-client-jar refuses a file that is not a jar', async () => {
+            const source = path.join(homeDir, 'notes.txt');
+            fs.writeFileSync(source, 'not a jar');
+            dialog.showOpenDialog.mockResolvedValue({
+                canceled: false,
+                filePaths: [source]
+            });
+
+            expect(await handlers['load-custom-client-jar']()).toEqual({
+                error: 'Choose a .jar file.'
+            });
+            expect(fs.readdirSync(microbotDir)).toEqual([]);
         });
 
         test('download-client records the version as launcher-managed', async () => {

@@ -1897,6 +1897,35 @@ async function populateAndSelectClientVersion(version) {
     await selectClientVersion(version);
 }
 
+async function loadCustomClientJar() {
+    const button = document.getElementById('load-custom-client');
+    if (!button || button.disabled) return;
+    button.disabled = true;
+    try {
+        const result = await window.electron.loadCustomClientJar();
+        if (!result || result.canceled) return;
+        if (result.error) {
+            window.electron.errorAlert(result.error);
+            return;
+        }
+        if (isNightlyChannel()) {
+            await selectChannel('stable');
+        }
+        await populateAndSelectClientVersion(result.version);
+        window.electron.logError(`Loaded custom client ${result.file}`);
+    } catch (error) {
+        window.electron.errorAlert(error?.message || String(error));
+    } finally {
+        button.disabled = false;
+    }
+}
+
+function setupCustomClientJar() {
+    const button = document.getElementById('load-custom-client');
+    button?.removeEventListener('click', loadCustomClientJar);
+    button?.addEventListener('click', loadCustomClientJar);
+}
+
 /**
  * Select client version select element value
  *
@@ -2131,6 +2160,7 @@ async function initUI(properties) {
 
     await setVersionPreference(properties);
     setupChannelSwitch(properties);
+    setupCustomClientJar();
     document.querySelector('.game-info').style = 'display:block';
 
     await setupRamInput();

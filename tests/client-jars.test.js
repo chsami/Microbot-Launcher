@@ -8,6 +8,7 @@ const {
     labelClientJar,
     markClientDownloaded,
     readDownloadedClients,
+    customClientVersion,
     DOWNLOADED_CLIENTS_FILE
 } = require('../libs/client-jars');
 
@@ -49,12 +50,39 @@ describe('parseClientJar', () => {
     });
 });
 
+describe('customClientVersion', () => {
+    test('turns a picked jar name into a safe custom version', () => {
+        expect(customClientVersion('C:\\builds\\microbot-2.6.47.jar')).toBe(
+            'custom-2.6.47'
+        );
+        expect(customClientVersion('Microbot My Build.jar')).toBe(
+            'custom-Microbot-My-Build'
+        );
+        expect(customClientVersion('microbot-2.6.28-dev.jar')).toBe(
+            'custom-2.6.28-dev'
+        );
+        expect(customClientVersion('microbot-custom.jar')).toBe('custom');
+        expect(customClientVersion('microbot-custom-mybuild.jar')).toBe(
+            'custom-mybuild'
+        );
+    });
+
+    test('strips path separators and odd characters', () => {
+        expect(customClientVersion('..\\..\\evil name*.jar')).toBe(
+            'custom-evil-name'
+        );
+        expect(customClientVersion('.jar')).toBe('custom-client');
+        expect(customClientVersion(null)).toBeNull();
+    });
+});
+
 describe('labelClientJar', () => {
     test('labels latest, older, custom and unknown-latest jars', () => {
         expect(labelClientJar(parseClientJar('microbot-2.6.28.jar'), '2.6.28')).toBe('2.6.28 (latest)');
         expect(labelClientJar(parseClientJar('microbot-2.6.9.jar'), '2.6.28')).toBe('2.6.9 (older)');
         expect(labelClientJar(parseClientJar('microbot-2.6.30.jar'), '2.6.28')).toBe('2.6.30');
         expect(labelClientJar(parseClientJar('microbot-dev.jar'), '2.6.28')).toBe('dev (custom)');
+        expect(labelClientJar(parseClientJar('microbot-custom-dev.jar'), '2.6.28')).toBe('dev (custom)');
         expect(labelClientJar(parseClientJar('microbot-2.6.27.jar'), null)).toBe('2.6.27');
         expect(labelClientJar(parseClientJar('microbot-2.6.27.jar'), { error: 'offline' })).toBe('2.6.27');
     });

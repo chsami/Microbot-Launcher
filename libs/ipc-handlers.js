@@ -28,10 +28,11 @@ module.exports = async function (deps) {
     const {
         listClientJars,
         markClientDownloaded,
-        isSafeClientVersion
+        isSafeClientVersion,
+        customClientVersion
     } = require(path.join(projectDir, 'libs', 'client-jars.js'));
     const { ensureHwidAgentJar } = require(path.join(projectDir, 'libs', 'hwid-agent.js'));
-    const { prepareNightly, nightlyStatus } = require(path.join(
+    const { prepareNightly, nightlyStatus, isCompleteJar } = require(path.join(
         projectDir,
         'libs',
         'nightly-client.js'
@@ -355,6 +356,64 @@ module.exports = async function (deps) {
         } catch (error) {
             log.error(`Unable to scan directory: ${error}`);
             return [];
+        }
+    });
+
+    ipcMain.handle('load-custom-client-jar', async () => {
+        if (!dialog || typeof dialog.showOpenDialog !== 'function') {
+            return { error: 'The file picker is not available.' };
+        }
+        let selection;
+        try {
+            selection = await dialog.showOpenDialog({
+                title: 'Load a custom client JAR',
+                properties: ['openFile'],
+                filters: [{ name: 'Client JAR', extensions: ['jar'] }]
+            });
+        } catch (error) {
+            log.error(`Could not open the custom JAR picker: ${error.message}`);
+            return { error: error.message };
+        }
+        if (!selection || selection.canceled || !selection.filePaths?.length) {
+            return { canceled: true };
+        }
+        const source = selection.filePaths[0];
+        if (path.extname(source).toLowerCase() !== '.jar') {
+            return { error: 'Choose a .jar file.' };
+        }
+        const version = customClientVersion(source);
+        if (!version) {
+            return { error: 'That file name cannot be used for a custom client.' };
+        }
+        try {
+            if (!fs.statSync(source).isFile()) {
+                return { error: 'Choose a .jar file.' };
+            }
+            if (!isCompleteJar(fs, source)) {
+                return { error: 'That file is not a complete JAR.' };
+            }
+            fs.mkdirSync(microbotDir, { recursive: true });
+            const target = path.join(microbotDir, `microbot-${version}.jar`);
+            if (path.resolve(source) !== path.resolve(target)) {
+                const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
+                try {
+                    fs.copyFileSync(source, temporary);
+                    fs.renameSync(temporary, target);
+                } catch (error) {
+                    try {
+                        fs.rmSync(temporary, { force: true });
+                    } catch (_) {}
+                    if (['EBUSY', 'EPERM', 'EACCES'].includes(error.code)) {
+                        return { error: 'Close any client using this custom JAR, then try again.' };
+                    }
+                    throw error;
+                }
+            }
+            log.info(`Loaded custom client ${source} as ${path.basename(target)}`);
+            return { success: true, file: path.basename(target), version };
+        } catch (error) {
+            log.error(`Could not load custom client ${source}: ${error.message}`);
+            return { error: error.message };
         }
     });
 
