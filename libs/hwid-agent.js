@@ -4,6 +4,8 @@ const { isSafeClientVersion } = require('./client-jars.js');
 const hwidAgentFile = 'hwid-agent-<version>.jar';
 const HWID_SPOOF_PROPERTY = 'hwid_spoof';
 const LAUNCHER_DISABLED_ARG = '-Dmicrobot.hwid.launcherDisabled=true';
+// The agent stays inert unless the client is started with this flag.
+const SPOOF_ENABLED_ARG = '-Dmicrobot.hwid.spoof=true';
 
 async function ensureHwidAgentJar({ axios, fs, log, microbotDir, filestorage, version }) {
     if (!isSafeClientVersion(version)) return null;
@@ -40,19 +42,21 @@ function hwidAgentJarPath({ fs, microbotDir, version }) {
     return fs.existsSync(jarPath) ? jarPath : null;
 }
 
+// Opt-in: only an explicit on turns spoofing on.
 function isHwidSpoofEnabled(value) {
-    return value !== false && value !== 'false';
+    return value === true || value === 'true';
 }
 
 function hwidAgentArgs({ fs, microbotDir, version, enabled }) {
     if (!isHwidSpoofEnabled(enabled)) return [LAUNCHER_DISABLED_ARG];
     const agentJar = hwidAgentJarPath({ fs, microbotDir, version });
-    return agentJar ? [`-javaagent:${agentJar}`] : [];
+    return agentJar ? [`-javaagent:${agentJar}`, SPOOF_ENABLED_ARG] : [];
 }
 
 module.exports = {
     HWID_SPOOF_PROPERTY,
     LAUNCHER_DISABLED_ARG,
+    SPOOF_ENABLED_ARG,
     ensureHwidAgentJar,
     hwidAgentJarPath,
     isHwidSpoofEnabled,

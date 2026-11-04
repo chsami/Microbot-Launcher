@@ -1932,7 +1932,7 @@ function getProxyValues() {
 
 function getHwidSpoofPreference() {
     const checkbox = document.getElementById('hwid-spoof');
-    return checkbox ? checkbox.checked : true;
+    return checkbox ? checkbox.checked : false;
 }
 
 function getClientRamPreference() {
@@ -2563,7 +2563,7 @@ async function setupHwidSpoofInput() {
     }
 
     const properties = await window.electron.readProperties();
-    checkbox.checked = properties['hwid_spoof'] !== 'false';
+    checkbox.checked = properties['hwid_spoof'] === 'true';
 
     checkbox.addEventListener('change', async () => {
         const latestProperties = await window.electron.readProperties();

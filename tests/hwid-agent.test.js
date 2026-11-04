@@ -7,7 +7,8 @@ const {
     ensureHwidAgentJar,
     hwidAgentJarPath,
     isHwidSpoofEnabled,
-    hwidAgentArgs
+    hwidAgentArgs,
+    SPOOF_ENABLED_ARG
 } = require('../libs/hwid-agent.js');
 
 const FILESTORAGE = 'https://files.microbot.example';
@@ -124,25 +125,30 @@ describe('hwidAgentJarPath', () => {
 });
 
 describe('isHwidSpoofEnabled', () => {
-    test('defaults to on for missing or unknown values', () => {
-        expect(isHwidSpoofEnabled(undefined)).toBe(true);
-        expect(isHwidSpoofEnabled(null)).toBe(true);
-        expect(isHwidSpoofEnabled(true)).toBe(true);
-        expect(isHwidSpoofEnabled('true')).toBe(true);
-    });
-
-    test('is off only when explicitly disabled', () => {
+    test('defaults to off for missing or unknown values', () => {
+        expect(isHwidSpoofEnabled(undefined)).toBe(false);
+        expect(isHwidSpoofEnabled(null)).toBe(false);
+        expect(isHwidSpoofEnabled('yes')).toBe(false);
         expect(isHwidSpoofEnabled(false)).toBe(false);
         expect(isHwidSpoofEnabled('false')).toBe(false);
+    });
+
+    test('is on only when explicitly enabled', () => {
+        expect(isHwidSpoofEnabled(true)).toBe(true);
+        expect(isHwidSpoofEnabled('true')).toBe(true);
     });
 });
 
 describe('hwidAgentArgs', () => {
-    test('attaches the agent when enabled and the jar exists', () => {
+    test('attaches the agent and turns spoofing on when enabled and the jar exists', () => {
         const jarPath = path.join(microbotDir, `hwid-agent-${VERSION}.jar`);
         fs.writeFileSync(jarPath, 'x');
-        expect(hwidAgentArgs({ fs, microbotDir, version: VERSION, enabled: true })).toEqual([`-javaagent:${jarPath}`]);
-        expect(hwidAgentArgs({ fs, microbotDir, version: VERSION, enabled: undefined })).toEqual([`-javaagent:${jarPath}`]);
+        expect(hwidAgentArgs({ fs, microbotDir, version: VERSION, enabled: true })).toEqual([`-javaagent:${jarPath}`, SPOOF_ENABLED_ARG]);
+    });
+
+    test('treats a missing choice as off', () => {
+        fs.writeFileSync(path.join(microbotDir, `hwid-agent-${VERSION}.jar`), 'x');
+        expect(hwidAgentArgs({ fs, microbotDir, version: VERSION, enabled: undefined })).toEqual([LAUNCHER_DISABLED_ARG]);
     });
 
     test('adds nothing when enabled but the jar is missing', () => {

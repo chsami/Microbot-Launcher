@@ -114,7 +114,7 @@ function buildStartOptions({
             channel,
             version: channel === 'stable' ? stableVersion(properties.version_pref) : null,
             ram: sanitizeRam(properties.client_ram),
-            hwidSpoof: properties.hwid_spoof !== 'false',
+            hwidSpoof: properties.hwid_spoof === 'true',
             proxyId: proxyIdOf(playProxyAddress(account, properties))
         }
     };
