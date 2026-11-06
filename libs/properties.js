@@ -1,15 +1,15 @@
+// Define your default values here
+const defaultProperties = {
+    client: '0.0.0',
+    version_pref: '0.0.0',
+    proxyip: '',
+    client_ram: '1g'
+};
+
 module.exports = async function (deps) {
     const { fs, path, microbotDir, ipcMain, log } = deps;
 
     const filePath = path.resolve(microbotDir, 'resource_versions.json');
-
-    // Define your default values here
-    const defaultProperties = {
-        client: '0.0.0',
-        version_pref: '0.0.0',
-        proxyip: '',
-        client_ram: '1g'
-    };
 
     ipcMain.handle('write-properties', async (event, data) => {
         try {
@@ -52,3 +52,5 @@ module.exports = async function (deps) {
         }
     });
 };
+
+module.exports.defaultProperties = defaultProperties;

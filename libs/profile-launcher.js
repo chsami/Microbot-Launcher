@@ -303,7 +303,7 @@ module.exports = function setupProfileLauncher(deps) {
             version: resolved.version,
             proxy: { proxyIp },
             ramPreference: typeof properties.client_ram === 'string' ? properties.client_ram : '',
-            hwidSpoof: properties.hwid_spoof !== 'false'
+            hwidSpoof: properties.hwid_spoof === 'true'
         });
     };
 

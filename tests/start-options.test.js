@@ -51,7 +51,7 @@ describe('start options sent to the dashboard', () => {
                 channel: 'stable',
                 version: '2.6.44',
                 ram: '2g',
-                hwidSpoof: true,
+                hwidSpoof: false,
                 proxyId: 'x_13'
             }
         });
@@ -93,6 +93,7 @@ describe('start options sent to the dashboard', () => {
     test('RAM and hardware ID spoofing follow the saved settings, like the Play screen', () => {
         expect(build({ properties: { client_ram: ' 4G ', hwid_spoof: 'false' } }).defaults).toMatchObject({ ram: '4g', hwidSpoof: false });
         expect(build({ properties: { client_ram: 'lots' } }).defaults.ram).toBe('1g');
+        expect(build({ properties: { hwid_spoof: 'true' } }).defaults.hwidSpoof).toBe(true);
         const custom = build({ properties: { client_ram: '3g' } });
         expect(custom.defaults.ram).toBe('3g');
         expect(custom.ramChoices).toEqual(['256m', '512m', '1g', '2g', '4g', '6g', '8g', '3g']);

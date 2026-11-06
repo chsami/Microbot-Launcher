@@ -7,7 +7,9 @@ const {
     ensureHwidAgentJar,
     hwidAgentJarPath,
     isHwidSpoofEnabled,
-    hwidAgentArgs
+    hwidAgentArgs,
+    SPOOF_ENABLED_ARG,
+    settleHwidSpoofChoice
 } = require('../libs/hwid-agent.js');
 
 const FILESTORAGE = 'https://files.microbot.example';
@@ -124,25 +126,30 @@ describe('hwidAgentJarPath', () => {
 });
 
 describe('isHwidSpoofEnabled', () => {
-    test('defaults to on for missing or unknown values', () => {
-        expect(isHwidSpoofEnabled(undefined)).toBe(true);
-        expect(isHwidSpoofEnabled(null)).toBe(true);
-        expect(isHwidSpoofEnabled(true)).toBe(true);
-        expect(isHwidSpoofEnabled('true')).toBe(true);
-    });
-
-    test('is off only when explicitly disabled', () => {
+    test('defaults to off for missing or unknown values', () => {
+        expect(isHwidSpoofEnabled(undefined)).toBe(false);
+        expect(isHwidSpoofEnabled(null)).toBe(false);
+        expect(isHwidSpoofEnabled('yes')).toBe(false);
         expect(isHwidSpoofEnabled(false)).toBe(false);
         expect(isHwidSpoofEnabled('false')).toBe(false);
+    });
+
+    test('is on only when explicitly enabled', () => {
+        expect(isHwidSpoofEnabled(true)).toBe(true);
+        expect(isHwidSpoofEnabled('true')).toBe(true);
     });
 });
 
 describe('hwidAgentArgs', () => {
-    test('attaches the agent when enabled and the jar exists', () => {
+    test('attaches the agent and turns spoofing on when enabled and the jar exists', () => {
         const jarPath = path.join(microbotDir, `hwid-agent-${VERSION}.jar`);
         fs.writeFileSync(jarPath, 'x');
-        expect(hwidAgentArgs({ fs, microbotDir, version: VERSION, enabled: true })).toEqual([`-javaagent:${jarPath}`]);
-        expect(hwidAgentArgs({ fs, microbotDir, version: VERSION, enabled: undefined })).toEqual([`-javaagent:${jarPath}`]);
+        expect(hwidAgentArgs({ fs, microbotDir, version: VERSION, enabled: true })).toEqual([`-javaagent:${jarPath}`, SPOOF_ENABLED_ARG]);
+    });
+
+    test('treats a missing choice as off', () => {
+        fs.writeFileSync(path.join(microbotDir, `hwid-agent-${VERSION}.jar`), 'x');
+        expect(hwidAgentArgs({ fs, microbotDir, version: VERSION, enabled: undefined })).toEqual([LAUNCHER_DISABLED_ARG]);
     });
 
     test('adds nothing when enabled but the jar is missing', () => {
@@ -152,5 +159,76 @@ describe('hwidAgentArgs', () => {
     test('skips the agent and tells the client when disabled', () => {
         fs.writeFileSync(path.join(microbotDir, `hwid-agent-${VERSION}.jar`), 'x');
         expect(hwidAgentArgs({ fs, microbotDir, version: VERSION, enabled: false })).toEqual([LAUNCHER_DISABLED_ARG]);
+    });
+});
+
+describe('settleHwidSpoofChoice', () => {
+    const propertiesFile = () => path.join(microbotDir, 'resource_versions.json');
+    const saved = () => JSON.parse(fs.readFileSync(propertiesFile(), 'utf8'));
+    const settle = (log = createLog()) => settleHwidSpoofChoice({ fs, log, microbotDir, defaults: { client_ram: '1g' } });
+
+    test('an existing install with nothing saved keeps spoofing', () => {
+        fs.writeFileSync(propertiesFile(), JSON.stringify({ client_ram: '2g', selected_account: 'abc' }));
+        expect(settle()).toBe('true');
+        expect(saved()).toEqual({ client_ram: '2g', selected_account: 'abc', hwid_spoof: 'true' });
+    });
+
+    test('an earlier run that left only accounts or a client jar counts as an existing install', () => {
+        fs.writeFileSync(path.join(microbotDir, 'accounts.json'), '[]');
+        expect(settle()).toBe('true');
+        expect(saved()).toEqual({ client_ram: '1g', hwid_spoof: 'true' });
+
+        fs.rmSync(path.join(microbotDir, 'accounts.json'));
+        fs.rmSync(propertiesFile());
+        fs.writeFileSync(path.join(microbotDir, 'microbot-2.6.21.jar'), 'x');
+        expect(settle()).toBe('true');
+    });
+
+    test('a new install starts with spoofing off', () => {
+        fs.writeFileSync(path.join(microbotDir, 'launcher-settings.json'), '{}');
+        expect(settle()).toBe('false');
+        expect(saved()).toEqual({ client_ram: '1g', hwid_spoof: 'false' });
+    });
+
+    test('a saved choice is left untouched', () => {
+        for (const value of ['true', 'false']) {
+            const content = JSON.stringify({ client_ram: '2g', hwid_spoof: value });
+            fs.writeFileSync(propertiesFile(), content);
+            expect(settle()).toBe(value);
+            expect(fs.readFileSync(propertiesFile(), 'utf8')).toBe(content);
+        }
+    });
+
+    test('runs only once: the saved choice wins on later starts', () => {
+        expect(settle()).toBe('false');
+        fs.writeFileSync(path.join(microbotDir, 'accounts.json'), '[]');
+        expect(settle()).toBe('false');
+    });
+
+    test('an unreadable settings file is kept as a copy and replaced with spoofing on', () => {
+        fs.writeFileSync(propertiesFile(), '{broken');
+        const log = createLog();
+        expect(settle(log)).toBe('true');
+        expect(fs.readFileSync(`${propertiesFile()}.unreadable`, 'utf8')).toBe('{broken');
+        expect(saved()).toEqual({ client_ram: '1g', hwid_spoof: 'true' });
+        expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('resource_versions.json.unreadable'));
+    });
+
+    test('a settings file holding JSON that is not an object is kept as a copy and replaced with spoofing on', () => {
+        for (const content of ['[]', 'null', '"text"', '42']) {
+            fs.writeFileSync(propertiesFile(), content);
+            expect(settle()).toBe('true');
+            expect(fs.readFileSync(`${propertiesFile()}.unreadable`, 'utf8')).toBe(content);
+            expect(saved()).toEqual({ client_ram: '1g', hwid_spoof: 'true' });
+        }
+    });
+
+    test('an unreadable settings file is left alone when it cannot be copied', () => {
+        fs.writeFileSync(propertiesFile(), '{broken');
+        const failingCopy = { ...fs, copyFileSync: () => { throw new Error('disk full'); } };
+        const log = createLog();
+        expect(settleHwidSpoofChoice({ fs: failingCopy, log, microbotDir, defaults: { client_ram: '1g' } })).toBeNull();
+        expect(fs.readFileSync(propertiesFile(), 'utf8')).toBe('{broken');
+        expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('disk full'));
     });
 });
