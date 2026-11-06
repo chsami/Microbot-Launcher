@@ -51,6 +51,8 @@ contextBridge.exposeInMainWorld('electron', {
     listClientJars: (latestVersion) =>
         ipcRenderer.invoke('list-client-jars', latestVersion),
     loadCustomClientJar: () => ipcRenderer.invoke('load-custom-client-jar'),
+    removeCustomClientJar: (version) =>
+        ipcRenderer.invoke('remove-custom-client-jar', version),
     listProfiles: () => ipcRenderer.invoke('list-profiles'),
     launcherVersion: () => ipcRenderer.invoke('launcher-version'),
     logError: (message) => ipcRenderer.invoke('log-error', message),

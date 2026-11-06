@@ -312,6 +312,18 @@
             </svg>
         </button>
     </div>
+    <div id="custom-clients-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
+        aria-labelledby="custom-clients-title">
+        <div class="auth-card custom-clients-card">
+            <h1 id="custom-clients-title" class="auth-title">Custom client JARs</h1>
+            <p class="auth-subtitle">Remove custom JARs you no longer need. Official and nightly builds are managed by
+                the launcher.</p>
+            <ul id="custom-clients-list" class="proxy-list" aria-label="Custom client JARs"></ul>
+            <p id="custom-clients-empty" class="proxy-list-empty">No custom client JARs.</p>
+            <p id="custom-clients-error" class="auth-error" role="alert" aria-live="polite"></p>
+            <button id="custom-clients-close" class="auth-cancel" type="button">Done</button>
+        </div>
+    </div>
     <div id="proxy-manager-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
         aria-labelledby="proxy-manager-title">
         <div class="auth-card proxy-manager-card">
@@ -537,8 +549,21 @@
                             title="Built every night from the newest code. New fixes first, but may have bugs.">Nightly</button>
                     </div>
                     <select id="client" aria-labelledby="client-channel-label"></select>
-                    <button id="load-custom-client" class="load-custom-client-btn" type="button"
-                        title="Load a client JAR you built yourself">Load custom client JAR…</button>
+                    <div class="custom-client-actions">
+                        <button id="load-custom-client" class="load-custom-client-btn" type="button"
+                            title="Load a client JAR you built yourself">Load custom client JAR…</button>
+                        <button id="manage-custom-clients" class="refresh-accounts-btn" type="button"
+                            title="Remove custom client JARs you no longer need"
+                            aria-label="Manage custom client JARs">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 6h18"></path>
+                                <path d="M8 6V4h8v2"></path>
+                                <path d="M19 6l-1 14H6L5 6"></path>
+                                <path d="M10 11v6M14 11v6"></path>
+                            </svg>
+                        </button>
+                    </div>
                     <div id="nightly-info" class="nightly-info" aria-live="polite" hidden>
                         <span id="nightly-info-title" class="nightly-info-title">Nightly build</span>
                         <span id="nightly-info-hint" class="nightly-info-hint"></span>

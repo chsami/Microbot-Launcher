@@ -29,7 +29,8 @@ module.exports = async function (deps) {
         listClientJars,
         markClientDownloaded,
         isSafeClientVersion,
-        customClientVersion
+        customClientVersion,
+        parseClientJar
     } = require(path.join(projectDir, 'libs', 'client-jars.js'));
     const { ensureHwidAgentJar } = require(path.join(projectDir, 'libs', 'hwid-agent.js'));
     const { prepareNightly, nightlyStatus, isCompleteJar } = require(path.join(
@@ -426,6 +427,39 @@ module.exports = async function (deps) {
             return { success: true, file: path.basename(target), version };
         } catch (error) {
             log.error(`Could not load custom client ${source}: ${error.message}`);
+            return { error: error.message };
+        }
+    });
+
+    ipcMain.handle('remove-custom-client-jar', async (event, version) => {
+        if (!isSafeClientVersion(version)) {
+            return invalidVersionResult(version);
+        }
+        const entry = parseClientJar(`microbot-${version}.jar`);
+        if (!entry || entry.kind !== 'custom') {
+            return { error: 'Only custom client JARs can be removed.' };
+        }
+        const filePath = path.join(microbotDir, entry.file);
+        try {
+            if (!fs.statSync(filePath).isFile()) {
+                return { error: 'Custom client JAR not found.' };
+            }
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                return { error: 'Custom client JAR not found.' };
+            }
+            log.error(`Could not inspect custom client ${filePath}: ${error.message}`);
+            return { error: error.message };
+        }
+        try {
+            fs.rmSync(filePath);
+            log.info(`Removed custom client ${entry.file}`);
+            return { success: true, version, file: entry.file };
+        } catch (error) {
+            if (['EBUSY', 'EPERM', 'EACCES'].includes(error.code)) {
+                return { error: 'Close any client using this custom JAR, then try again.' };
+            }
+            log.error(`Could not remove custom client ${filePath}: ${error.message}`);
             return { error: error.message };
         }
     });
