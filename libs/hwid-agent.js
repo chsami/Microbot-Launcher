@@ -68,29 +68,44 @@ function settleHwidSpoofChoice({ fs, log, microbotDir, defaults = {} }) {
     const file = path.join(microbotDir, PROPERTIES_FILE);
     let properties = null;
     if (fs.existsSync(file)) {
+        let problem = null;
         try {
             properties = JSON.parse(fs.readFileSync(file, 'utf8'));
+            if (!properties || typeof properties !== 'object' || Array.isArray(properties)) {
+                problem = 'it is not a settings object';
+            }
         } catch (error) {
-            log.warn(`Could not read ${PROPERTIES_FILE}, so Spoof hardware IDs was left unset: ${error.message}`);
-            return null;
+            problem = error.message;
         }
-        if (!properties || typeof properties !== 'object' || Array.isArray(properties)) {
-            log.warn(`${PROPERTIES_FILE} is not a settings object, so Spoof hardware IDs was left unset.`);
-            return null;
-        }
+        if (problem) return replaceUnreadableSettings({ fs, log, file, defaults, problem });
         if (properties[HWID_SPOOF_PROPERTY] !== undefined) return properties[HWID_SPOOF_PROPERTY];
     }
     const value = isExistingInstall({ fs, microbotDir }) ? 'true' : 'false';
     try {
         fs.writeFileSync(file, JSON.stringify({ ...(properties || defaults), [HWID_SPOOF_PROPERTY]: value }, null, 2), 'utf8');
     } catch (error) {
-        log.warn(`Could not save the Spoof hardware IDs choice: ${error.message}`);
+        log.warn(value === 'true'
+            ? `Could not save Spoof hardware IDs as on for this existing install, so this launch starts without spoofing and the launcher tries again next start: ${error.message}`
+            : `Could not save Spoof hardware IDs as off for this new install: ${error.message}`);
         return null;
     }
     log.info(value === 'true'
         ? 'Spoof hardware IDs kept on for an existing install.'
         : 'Spoof hardware IDs starts off for a new install.');
     return value;
+}
+
+function replaceUnreadableSettings({ fs, log, file, defaults, problem }) {
+    const backup = `${file}.unreadable`;
+    try {
+        fs.copyFileSync(file, backup);
+        fs.writeFileSync(file, JSON.stringify({ ...defaults, [HWID_SPOOF_PROPERTY]: 'true' }, null, 2), 'utf8');
+    } catch (error) {
+        log.warn(`Could not read ${PROPERTIES_FILE} (${problem}) or replace it, so Spoof hardware IDs was left unset: ${error.message}`);
+        return null;
+    }
+    log.warn(`Could not read ${PROPERTIES_FILE} (${problem}). Saved a copy as ${path.basename(backup)} and reset launcher settings, with Spoof hardware IDs kept on for this existing install.`);
+    return 'true';
 }
 
 module.exports = {

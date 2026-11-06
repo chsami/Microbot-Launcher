@@ -205,11 +205,30 @@ describe('settleHwidSpoofChoice', () => {
         expect(settle()).toBe('false');
     });
 
-    test('an unreadable settings file is not overwritten', () => {
+    test('an unreadable settings file is kept as a copy and replaced with spoofing on', () => {
         fs.writeFileSync(propertiesFile(), '{broken');
         const log = createLog();
-        expect(settle(log)).toBeNull();
+        expect(settle(log)).toBe('true');
+        expect(fs.readFileSync(`${propertiesFile()}.unreadable`, 'utf8')).toBe('{broken');
+        expect(saved()).toEqual({ client_ram: '1g', hwid_spoof: 'true' });
+        expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('resource_versions.json.unreadable'));
+    });
+
+    test('a settings file holding JSON that is not an object is kept as a copy and replaced with spoofing on', () => {
+        for (const content of ['[]', 'null', '"text"', '42']) {
+            fs.writeFileSync(propertiesFile(), content);
+            expect(settle()).toBe('true');
+            expect(fs.readFileSync(`${propertiesFile()}.unreadable`, 'utf8')).toBe(content);
+            expect(saved()).toEqual({ client_ram: '1g', hwid_spoof: 'true' });
+        }
+    });
+
+    test('an unreadable settings file is left alone when it cannot be copied', () => {
+        fs.writeFileSync(propertiesFile(), '{broken');
+        const failingCopy = { ...fs, copyFileSync: () => { throw new Error('disk full'); } };
+        const log = createLog();
+        expect(settleHwidSpoofChoice({ fs: failingCopy, log, microbotDir, defaults: { client_ram: '1g' } })).toBeNull();
         expect(fs.readFileSync(propertiesFile(), 'utf8')).toBe('{broken');
-        expect(log.warn).toHaveBeenCalled();
+        expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('disk full'));
     });
 });
