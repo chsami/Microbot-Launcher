@@ -60,7 +60,7 @@ describe('launching a profile without the launcher window', () => {
             version: '2.6.43',
             proxy: { proxyIp: '' },
             ramPreference: '2g',
-            hwidSpoof: true,
+            hwidSpoof: false,
             account: JAGEX_MAIN
         });
         expect(deps.recordClientUse).toHaveBeenCalledWith('2.6.43');
@@ -111,7 +111,7 @@ describe('launching a profile without the launcher window', () => {
             version: '2.6.43',
             proxy: { proxyIp: '' },
             ramPreference: '2g',
-            hwidSpoof: true,
+            hwidSpoof: false,
             account: { ...JAGEX_ALT, profile: 'main' }
         });
     });
@@ -165,6 +165,12 @@ describe('launching a profile without the launcher window', () => {
         const { deps, launchProfile } = setup({ properties: { hwid_spoof: 'false' } });
         await launchProfile('main');
         expect(deps.launch.mock.calls[0][0].hwidSpoof).toBe(false);
+    });
+
+    test('spoofs hardware IDs only when it was switched on', async () => {
+        const { deps, launchProfile } = setup({ properties: { hwid_spoof: 'true' } });
+        await launchProfile('main');
+        expect(deps.launch.mock.calls[0][0].hwidSpoof).toBe(true);
     });
 
     test('a profile no Jagex account uses starts without one', async () => {

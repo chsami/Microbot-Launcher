@@ -14,7 +14,7 @@ Get the installer for Windows, macOS or Linux from [themicrobot.com](https://the
 - **Stable or Nightly.** Stable is the tested release and right for most players. Nightly is built every night from the newest Microbot code: you get fixes sooner, but it is tested less. On Stable, keep the newest version, because older ones stop working after game updates.
 - **Profiles.** A profile holds your plugin settings, and each Jagex character remembers its own, so every account can keep its own setup. Sign in with a Microbot account to back your profiles up and use them on another PC.
 - **Client RAM.** Choose how much memory the client gets. 1 or 2 GB is enough for one client.
-- **Spoof hardware IDs.** On by default. Each account sends its own `random.dat` seed instead of your computer's.
+- **Spoof hardware IDs.** Off by default for new installs. If you used Microbot before this update, your setting is kept. When on, each account sends its own `random.dat` seed instead of your computer's. Changes apply on the next client start.
 - **Proxies.** Optional, SOCKS5 only. A character you added through a proxy switches back to it when you select it. With a Jagex account, the login window and the launcher's Jagex requests also go through the proxy.
 - **Microbot account and dashboard.** Signing in is optional and is not your Jagex account. Once you're signed in, the left pane shows your [Microbot dashboard](https://dashboard.microbot.cloud): your linked clients, what they're running, the XP they're making and your bot alerts.
 - **Setup guide.** On first start a short guide explains which account you have and what to check before you play. Open it again from the menu at any time.
