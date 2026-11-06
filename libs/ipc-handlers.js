@@ -365,6 +365,19 @@ module.exports = async function (deps) {
         }
         let selection;
         try {
+            const warning = await dialog.showMessageBox({
+                type: 'warning',
+                title: 'Load a custom client JAR',
+                message: 'Only load a client you built yourself.',
+                detail: 'The client you load gets your account login, just like the official one. Never load a JAR someone sent you: that is how accounts get stolen.',
+                buttons: ['Cancel', 'Choose JAR'],
+                defaultId: 0,
+                cancelId: 0,
+                noLink: true
+            });
+            if (warning?.response !== 1) {
+                return { canceled: true };
+            }
             selection = await dialog.showOpenDialog({
                 title: 'Load a custom client JAR',
                 properties: ['openFile'],

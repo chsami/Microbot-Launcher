@@ -145,7 +145,10 @@ describe('client jar cleanup and listing with an isolated home', () => {
         beforeEach(async () => {
             handlers = {};
             axios = jest.fn().mockResolvedValue({ data: Buffer.from('jar') });
-            dialog = { showOpenDialog: jest.fn() };
+            dialog = {
+                showOpenDialog: jest.fn(),
+                showMessageBox: jest.fn().mockResolvedValue({ response: 1 })
+            };
             const ipcHandlers = require('../libs/ipc-handlers.js');
             await ipcHandlers({
                 ipcMain: {
@@ -209,6 +212,23 @@ describe('client jar cleanup and listing with an isolated home', () => {
             expect(await handlers['load-custom-client-jar']()).toEqual({
                 canceled: true
             });
+            expect(fs.readdirSync(microbotDir)).toEqual([]);
+        });
+
+        test('load-custom-client-jar opens no picker when the warning is cancelled', async () => {
+            dialog.showMessageBox.mockResolvedValue({ response: 0 });
+
+            expect(await handlers['load-custom-client-jar']()).toEqual({
+                canceled: true
+            });
+            expect(dialog.showMessageBox).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    message: 'Only load a client you built yourself.',
+                    cancelId: 0,
+                    defaultId: 0
+                })
+            );
+            expect(dialog.showOpenDialog).not.toHaveBeenCalled();
             expect(fs.readdirSync(microbotDir)).toEqual([]);
         });
 

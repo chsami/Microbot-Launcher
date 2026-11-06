@@ -30,8 +30,9 @@ function customClientVersion(filePath) {
     if (typeof filePath !== 'string') {
         return null;
     }
-    const base = path
-        .basename(filePath)
+    const base = filePath
+        .split(/[\\/]/)
+        .pop()
         .replace(/\.jar$/i, '')
         .replace(/^microbot-/i, '')
         .replace(/^custom-/i, '');
