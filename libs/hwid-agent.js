@@ -4,8 +4,10 @@ const { isSafeClientVersion } = require('./client-jars.js');
 const hwidAgentFile = 'hwid-agent-<version>.jar';
 const HWID_SPOOF_PROPERTY = 'hwid_spoof';
 const LAUNCHER_DISABLED_ARG = '-Dmicrobot.hwid.launcherDisabled=true';
-// The agent stays inert unless the client is started with this flag.
 const SPOOF_ENABLED_ARG = '-Dmicrobot.hwid.spoof=true';
+const PROPERTIES_FILE = 'resource_versions.json';
+const EARLIER_RUN_FILES = [PROPERTIES_FILE, 'accounts.json'];
+const CLIENT_JAR = /^microbot-.+\.jar$/;
 
 async function ensureHwidAgentJar({ axios, fs, log, microbotDir, filestorage, version }) {
     if (!isSafeClientVersion(version)) return null;
@@ -53,6 +55,44 @@ function hwidAgentArgs({ fs, microbotDir, version, enabled }) {
     return agentJar ? [`-javaagent:${agentJar}`, SPOOF_ENABLED_ARG] : [];
 }
 
+function isExistingInstall({ fs, microbotDir }) {
+    if (EARLIER_RUN_FILES.some((name) => fs.existsSync(path.join(microbotDir, name)))) return true;
+    try {
+        return fs.readdirSync(microbotDir).some((name) => CLIENT_JAR.test(name));
+    } catch (_) {
+        return false;
+    }
+}
+
+function settleHwidSpoofChoice({ fs, log, microbotDir, defaults = {} }) {
+    const file = path.join(microbotDir, PROPERTIES_FILE);
+    let properties = null;
+    if (fs.existsSync(file)) {
+        try {
+            properties = JSON.parse(fs.readFileSync(file, 'utf8'));
+        } catch (error) {
+            log.warn(`Could not read ${PROPERTIES_FILE}, so Spoof hardware IDs was left unset: ${error.message}`);
+            return null;
+        }
+        if (!properties || typeof properties !== 'object' || Array.isArray(properties)) {
+            log.warn(`${PROPERTIES_FILE} is not a settings object, so Spoof hardware IDs was left unset.`);
+            return null;
+        }
+        if (properties[HWID_SPOOF_PROPERTY] !== undefined) return properties[HWID_SPOOF_PROPERTY];
+    }
+    const value = isExistingInstall({ fs, microbotDir }) ? 'true' : 'false';
+    try {
+        fs.writeFileSync(file, JSON.stringify({ ...(properties || defaults), [HWID_SPOOF_PROPERTY]: value }, null, 2), 'utf8');
+    } catch (error) {
+        log.warn(`Could not save the Spoof hardware IDs choice: ${error.message}`);
+        return null;
+    }
+    log.info(value === 'true'
+        ? 'Spoof hardware IDs kept on for an existing install.'
+        : 'Spoof hardware IDs starts off for a new install.');
+    return value;
+}
+
 module.exports = {
     HWID_SPOOF_PROPERTY,
     LAUNCHER_DISABLED_ARG,
@@ -60,5 +100,7 @@ module.exports = {
     ensureHwidAgentJar,
     hwidAgentJarPath,
     isHwidSpoofEnabled,
-    hwidAgentArgs
+    hwidAgentArgs,
+    isExistingInstall,
+    settleHwidSpoofChoice
 };

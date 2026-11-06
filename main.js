@@ -237,6 +237,12 @@ app.whenReady().then(async () => {
         return;
     }
 
+    require(path.join(__dirname, 'libs', 'hwid-agent.js')).settleHwidSpoofChoice({
+        fs,
+        log,
+        microbotDir,
+        defaults: require(path.join(__dirname, 'libs', 'properties.js')).defaultProperties
+    });
     await loadLibraries();
     await createWindow();
     background.start();

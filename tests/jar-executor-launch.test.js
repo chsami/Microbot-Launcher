@@ -69,10 +69,10 @@ function createHarness({ clipboard = true, response = 0, startupWindowMs = 2500,
     return { deps, handlers, spawnCalls, dialogs, dialogShown, log };
 }
 
-async function launch(harness, { ram = '', proxy = null, profile, displayName } = {}) {
+async function launch(harness, { ram = '', proxy = null, profile, displayName, hwidSpoof } = {}) {
     await require('../libs/jar-executor')(harness.deps);
     const account = profile || displayName ? { profile, displayName } : null;
-    return harness.handlers['open-client']({}, VERSION, proxy, account, ram);
+    return harness.handlers['open-client']({}, VERSION, proxy, account, ram, hwidSpoof);
 }
 
 function useJava(major) {
@@ -294,6 +294,42 @@ describe('open-client launch diagnostics with real Java runtimes', () => {
         const args = harness.spawnCalls[1].args;
         expect(args).toEqual(expect.arrayContaining(['-Xms256m', '-Xmx512m']));
         expect(args.some((arg) => /ZGC|SoftMaxHeapSize|ZUncommit/.test(arg))).toBe(false);
+    });
+
+    describe('hardware ID spoofing arguments', () => {
+        const java17 = () =>
+            fakeRuntimeHarness(
+                fs.readFileSync(path.join(__dirname, '__fixtures__', 'java-probe', 'synthetic-windows-temurin-17-x86.txt'), 'utf8')
+            );
+        const agentJar = () => path.join(microbotDir, `hwid-agent-${VERSION}.jar`);
+
+        beforeEach(() => fs.writeFileSync(agentJar(), 'x'));
+        afterEach(() => fs.rmSync(agentJar(), { force: true }));
+
+        test('ticked passes the agent and the spoof flag before -jar', async () => {
+            const harness = java17();
+            await launch(harness, { hwidSpoof: true });
+            await waitFor(() => harness.spawnCalls.length >= 2);
+            const args = harness.spawnCalls[1].args;
+            const jar = args.indexOf('-jar');
+            expect(jar).toBeGreaterThan(-1);
+            expect(args.indexOf(`-javaagent:${agentJar()}`)).toBeGreaterThan(-1);
+            expect(args.indexOf(`-javaagent:${agentJar()}`)).toBeLessThan(jar);
+            expect(args.indexOf('-Dmicrobot.hwid.spoof=true')).toBeGreaterThan(-1);
+            expect(args.indexOf('-Dmicrobot.hwid.spoof=true')).toBeLessThan(jar);
+            expect(args).not.toContain('-Dmicrobot.hwid.launcherDisabled=true');
+        });
+
+        test('unticked passes no agent and marks the opt-out before -jar', async () => {
+            const harness = java17();
+            await launch(harness, { hwidSpoof: false });
+            await waitFor(() => harness.spawnCalls.length >= 2);
+            const args = harness.spawnCalls[1].args;
+            expect(args.some((arg) => arg.startsWith('-javaagent:'))).toBe(false);
+            expect(args.some((arg) => arg.startsWith('-Dmicrobot.hwid.spoof'))).toBe(false);
+            expect(args.indexOf('-Dmicrobot.hwid.launcherDisabled=true')).toBeGreaterThan(-1);
+            expect(args.indexOf('-Dmicrobot.hwid.launcherDisabled=true')).toBeLessThan(args.indexOf('-jar'));
+        });
     });
 
     test('multibyte characters split across stderr chunks are still redacted', async () => {
