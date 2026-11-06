@@ -1926,6 +1926,132 @@ function setupCustomClientJar() {
     button?.addEventListener('click', loadCustomClientJar);
 }
 
+function renderCustomClientList(jars) {
+    const list = document.getElementById('custom-clients-list');
+    const empty = document.getElementById('custom-clients-empty');
+    if (!list) return;
+    const customJars = Array.isArray(jars)
+        ? jars.filter((jar) => jar.kind === 'custom')
+        : [];
+    list.innerHTML = '';
+    if (empty) empty.hidden = customJars.length > 0;
+    for (const jar of customJars) {
+        const row = document.createElement('li');
+        row.className = 'custom-client-row';
+        const details = document.createElement('div');
+        details.className = 'custom-client-details';
+        const name = document.createElement('span');
+        name.className = 'custom-client-name';
+        name.textContent = jar.label;
+        const file = document.createElement('span');
+        file.className = 'custom-client-file';
+        file.textContent = jar.file;
+        details.append(name, file);
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className =
+            'profile-icon-button profile-delete-button custom-client-remove';
+        remove.dataset.version = jar.version;
+        remove.title = `Remove ${jar.file}`;
+        remove.setAttribute('aria-label', `Remove ${jar.file}`);
+        remove.innerHTML =
+            '<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>';
+        row.append(details, remove);
+        list.appendChild(row);
+    }
+}
+
+async function refreshClientJarListAfterRemoval() {
+    const selectedFile = document.getElementById('client').value;
+    const remaining = await orderClientJarsByVersion();
+    populateSelectElement('client', remaining);
+    const keep = remaining.find((jar) => jar.file === selectedFile);
+    if (keep) {
+        await selectClientVersion(keep.version);
+        return;
+    }
+    if (remaining.length > 0) {
+        await selectClientVersion(remaining[0].version);
+        return;
+    }
+    const properties = await window.electron.readProperties();
+    properties['version_pref'] = '0.0.0';
+    await window.electron.writeProperties(properties);
+}
+
+function setupCustomClientManager() {
+    const modal = document.getElementById('custom-clients-modal');
+    const openButton = document.getElementById('manage-custom-clients');
+    const closeButton = document.getElementById('custom-clients-close');
+    const list = document.getElementById('custom-clients-list');
+    const message = document.getElementById('custom-clients-error');
+    if (!modal || !openButton || !list) return;
+
+    const close = () => {
+        modal.classList.add('auth-hidden');
+        document.removeEventListener('keydown', closeOnEscape);
+        openButton.focus();
+    };
+    const closeOnEscape = (event) => {
+        if (event.key === 'Escape') close();
+    };
+    const showMessage = (text) => {
+        if (!message) return;
+        message.textContent = text;
+        message.classList.remove('success');
+    };
+
+    openButton.addEventListener('click', async () => {
+        showMessage('');
+        renderCustomClientList(await orderClientJarsByVersion());
+        modal.classList.remove('auth-hidden');
+        document.addEventListener('keydown', closeOnEscape);
+        closeButton?.focus();
+    });
+    closeButton?.addEventListener('click', close);
+    modal.addEventListener('click', (event) => {
+        if (event.target === modal) close();
+    });
+    list.addEventListener('click', async (event) => {
+        const button = event.target.closest('.custom-client-remove');
+        if (!button || button.disabled) return;
+        const version = button.dataset.version;
+        const jars = await orderClientJarsByVersion();
+        const jar = jars.find(
+            (entry) => entry.version === version && entry.kind === 'custom'
+        );
+        if (!jar) {
+            showMessage('That custom client is no longer in the list.');
+            return;
+        }
+        const confirmed = await window.electron.showConfirmationDialog(
+            'Remove this custom client?',
+            `This deletes ${jar.file} from your .microbot folder. This cannot be undone.`,
+            'Remove custom client',
+            'Remove',
+            'Cancel',
+            { type: 'warning', defaultId: 1, cancelId: 1 }
+        );
+        if (!confirmed) return;
+        button.disabled = true;
+        try {
+            const result = await window.electron.removeCustomClientJar(version);
+            if (result?.error) {
+                showMessage(result.error);
+                return;
+            }
+            await refreshClientJarListAfterRemoval();
+            renderCustomClientList(await orderClientJarsByVersion());
+            showMessage(`Removed ${jar.file}.`);
+            if (message) message.classList.add('success');
+        } catch (error) {
+            showMessage(error?.message || String(error));
+        } finally {
+            button.disabled = false;
+        }
+    });
+}
+
 /**
  * Select client version select element value
  *
@@ -2161,6 +2287,7 @@ async function initUI(properties) {
     await setVersionPreference(properties);
     setupChannelSwitch(properties);
     setupCustomClientJar();
+    setupCustomClientManager();
     document.querySelector('.game-info').style = 'display:block';
 
     await setupRamInput();

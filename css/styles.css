@@ -1075,6 +1075,61 @@ h2 {
     cursor: wait;
 }
 
+.custom-client-actions {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    margin: -4px 0 10px;
+}
+
+.custom-client-actions .load-custom-client-btn {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+}
+
+.custom-client-actions .refresh-accounts-btn {
+    min-width: 44px;
+    margin: 0;
+}
+
+.custom-clients-card {
+    width: min(540px, 100%);
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+}
+
+.custom-client-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface-2);
+}
+
+.custom-client-details {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.custom-client-name {
+    color: var(--text-strong);
+    font-size: 14px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.custom-client-file {
+    color: var(--muted);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
 /* Same box as the selects (padding, border, 14px/600 value) so the toggle reads as one more field. */
 .game-info .hwid-spoof-toggle {
     position: relative;

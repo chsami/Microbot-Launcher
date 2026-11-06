@@ -246,6 +246,33 @@ describe('client jar cleanup and listing with an isolated home', () => {
             expect(fs.readdirSync(microbotDir)).toEqual([]);
         });
 
+        test('remove-custom-client-jar deletes only custom jars', async () => {
+            touch('microbot-custom.jar');
+            touch('microbot-2.6.28.jar');
+
+            expect(await handlers['remove-custom-client-jar']({}, 'custom')).toEqual({
+                success: true,
+                version: 'custom',
+                file: 'microbot-custom.jar'
+            });
+            expect(exists('microbot-custom.jar')).toBe(false);
+            expect(exists('microbot-2.6.28.jar')).toBe(true);
+
+            expect(await handlers['remove-custom-client-jar']({}, '2.6.28')).toEqual({
+                error: 'Only custom client JARs can be removed.'
+            });
+            expect(exists('microbot-2.6.28.jar')).toBe(true);
+        });
+
+        test('remove-custom-client-jar rejects unsafe or missing versions', async () => {
+            expect(await handlers['remove-custom-client-jar']({}, '../evil')).toEqual({
+                error: 'Invalid client version: "../evil"'
+            });
+            expect(await handlers['remove-custom-client-jar']({}, 'missing')).toEqual({
+                error: 'Custom client JAR not found.'
+            });
+        });
+
         test('download-client records the version as launcher-managed', async () => {
             const sender = { send: jest.fn() };
 
