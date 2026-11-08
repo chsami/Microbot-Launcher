@@ -369,7 +369,7 @@ module.exports = function setupRuneliteLoader(deps) {
     const viewFor = (access, status) => {
         if (operation) return { visible: true, state: 'working', progress: progressText, mode: readMode() };
         if (access.available) return { ...cardFor(access, status), mode: readMode() };
-        if (status?.installed) return { visible: true, state: 'remove-only', mode: readMode() };
+        if (status?.installed) return { visible: true, state: 'remove-only', mode: 'runelite' };
         fallBackToClient(access);
         return { visible: false };
     };
@@ -379,7 +379,8 @@ module.exports = function setupRuneliteLoader(deps) {
         if (!status?.installed) return { visible: true, state: 'not-added', version };
         if (status.agentSha256 !== access.agent.sha256) return { visible: true, state: 'update', reason: 'new-version', version };
         if (status.willLoad === false) return { visible: true, state: 'update', reason: 'not-loading', version };
-        if (status.signedIn === false || tokenRefused(status.lastStart)) return { visible: true, state: 'update', reason: 'signed-out', version };
+        if (status.signedIn === false || status.lastStart?.code === 'signed-out') return { visible: true, state: 'update', reason: 'signed-out', version };
+        if (status.lastStart?.code === 'not-ready') return { visible: true, state: 'added', note: 'not-ready', version };
         return { visible: true, state: 'added', version };
     };
 
@@ -556,16 +557,10 @@ function parseStatus(stdout) {
 function parseLastStart(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     return {
-        state: typeof value.state === 'string' ? value.state : null,
-        reason: typeof value.reason === 'string' ? value.reason : null
+        code: typeof value.code === 'string' ? value.code.trim().toLowerCase() : null,
+        at: typeof value.at === 'string' ? value.at : null,
+        message: typeof value.message === 'string' ? value.message : null
     };
-}
-
-function tokenRefused(lastStart) {
-    if (!lastStart) return false;
-    const text = `${lastStart.state || ''} ${lastStart.reason || ''}`;
-    if (/unauthori[sz]ed|\b401\b/i.test(text)) return true;
-    return /token/i.test(text) && /refus|reject|invalid|revok|expired|denied/i.test(text);
 }
 
 function lineJarPath(argument) {
@@ -611,5 +606,4 @@ function withTimeout(promise, ms) {
 module.exports.parseAgent = parseAgent;
 module.exports.parseStatus = parseStatus;
 module.exports.sentence = sentence;
-module.exports.tokenRefused = tokenRefused;
 module.exports.MESSAGES = MESSAGES;

@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const setupRuneliteLoader = require('../libs/runelite-loader');
-const { parseStatus, parseAgent, tokenRefused, MESSAGES } = require('../libs/runelite-loader');
+const { parseStatus, parseAgent, MESSAGES } = require('../libs/runelite-loader');
 const { PROBE_ARGS } = require('../libs/java-runtime');
 
 class FakeIpcMain {
@@ -581,38 +581,51 @@ describe('runelite-loader', () => {
             expect(await setup().loader.state()).toMatchObject({ state: 'update', reason: 'not-loading' });
         });
 
-        test('Update when the last RuneLite start had its token refused', async () => {
+        const lastStart = (code, message = null) => ({ code, at: '2026-11-08T07:00:00Z', message });
+
+        test('Update when the last RuneLite start was signed out', async () => {
             installAgentJar();
-            statusWith({ willLoad: true, lastStart: { state: 'FAILED', reason: 'token refused' } });
+            statusWith({ willLoad: true, lastStart: lastStart('signed-out', 'The client token was refused.') });
 
             expect(await setup().loader.state()).toMatchObject({ state: 'update', reason: 'signed-out' });
         });
 
-        test('a good last start and willLoad true read as added', async () => {
+        test('not ready reads as added with a quiet note', async () => {
             installAgentJar();
-            statusWith({ willLoad: true, lastStart: { state: 'LOADED', reason: null } });
+            statusWith({ willLoad: true, lastStart: lastStart('not-ready') });
+
+            expect(await setup().loader.state()).toEqual({ visible: true, state: 'added', note: 'not-ready', version: '1.0.0', mode: 'client' });
+        });
+
+        test.each(['loaded', 'not-member', 'safe-mode', 'offline', 'error', 'something-new'])('a last start of %s reads as added', async (code) => {
+            installAgentJar();
+            statusWith({ willLoad: true, lastStart: lastStart(code, 'whatever') });
+
+            expect(await setup().loader.state()).toEqual({ visible: true, state: 'added', version: '1.0.0', mode: 'client' });
+        });
+
+        test('no last start yet reads as added', async () => {
+            installAgentJar();
+            statusWith({ willLoad: true, lastStart: null });
 
             expect(await setup().loader.state()).toMatchObject({ state: 'added' });
         });
 
-        test('reads the new status fields and tolerates odd shapes', () => {
-            expect(parseStatus(JSON.stringify({ installed: true, willLoad: false, lastStart: { state: 'FAILED', reason: 'HTTP 401' } }))).toMatchObject({
-                willLoad: false,
-                lastStart: { state: 'FAILED', reason: 'HTTP 401' }
-            });
-            expect(parseStatus(JSON.stringify({ installed: true, willLoad: 'no', lastStart: 'x' }))).toMatchObject({ willLoad: null, lastStart: null });
+        test('not-member without access is the remove-only state', async () => {
+            installAgentJar();
+            statusWith({ willLoad: true, lastStart: lastStart('not-member') });
+            access = { available: false, reason: 'not-in-audience' };
+
+            expect(await setup().loader.state()).toEqual({ visible: true, state: 'remove-only', mode: 'runelite' });
         });
 
-        test.each([
-            [{ state: 'FAILED', reason: 'token refused' }, true],
-            [{ state: 'TOKEN_REJECTED', reason: null }, true],
-            [{ state: 'FAILED', reason: 'The API answered 401' }, true],
-            [{ state: 'FAILED', reason: 'unauthorized' }, true],
-            [{ state: 'FAILED', reason: 'network unreachable' }, false],
-            [{ state: 'LOADED', reason: null }, false],
-            [null, false]
-        ])('token refused from %j is %s', (lastStart, expected) => {
-            expect(tokenRefused(lastStart)).toBe(expected);
+        test('reads the new status fields and tolerates odd shapes', () => {
+            expect(parseStatus(JSON.stringify({ installed: true, willLoad: false, lastStart: { code: 'Signed-Out', at: '2026-11-08T07:00:00Z', message: 'Refused.' } }))).toMatchObject({
+                willLoad: false,
+                lastStart: { code: 'signed-out', at: '2026-11-08T07:00:00Z', message: 'Refused.' }
+            });
+            expect(parseStatus(JSON.stringify({ installed: true, lastStart: { code: 3, at: null } }))).toMatchObject({ lastStart: { code: null, at: null, message: null } });
+            expect(parseStatus(JSON.stringify({ installed: true, willLoad: 'no', lastStart: 'x' }))).toMatchObject({ willLoad: null, lastStart: null });
         });
 
         test('without access but installed, the card offers only Remove and keeps the RuneLite screen', async () => {
@@ -622,6 +635,15 @@ describe('runelite-loader', () => {
 
             expect(await setup().ipcMain.invoke('runelite-loader:state')).toEqual({ visible: true, state: 'remove-only', mode: 'runelite' });
             expect(JSON.parse(fs.readFileSync(settingsFile, 'utf8')).launcherMode).toBe('runelite');
+        });
+
+        test('remove-only opens the RuneLite screen even when the client screen was chosen, without saving it', async () => {
+            installAgentJar();
+            fs.writeFileSync(settingsFile, JSON.stringify({ launcherMode: 'client' }));
+            access = httpError(403);
+
+            expect(await setup().loader.state()).toMatchObject({ state: 'remove-only', mode: 'runelite' });
+            expect(JSON.parse(fs.readFileSync(settingsFile, 'utf8')).launcherMode).toBe('client');
         });
 
         test('also when signed out or offline', async () => {

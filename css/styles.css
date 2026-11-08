@@ -577,6 +577,16 @@ webview#website {
     color: var(--gold-soft);
 }
 
+.loader-card-note {
+    font-size: 12px;
+    font-style: italic;
+    color: var(--faint);
+}
+
+.loader-card-note:empty {
+    display: none;
+}
+
 .loader-card-error {
     font-size: 12px;
     color: var(--red-text);

@@ -9,6 +9,7 @@
         signedOut: 'Microbot in RuneLite needs your Microbot sign-in again.',
         notLoading: "RuneLite won't load Microbot right now. Press Update to fix it.",
         removeOnly: 'Microbot is still in your RuneLite.',
+        notReady: 'Microbot is waiting for an update for the latest RuneLite.',
         working: 'Working...',
         failed: 'Something went wrong. Try again in a minute.'
     };
@@ -22,9 +23,9 @@
 
     const cardView = (view) => {
         if (!view?.visible) return { hidden: true };
-        const base = { hidden: false, button: null, remove: false, error: view.error || '', hint: '' };
+        const base = { hidden: false, button: null, remove: false, error: view.error || '', hint: '', note: '' };
         if (view.state === 'working') return { ...base, hint: view.progress || TEXT.working };
-        if (view.state === 'added') return { ...base, hint: TEXT.added, remove: true };
+        if (view.state === 'added') return { ...base, hint: TEXT.added, note: view.note === 'not-ready' ? TEXT.notReady : '', remove: true };
         if (view.state === 'remove-only') return { ...base, hint: TEXT.removeOnly, remove: true };
         if (view.state === 'update') {
             const hints = { 'signed-out': TEXT.signedOut, 'not-loading': TEXT.notLoading };
@@ -76,6 +77,8 @@
         remove.hidden = !shown.remove;
         remove.disabled = busy;
         $('runelite-loader-error').textContent = shown.error;
+        const note = $('runelite-loader-note');
+        if (note) note.textContent = shown.note;
     };
 
     const api = () => window.electron?.runeliteLoader;

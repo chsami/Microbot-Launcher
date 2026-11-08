@@ -13,7 +13,8 @@ describe('Microbot in RuneLite card', () => {
             hint: '',
             button: 'Add Microbot to my RuneLite',
             remove: false,
-            error: ''
+            error: '',
+            note: ''
         });
     });
 
@@ -34,6 +35,16 @@ describe('Microbot in RuneLite card', () => {
         });
     });
 
+    test('added while waiting for a RuneLite update shows a quiet note', () => {
+        expect(cardView({ visible: true, state: 'added', note: 'not-ready' })).toMatchObject({
+            hint: TEXT.added,
+            note: 'Microbot is waiting for an update for the latest RuneLite.',
+            button: null,
+            remove: true
+        });
+        expect(cardView({ visible: true, state: 'added' }).note).toBe('');
+    });
+
     test('update offers Update and removal', () => {
         expect(cardView({ visible: true, state: 'update', reason: 'new-version' })).toMatchObject({ button: 'Update', remove: true, hint: TEXT.newVersion });
         expect(cardView({ visible: true, state: 'update', reason: 'signed-out' })).toMatchObject({ button: 'Update', hint: TEXT.signedOut });
@@ -52,7 +63,8 @@ describe('Microbot in RuneLite card', () => {
             hint: 'Microbot is still in your RuneLite.',
             button: null,
             remove: true,
-            error: ''
+            error: '',
+            note: ''
         });
     });
 
@@ -113,7 +125,7 @@ describe('Microbot client / Microbot in RuneLite switch', () => {
     const flush = () => new Promise((resolve) => setImmediate(resolve));
 
     function loadCard(states) {
-        const ids = ['launcher-mode', 'runelite-view', 'runelite-loader', 'runelite-loader-hint', 'runelite-loader-error', 'runelite-loader-action', 'runelite-loader-remove'];
+        const ids = ['launcher-mode', 'runelite-view', 'runelite-loader', 'runelite-loader-hint', 'runelite-loader-note', 'runelite-loader-error', 'runelite-loader-action', 'runelite-loader-remove'];
         const elements = Object.fromEntries(ids.map((id) => [id, fakeElement()]));
         const options = [fakeElement({ dataset: { mode: 'client' } }), fakeElement({ dataset: { mode: 'runelite' } })];
         const sidebar = fakeElement();
@@ -212,6 +224,19 @@ describe('Microbot client / Microbot in RuneLite switch', () => {
         expect(card.elements['launcher-mode'].hidden).toBe(true);
         expect(card.elements['runelite-view'].hidden).toBe(true);
         expect(card.sidebar.classList.contains('mode-runelite')).toBe(false);
+    });
+
+    test('remove-only opens the RuneLite view by itself', async () => {
+        const card = loadCard([{ visible: true, state: 'remove-only', mode: 'runelite' }]);
+        await flush();
+
+        expect(card.elements['launcher-mode'].hidden).toBe(false);
+        expect(card.pressed()).toBe('runelite');
+        expect(card.elements['runelite-view'].hidden).toBe(false);
+        expect(card.sidebar.classList.contains('mode-runelite')).toBe(true);
+        expect(card.elements['runelite-loader-remove'].hidden).toBe(false);
+        expect(card.elements['runelite-loader-action'].hidden).toBe(true);
+        expect(card.runeliteLoader.setMode).not.toHaveBeenCalled();
     });
 
     test('the switch cannot be used without access', async () => {
