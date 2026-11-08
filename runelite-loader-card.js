@@ -10,11 +10,14 @@
         notLoading: "RuneLite won't load Microbot right now. Press Update to fix it.",
         removeOnly: 'Microbot is still in your RuneLite.',
         notReady: 'Microbot is waiting for an update for the latest RuneLite.',
+        open: 'Open RuneLite',
+        find: 'Find RuneLite…',
         working: 'Working...',
         failed: 'Something went wrong. Try again in a minute.'
     };
 
     const MODES = ['client', 'runelite'];
+    const FLASH_MS = 6000;
 
     const layout = (view, chosen) => {
         if (!view?.visible) return { switchHidden: true, mode: 'client' };
@@ -23,15 +26,25 @@
 
     const cardView = (view) => {
         if (!view?.visible) return { hidden: true };
-        const base = { hidden: false, button: null, remove: false, error: view.error || '', hint: '', note: '' };
+        const base = { hidden: false, button: null, action: null, remove: false, error: view.error || '', hint: '', note: '' };
         if (view.state === 'working') return { ...base, hint: view.progress || TEXT.working };
-        if (view.state === 'added') return { ...base, hint: TEXT.added, note: view.note === 'not-ready' ? TEXT.notReady : '', remove: true };
+        if (view.state === 'added') {
+            const find = view.opener === 'find';
+            return {
+                ...base,
+                hint: view.flash || TEXT.added,
+                note: view.note === 'not-ready' ? TEXT.notReady : '',
+                button: find ? TEXT.find : TEXT.open,
+                action: find ? 'find' : 'open',
+                remove: true
+            };
+        }
         if (view.state === 'remove-only') return { ...base, hint: TEXT.removeOnly, remove: true };
         if (view.state === 'update') {
             const hints = { 'signed-out': TEXT.signedOut, 'not-loading': TEXT.notLoading };
-            return { ...base, hint: hints[view.reason] || TEXT.newVersion, button: TEXT.update, remove: true };
+            return { ...base, hint: hints[view.reason] || TEXT.newVersion, button: TEXT.update, action: 'install', remove: true };
         }
-        return { ...base, button: TEXT.add };
+        return { ...base, button: TEXT.add, action: 'install' };
     };
 
     if (typeof document === 'undefined') {
@@ -72,7 +85,8 @@
         const button = $('runelite-loader-action');
         button.hidden = !shown.button;
         button.textContent = shown.button || '';
-        button.disabled = busy;
+        button.disabled = busy || Boolean(latest.flash);
+        button.dataset.action = shown.action || '';
         const remove = $('runelite-loader-remove');
         remove.hidden = !shown.remove;
         remove.disabled = busy;
@@ -124,8 +138,37 @@
         render(view);
     };
 
+    let flashTimer = null;
+
+    const launchRuneLite = async (action) => {
+        if (busy || !api()?.[action]) return;
+        busy = true;
+        render({ ...latest, error: '' });
+        let result;
+        try {
+            result = await api()[action]();
+        } catch (error) {
+            result = { ok: false, error: TEXT.failed };
+        }
+        busy = false;
+        if (result?.cancelled) return render(latest);
+        const opener = result?.opener || latest.opener;
+        if (!result?.ok) return render({ ...latest, opener, error: result?.error || TEXT.failed });
+        clearTimeout(flashTimer);
+        render({ ...latest, opener, error: '', flash: result.message });
+        flashTimer = setTimeout(() => {
+            if (latest.flash) render({ ...latest, flash: '' });
+        }, FLASH_MS);
+    };
+
+    const press = () => {
+        const action = $('runelite-loader-action')?.dataset.action;
+        if (action === 'open' || action === 'find') launchRuneLite(action);
+        else act('install');
+    };
+
     const init = () => {
-        $('runelite-loader-action')?.addEventListener('click', () => act('install'));
+        $('runelite-loader-action')?.addEventListener('click', press);
         $('runelite-loader-remove')?.addEventListener('click', () => act('remove'));
         document.querySelectorAll('.mode-option').forEach((option) => {
             option.addEventListener('click', () => choose(option.dataset.mode));

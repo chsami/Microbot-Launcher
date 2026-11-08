@@ -64,6 +64,9 @@ describe('runelite-loader', () => {
             agentJar,
             settingsFile,
             managedJdk,
+            finder: { find: () => null, fromPath: () => null },
+            env: { PATH: '/usr/bin', HOME: dir },
+            home: dir,
             getWindow: () => ({ isDestroyed: () => false, webContents }),
             ...overrides
         });
@@ -209,7 +212,7 @@ describe('runelite-loader', () => {
             fs.writeFileSync(agentJar, JAR);
             const { ipcMain } = setup();
 
-            expect(await ipcMain.invoke('runelite-loader:state')).toEqual({ visible: true, state: 'added', version: '1.0.0', mode: 'client' });
+            expect(await ipcMain.invoke('runelite-loader:state')).toEqual({ visible: true, state: 'added', opener: 'find', version: '1.0.0', mode: 'client' });
             expect(runsOf('--status')).toHaveLength(1);
             expect(runsOf('--status')[0].args).toEqual(['-jar', agentJar, '--status', '--json']);
         });
@@ -271,7 +274,7 @@ describe('runelite-loader', () => {
 
             const result = await loader.install();
 
-            expect(result).toEqual({ visible: true, state: 'added', version: '1.0.0', mode: 'client', message: 'Microbot was added to RuneLite.' });
+            expect(result).toEqual({ visible: true, state: 'added', opener: 'find', version: '1.0.0', mode: 'client', message: 'Microbot was added to RuneLite.' });
             const target = path.join(downloadsDir, 'agent-1.0.0.jar');
             expect(fs.readFileSync(target)).toEqual(JAR);
             expect(fs.readdirSync(downloadsDir)).toEqual(['agent-1.0.0.jar']);
@@ -594,14 +597,14 @@ describe('runelite-loader', () => {
             installAgentJar();
             statusWith({ willLoad: true, lastStart: lastStart('not-ready') });
 
-            expect(await setup().loader.state()).toEqual({ visible: true, state: 'added', note: 'not-ready', version: '1.0.0', mode: 'client' });
+            expect(await setup().loader.state()).toEqual({ visible: true, state: 'added', note: 'not-ready', opener: 'find', version: '1.0.0', mode: 'client' });
         });
 
         test.each(['loaded', 'not-member', 'safe-mode', 'offline', 'error', 'something-new'])('a last start of %s reads as added', async (code) => {
             installAgentJar();
             statusWith({ willLoad: true, lastStart: lastStart(code, 'whatever') });
 
-            expect(await setup().loader.state()).toEqual({ visible: true, state: 'added', version: '1.0.0', mode: 'client' });
+            expect(await setup().loader.state()).toEqual({ visible: true, state: 'added', opener: 'find', version: '1.0.0', mode: 'client' });
         });
 
         test('no last start yet reads as added', async () => {
@@ -738,6 +741,137 @@ describe('runelite-loader', () => {
             access = { available: false, reason: 'not-in-audience' };
             await ipcMain.invoke('runelite-loader:state');
             expect(fs.readFileSync(settingsFile, 'utf8')).toBe('{ "runInBackground": tru');
+        });
+    });
+
+    describe('Open RuneLite', () => {
+        const appImage = '/home/zezima/Downloads/RuneLite.AppImage';
+        const launchable = () => {
+            const children = [];
+            const launchSpawn = jest.fn((command, args, options) => {
+                if (options?.detached) {
+                    const child = new EventEmitter();
+                    child.unref = jest.fn();
+                    children.push(child);
+                    setImmediate(() => child.emit('spawn'));
+                    return child;
+                }
+                return spawn(command, args, options);
+            });
+            return { launchSpawn, children };
+        };
+
+        test('Added shows Open RuneLite when RuneLite is found, Find RuneLite… when not', async () => {
+            fs.mkdirSync(path.dirname(agentJar), { recursive: true });
+            fs.writeFileSync(agentJar, JAR);
+            const spec = { command: '/snap/bin/runelite', args: [], source: 'snap', label: '/snap/bin/runelite' };
+
+            expect(await setup({ finder: { find: () => spec, fromPath: () => null } }).loader.state()).toMatchObject({ state: 'added', opener: 'open' });
+            expect(await setup().loader.state()).toMatchObject({ state: 'added', opener: 'find' });
+        });
+
+        test('starts the found RuneLite detached with a clean environment', async () => {
+            const { launchSpawn } = launchable();
+            const spec = { command: '/snap/bin/runelite', args: [], source: 'snap', label: '/snap/bin/runelite' };
+            const { ipcMain } = setup({
+                spawn: launchSpawn,
+                finder: { find: () => spec, fromPath: () => null },
+                env: { PATH: '/usr/bin', HOME: dir, DISPLAY: ':0', MICROBOT_CLIENT_TOKEN: TOKEN, JX_SESSION_ID: 'jagex-secret', HTTPS_PROXY: 'http://u:p@proxy:1' }
+            });
+
+            expect(await ipcMain.invoke('runelite-loader:open')).toEqual({ ok: true, message: 'RuneLite is starting. Microbot will be in the sidebar.' });
+
+            const [command, args, options] = launchSpawn.mock.calls[0];
+            expect(command).toBe('/snap/bin/runelite');
+            expect(args).toEqual([]);
+            expect(options).toMatchObject({ detached: true, stdio: 'ignore' });
+            expect(options.env).toEqual({ PATH: '/usr/bin', HOME: dir, DISPLAY: ':0' });
+            expect(JSON.stringify(launchSpawn.mock.calls)).not.toContain(TOKEN);
+            expect(alerts.tokenForLoader).not.toHaveBeenCalled();
+        });
+
+        test('double clicks start RuneLite once', async () => {
+            const { launchSpawn } = launchable();
+            const spec = { command: '/snap/bin/runelite', args: [], source: 'snap', label: '/snap/bin/runelite' };
+            const { loader } = setup({ spawn: launchSpawn, finder: { find: () => spec, fromPath: () => null } });
+
+            await Promise.all([loader.openRuneLite(), loader.openRuneLite()]);
+
+            expect(launchSpawn).toHaveBeenCalledTimes(1);
+        });
+
+        test('not found asks the member to find it', async () => {
+            const { loader } = setup();
+
+            expect(await loader.openRuneLite()).toEqual({ ok: false, opener: 'find', error: "RuneLite wasn't found on this PC. Press Find RuneLite… to choose it." });
+        });
+
+        test('a failed start gives one plain sentence', async () => {
+            const failing = jest.fn(() => {
+                const child = new EventEmitter();
+                child.unref = jest.fn();
+                setImmediate(() => child.emit('error', new Error('spawn EACCES')));
+                return child;
+            });
+            const spec = { command: appImage, args: [], source: 'appimage', label: appImage };
+            const { loader } = setup({ spawn: failing, finder: { find: () => spec, fromPath: () => null } });
+
+            expect(await loader.openRuneLite()).toEqual({ ok: false, error: 'RuneLite could not be started. Try opening it the usual way.' });
+        });
+
+        test('Find RuneLite… remembers the chosen file and starts it', async () => {
+            const chosen = path.join(dir, 'RuneLite.AppImage');
+            fs.writeFileSync(chosen, '');
+            fs.writeFileSync(settingsFile, JSON.stringify({ launcherMode: 'runelite' }));
+            const { launchSpawn } = launchable();
+            const dialog = { showOpenDialog: jest.fn(async () => ({ canceled: false, filePaths: [chosen] })) };
+            const { ipcMain } = setup({ spawn: launchSpawn, dialog, finder: undefined, platform: 'linux' });
+
+            expect(await ipcMain.invoke('runelite-loader:find')).toEqual({ ok: true, message: 'RuneLite is starting. Microbot will be in the sidebar.', opener: 'open' });
+
+            expect(JSON.parse(fs.readFileSync(settingsFile, 'utf8'))).toEqual({ launcherMode: 'runelite', runelitePath: chosen });
+            expect(launchSpawn.mock.calls[0][0]).toBe(chosen);
+            expect(dialog.showOpenDialog.mock.calls[0][1]).toMatchObject({ properties: ['openFile'] });
+        });
+
+        test('a cancelled picker does nothing', async () => {
+            const dialog = { showOpenDialog: jest.fn(async () => ({ canceled: true, filePaths: [] })) };
+            const { loader } = setup({ dialog });
+
+            expect(await loader.findAndOpen()).toEqual({ cancelled: true });
+            expect(fs.existsSync(settingsFile)).toBe(false);
+        });
+
+        test('a folder is refused and not remembered', async () => {
+            const dialog = { showOpenDialog: jest.fn(async () => ({ canceled: false, filePaths: [dir] })) };
+            const { loader } = setup({ dialog, finder: undefined, platform: 'linux' });
+
+            expect(await loader.findAndOpen()).toEqual({ ok: false, opener: 'find', error: "That file can't be started. Choose RuneLite itself." });
+            expect(fs.existsSync(settingsFile)).toBe(false);
+        });
+
+        test('unreadable launcher settings are not overwritten by the chosen path', async () => {
+            const chosen = path.join(dir, 'RuneLite.AppImage');
+            fs.writeFileSync(chosen, '');
+            fs.writeFileSync(settingsFile, '{ broken');
+            const { launchSpawn } = launchable();
+            const dialog = { showOpenDialog: jest.fn(async () => ({ canceled: false, filePaths: [chosen] })) };
+            const { loader } = setup({ spawn: launchSpawn, dialog, finder: undefined, platform: 'linux' });
+
+            expect((await loader.findAndOpen()).ok).toBe(true);
+            expect(fs.readFileSync(settingsFile, 'utf8')).toBe('{ broken');
+        });
+
+        test('the remembered path is used next time', async () => {
+            const chosen = path.join(dir, 'RuneLite.AppImage');
+            fs.writeFileSync(chosen, '');
+            fs.writeFileSync(settingsFile, JSON.stringify({ runelitePath: chosen }));
+            fs.mkdirSync(path.dirname(agentJar), { recursive: true });
+            fs.writeFileSync(agentJar, JAR);
+            const emptyHome = path.join(dir, 'home');
+            const options = { finder: undefined, platform: 'linux', home: emptyHome, env: { PATH: '' } };
+
+            expect(await setup(options).loader.state()).toMatchObject({ state: 'added', opener: 'open' });
         });
     });
 });

@@ -137,6 +137,7 @@ async function loadLibraries() {
                     downloadsDir: path.join(loaderHome, 'downloads'),
                     agentJar: path.join(loaderHome, 'agent.jar'),
                     settingsFile: path.join(microbotDir, 'launcher-settings.json'),
+                    dialog,
                     getWindow: () => mainWindow
                 });
             } catch (loaderError) {

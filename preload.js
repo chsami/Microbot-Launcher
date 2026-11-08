@@ -116,6 +116,8 @@ contextBridge.exposeInMainWorld('electron', {
         install: () => ipcRenderer.invoke('runelite-loader:install'),
         remove: () => ipcRenderer.invoke('runelite-loader:remove'),
         setMode: (mode) => ipcRenderer.invoke('runelite-loader:set-mode', mode),
+        open: () => ipcRenderer.invoke('runelite-loader:open'),
+        find: () => ipcRenderer.invoke('runelite-loader:find'),
         onProgress: (func) => ipcRenderer.on('runelite-loader:progress', (event, data) => func(data))
     },
     ipcRenderer: {

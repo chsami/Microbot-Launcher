@@ -1,5 +1,6 @@
 const path = require('path');
 const crypto = require('crypto');
+const { makeFinder, launch } = require('./runelite-launch.js');
 
 const ACCESS_PATH = '/api/loader/access';
 const AGENT_PATH = '/api/loader/agent';
@@ -23,6 +24,7 @@ const INSTALLED_JAR_PATTERN = /^agent(?:-[0-9a-f]{8})?\.jar$/;
 const DOWNLOADED_JAR_PATTERN = /^agent-.+\.jar$/;
 const AGENT_PREFIX = '-javaagent:';
 const MODE_KEY = 'launcherMode';
+const RUNELITE_PATH_KEY = 'runelitePath';
 const MODES = ['client', 'runelite'];
 
 const MESSAGES = {
@@ -38,7 +40,11 @@ const MESSAGES = {
     timeout: 'This took too long. Try again in a minute.',
     busy: 'Microbot is still busy with RuneLite. Wait a moment and try again.',
     added: 'Microbot was added to RuneLite.',
-    removed: 'Microbot was removed from RuneLite.'
+    removed: 'Microbot was removed from RuneLite.',
+    starting: 'RuneLite is starting. Microbot will be in the sidebar.',
+    notFound: "RuneLite wasn't found on this PC. Press Find RuneLite… to choose it.",
+    launchFailed: 'RuneLite could not be started. Try opening it the usual way.',
+    notRuneLite: "That file can't be started. Choose RuneLite itself."
 };
 
 module.exports = function setupRuneliteLoader(deps) {
@@ -48,6 +54,10 @@ module.exports = function setupRuneliteLoader(deps) {
     const platform = deps.platform || process.platform;
     const arch = deps.arch || process.arch;
     const getWindow = deps.getWindow || (() => null);
+    const env = deps.env || process.env;
+    const home = deps.home || require('os').homedir();
+    const dialog = deps.dialog || null;
+    const finder = deps.finder || makeFinder({ fs, platform, env, home });
 
     let operation = null;
     let progressText = '';
@@ -75,15 +85,31 @@ module.exports = function setupRuneliteLoader(deps) {
 
     const readMode = () => (readSettings()?.[MODE_KEY] === 'runelite' ? 'runelite' : 'client');
 
-    const writeMode = (mode) => {
+    const writeSetting = (key, value) => {
         if (!settingsFile) return false;
         const current = readSettings();
         if (!current) {
-            log.warn('Launcher settings could not be read, so the launcher view was not saved.');
+            log.warn(`Launcher settings could not be read, so ${key} was not saved.`);
             return false;
         }
-        fs.writeFileSync(settingsFile, JSON.stringify({ ...current, [MODE_KEY]: mode }, null, 2));
+        fs.writeFileSync(settingsFile, JSON.stringify({ ...current, [key]: value }, null, 2));
         return true;
+    };
+
+    const writeMode = (mode) => writeSetting(MODE_KEY, mode);
+
+    const rememberedRuneLite = () => {
+        const value = readSettings()?.[RUNELITE_PATH_KEY];
+        return typeof value === 'string' ? value : null;
+    };
+
+    const findRuneLite = () => {
+        try {
+            return finder.find(rememberedRuneLite());
+        } catch (error) {
+            log.warn(`Could not look for RuneLite: ${error?.message || error}`);
+            return null;
+        }
     };
 
     const fallBackToClient = (access) => {
@@ -380,8 +406,9 @@ module.exports = function setupRuneliteLoader(deps) {
         if (status.agentSha256 !== access.agent.sha256) return { visible: true, state: 'update', reason: 'new-version', version };
         if (status.willLoad === false) return { visible: true, state: 'update', reason: 'not-loading', version };
         if (status.signedIn === false || status.lastStart?.code === 'signed-out') return { visible: true, state: 'update', reason: 'signed-out', version };
-        if (status.lastStart?.code === 'not-ready') return { visible: true, state: 'added', note: 'not-ready', version };
-        return { visible: true, state: 'added', version };
+        const opener = findRuneLite() ? 'open' : 'find';
+        if (status.lastStart?.code === 'not-ready') return { visible: true, state: 'added', note: 'not-ready', opener, version };
+        return { visible: true, state: 'added', opener, version };
     };
 
     const state = async () => {
@@ -493,6 +520,58 @@ module.exports = function setupRuneliteLoader(deps) {
         return promise;
     };
 
+    const startRuneLite = async (spec) => {
+        const result = await launch({ spawn, spec, env, platform, home });
+        if (result.ok) {
+            log.info(`Started RuneLite (${spec.source}).`);
+            return { ok: true, message: MESSAGES.starting };
+        }
+        log.warn(`Could not start RuneLite (${spec.source}): ${result.error?.message || 'unknown error'}`);
+        return { ok: false, error: MESSAGES.launchFailed };
+    };
+
+    let opening = null;
+
+    const once = (work) => {
+        if (!opening) {
+            opening = work().finally(() => {
+                opening = null;
+            });
+        }
+        return opening;
+    };
+
+    const openRuneLite = () =>
+        once(async () => {
+            const spec = findRuneLite();
+            if (!spec) return { ok: false, opener: 'find', error: MESSAGES.notFound };
+            return startRuneLite(spec);
+        });
+
+    const pickerOptions = () => {
+        const options = { title: 'Find RuneLite', buttonLabel: 'Open RuneLite', properties: ['openFile'] };
+        if (platform === 'win32') options.filters = [{ name: 'RuneLite', extensions: ['exe'] }];
+        if (platform === 'darwin') options.filters = [{ name: 'RuneLite', extensions: ['app'] }];
+        return options;
+    };
+
+    const findAndOpen = () =>
+        once(async () => {
+            if (!dialog) return { ok: false, opener: 'find', error: MESSAGES.notFound };
+            const win = getWindow();
+            const parent = win && !win.isDestroyed() ? win : undefined;
+            const { canceled, filePaths } = parent ? await dialog.showOpenDialog(parent, pickerOptions()) : await dialog.showOpenDialog(pickerOptions());
+            if (canceled || !Array.isArray(filePaths) || !filePaths.length) return { cancelled: true };
+            const spec = finder.fromPath(filePaths[0]);
+            if (!spec) return { ok: false, opener: 'find', error: MESSAGES.notRuneLite };
+            try {
+                writeSetting(RUNELITE_PATH_KEY, filePaths[0]);
+            } catch (error) {
+                log.warn(`Could not remember where RuneLite is: ${error?.message || error}`);
+            }
+            return { ...(await startRuneLite(spec)), opener: 'open' };
+        });
+
     const install = () => run('install', installNow);
     const remove = () => run('remove', removeNow);
 
@@ -505,6 +584,8 @@ module.exports = function setupRuneliteLoader(deps) {
         }
     });
     ipcMain.handle('runelite-loader:install', () => install());
+    ipcMain.handle('runelite-loader:open', () => openRuneLite());
+    ipcMain.handle('runelite-loader:find', () => findAndOpen());
     ipcMain.handle('runelite-loader:set-mode', async (_event, mode) => {
         if (!MODES.includes(mode)) return { error: 'Unknown view.', mode: readMode() };
         try {
@@ -517,7 +598,7 @@ module.exports = function setupRuneliteLoader(deps) {
     });
     ipcMain.handle('runelite-loader:remove', () => remove());
 
-    return { state, install, remove, checkAccess, mode: readMode };
+    return { state, install, remove, checkAccess, mode: readMode, openRuneLite, findAndOpen };
 };
 
 function parseAgent(agent) {
