@@ -1683,8 +1683,8 @@ function renderChannel() {
         const button = document.getElementById(id);
         if (button) button.disabled = channelSwitching;
     });
-    const clientSelect = document.getElementById('client');
-    if (clientSelect) clientSelect.hidden = isNightlyChannel();
+    const clientRow = document.getElementById('client-row');
+    if (clientRow) clientRow.hidden = isNightlyChannel();
     const nightlyInfo = document.getElementById('nightly-info');
     if (nightlyInfo) nightlyInfo.hidden = !isNightlyChannel();
 }
@@ -1926,6 +1926,61 @@ function setupCustomClientJar() {
     button?.addEventListener('click', loadCustomClientJar);
 }
 
+let refreshingClientJars = false;
+
+/**
+ * Rescan the .microbot folder and rebuild the version list. Keeps the current
+ * pick; if exactly one new jar showed up, selects it instead.
+ *
+ * @param {boolean} quiet Skip the rebuild when nothing changed (window focus).
+ */
+async function refreshClientJars(quiet = false) {
+    const clientSelect = document.getElementById('client');
+    const button = document.getElementById('refresh-clients');
+    if (!clientSelect || refreshingClientJars || channelSwitching) return;
+    refreshingClientJars = true;
+    if (button) button.disabled = true;
+    try {
+        const before = [...clientSelect.options].map((o) => o.value);
+        const jars = await orderClientJarsByVersion();
+        const after = jars.map((jar) => jar.file);
+        if (quiet && before.join('\n') === after.join('\n')) return;
+
+        const previous = clientSelect.value;
+        const added = after.filter((file) => !before.includes(file));
+        populateSelectElement('client', jars);
+        const pick =
+            added.length === 1 ? added[0] : after.includes(previous) ? previous : after[0];
+        if (pick) {
+            clientSelect.value = pick;
+            if (pick !== previous) {
+                await updateVersionPreference({ target: { value: pick } });
+            }
+        }
+    } catch (error) {
+        if (!quiet) window.electron.errorAlert(error?.message || String(error));
+    } finally {
+        refreshingClientJars = false;
+        if (button) button.disabled = false;
+    }
+}
+
+function setupClientJarRefresh() {
+    const button = document.getElementById('refresh-clients');
+    button?.removeEventListener('click', onRefreshClientsClick);
+    button?.addEventListener('click', onRefreshClientsClick);
+    window.removeEventListener('focus', onWindowFocusRefreshClients);
+    window.addEventListener('focus', onWindowFocusRefreshClients);
+}
+
+function onRefreshClientsClick() {
+    return refreshClientJars(false);
+}
+
+function onWindowFocusRefreshClients() {
+    return refreshClientJars(true);
+}
+
 /**
  * Select client version select element value
  *
@@ -2161,6 +2216,7 @@ async function initUI(properties) {
     await setVersionPreference(properties);
     setupChannelSwitch(properties);
     setupCustomClientJar();
+    setupClientJarRefresh();
     document.querySelector('.game-info').style = 'display:block';
 
     await setupRamInput();

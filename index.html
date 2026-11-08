@@ -536,7 +536,18 @@
                             data-channel="nightly" aria-pressed="false"
                             title="Built every night from the newest code. New fixes first, but may have bugs.">Nightly</button>
                     </div>
-                    <select id="client" aria-labelledby="client-channel-label"></select>
+                    <div id="client-row" class="accounts-refresh-row client-refresh-row">
+                        <select id="client" aria-labelledby="client-channel-label"></select>
+                        <button id="refresh-clients" class="refresh-accounts-btn" type="button"
+                            title="Rescan the .microbot folder for client JARs"
+                            aria-label="Refresh client version list">
+                            <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
+                                <path d="M21 3v6h-6"></path>
+                            </svg>
+                        </button>
+                    </div>
                     <button id="load-custom-client" class="load-custom-client-btn" type="button"
                         title="Load a client JAR you built yourself">Load custom client JAR…</button>
                     <div id="nightly-info" class="nightly-info" aria-live="polite" hidden>

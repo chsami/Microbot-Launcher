@@ -96,7 +96,7 @@ describe('renderer client version select', () => {
         });
         const source = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
         vm.runInContext(
-            `${source}\nglobalThis.__renderer = { formatNightlyBuildTime, resolveLaunchVersion, checkForOutdatedLaunch, populateAndSelectClientVersion, selectClientVersion, shouldPromptForClientDownload, orderClientJarsByVersion, rememberLatestClientVersion };`,
+            `${source}\nglobalThis.__renderer = { formatNightlyBuildTime, resolveLaunchVersion, checkForOutdatedLaunch, populateAndSelectClientVersion, selectClientVersion, shouldPromptForClientDownload, orderClientJarsByVersion, rememberLatestClientVersion, refreshClientJars };`,
             context
         );
         context.__renderer.rememberLatestClientVersion('2.6.28');
@@ -163,6 +163,30 @@ describe('renderer client version select', () => {
         expect(formatNightlyBuildTime(new Date(2026, 9, 23, 4, 21).toISOString(), now)).toMatch(/^yesterday at 4:21/);
         expect(formatNightlyBuildTime(new Date(2026, 9, 20, 4, 21).toISOString(), now)).toMatch(/Oct 20, 4:21/);
         expect(formatNightlyBuildTime(null, now)).toBe('');
+    });
+
+    test('refresh picks up a jar dropped into the folder and selects it', async () => {
+        await context.__renderer.populateAndSelectClientVersion('2.6.2');
+        fs.writeFileSync(path.join(microbotDir, 'microbot-my-build.jar'), 'jar');
+
+        await context.__renderer.refreshClientJars();
+
+        expect(select.options.map((o) => o.value)).toContain('microbot-my-build.jar');
+        expect(select.value).toBe('microbot-my-build.jar');
+        expect(properties.version_pref).toBe('my-build');
+    });
+
+    test('refresh keeps the current pick, and falls back when its jar is gone', async () => {
+        await context.__renderer.populateAndSelectClientVersion('2.6.2');
+
+        await context.__renderer.refreshClientJars();
+        expect(select.value).toBe('microbot-2.6.2.jar');
+
+        fs.unlinkSync(path.join(microbotDir, 'microbot-2.6.2.jar'));
+        await context.__renderer.refreshClientJars(true);
+        expect(select.options.map((o) => o.value)).not.toContain('microbot-2.6.2.jar');
+        expect(select.value).toBe('microbot-2.6.28.jar');
+        expect(properties.version_pref).toBe('2.6.28');
     });
 
     test('Play does nothing while the channel is switching', async () => {

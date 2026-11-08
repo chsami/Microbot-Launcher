@@ -1045,6 +1045,21 @@ h2 {
     color: var(--text-strong);
 }
 
+/* Version select + refresh share one row, spaced like a lone select. */
+.client-refresh-row {
+    margin-bottom: 10px;
+}
+
+.client-refresh-row[hidden] {
+    display: none;
+}
+
+.client-refresh-row>select {
+    flex: 1;
+    min-width: 0;
+    margin-bottom: 0;
+}
+
 .load-custom-client-btn {
     width: 100%;
     margin: -4px 0 10px;
