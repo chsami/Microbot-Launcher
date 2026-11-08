@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const setupRuneliteLoader = require('../libs/runelite-loader');
-const { parseStatus, parseAgent, MESSAGES } = require('../libs/runelite-loader');
+const { parseStatus, parseAgent, tokenRefused, MESSAGES } = require('../libs/runelite-loader');
 const { PROBE_ARGS } = require('../libs/java-runtime');
 
 class FakeIpcMain {
@@ -254,7 +254,9 @@ describe('runelite-loader', () => {
                 launchMode: 'JVM',
                 signedIn: true,
                 agentVersion: '1.0.0',
-                agentSha256: 'abc'
+                agentSha256: 'abc',
+                willLoad: null,
+                lastStart: null
             });
             expect(parseStatus('{"installed":"yes"}')).toMatchObject({ installed: false, signedIn: null, agentSha256: null });
             expect(parseStatus('not json')).toBeNull();
@@ -560,6 +562,160 @@ describe('runelite-loader', () => {
             await ipcMain.invoke('runelite-loader:set-mode', 'runelite');
 
             expect(await loader.install()).toMatchObject({ state: 'added', mode: 'runelite' });
+        });
+    });
+
+    describe('review fixes', () => {
+        const installAgentJar = (file = agentJar) => {
+            fs.mkdirSync(path.dirname(file), { recursive: true });
+            fs.writeFileSync(file, JAR);
+        };
+        const statusWith = (fields) => {
+            cli.status.stdout = JSON.stringify({ installed: true, settingsPath: null, launchMode: 'JVM', signedIn: true, agentVersion: '1.0.0', agentSha256: JAR_SHA, ...fields });
+        };
+
+        test('Update when RuneLite will not load the agent', async () => {
+            installAgentJar();
+            statusWith({ willLoad: false, lastStart: null });
+
+            expect(await setup().loader.state()).toMatchObject({ state: 'update', reason: 'not-loading' });
+        });
+
+        test('Update when the last RuneLite start had its token refused', async () => {
+            installAgentJar();
+            statusWith({ willLoad: true, lastStart: { state: 'FAILED', reason: 'token refused' } });
+
+            expect(await setup().loader.state()).toMatchObject({ state: 'update', reason: 'signed-out' });
+        });
+
+        test('a good last start and willLoad true read as added', async () => {
+            installAgentJar();
+            statusWith({ willLoad: true, lastStart: { state: 'LOADED', reason: null } });
+
+            expect(await setup().loader.state()).toMatchObject({ state: 'added' });
+        });
+
+        test('reads the new status fields and tolerates odd shapes', () => {
+            expect(parseStatus(JSON.stringify({ installed: true, willLoad: false, lastStart: { state: 'FAILED', reason: 'HTTP 401' } }))).toMatchObject({
+                willLoad: false,
+                lastStart: { state: 'FAILED', reason: 'HTTP 401' }
+            });
+            expect(parseStatus(JSON.stringify({ installed: true, willLoad: 'no', lastStart: 'x' }))).toMatchObject({ willLoad: null, lastStart: null });
+        });
+
+        test.each([
+            [{ state: 'FAILED', reason: 'token refused' }, true],
+            [{ state: 'TOKEN_REJECTED', reason: null }, true],
+            [{ state: 'FAILED', reason: 'The API answered 401' }, true],
+            [{ state: 'FAILED', reason: 'unauthorized' }, true],
+            [{ state: 'FAILED', reason: 'network unreachable' }, false],
+            [{ state: 'LOADED', reason: null }, false],
+            [null, false]
+        ])('token refused from %j is %s', (lastStart, expected) => {
+            expect(tokenRefused(lastStart)).toBe(expected);
+        });
+
+        test('without access but installed, the card offers only Remove and keeps the RuneLite screen', async () => {
+            installAgentJar();
+            fs.writeFileSync(settingsFile, JSON.stringify({ launcherMode: 'runelite' }));
+            access = httpError(403);
+
+            expect(await setup().ipcMain.invoke('runelite-loader:state')).toEqual({ visible: true, state: 'remove-only', mode: 'runelite' });
+            expect(JSON.parse(fs.readFileSync(settingsFile, 'utf8')).launcherMode).toBe('runelite');
+        });
+
+        test('also when signed out or offline', async () => {
+            installAgentJar(path.join(path.dirname(agentJar), 'agent-0a1b2c3d.jar'));
+            email = null;
+            expect(await setup().loader.state()).toMatchObject({ visible: true, state: 'remove-only' });
+            email = 'admin@example.com';
+            access = new Error('socket hang up');
+            expect(await setup().loader.state()).toMatchObject({ visible: true, state: 'remove-only' });
+        });
+
+        test('someone without access who never installed it sees nothing and starts no Java', async () => {
+            access = { available: false, reason: 'not-in-audience' };
+
+            expect(await setup().loader.state()).toEqual({ visible: false });
+            expect(spawn).not.toHaveBeenCalled();
+        });
+
+        test('without the API, Remove runs the jar the RuneLite line names', async () => {
+            const named = path.join(path.dirname(agentJar), 'agent-0a1b2c3d.jar');
+            installAgentJar();
+            installAgentJar(named);
+            const runeliteSettings = path.join(dir, 'runelite-settings.json');
+            fs.writeFileSync(runeliteSettings, JSON.stringify({ launchMode: 'JVM', jvmArguments: ['-Xmx1g', `-javaagent:${named}=quiet`, '-javaagent:/opt/other/agent.jar'] }));
+            statusWith({ settingsPath: runeliteSettings });
+            access = httpError(403);
+            const { loader } = setup();
+
+            const result = await loader.remove();
+
+            expect(result).toEqual({ visible: false, message: 'Microbot was removed from RuneLite.' });
+            expect(runsOf('--remove')).toHaveLength(1);
+            expect(runsOf('--status')[0].args[1]).toBe(agentJar);
+            expect(runsOf('--remove')[0].args).toEqual(['-jar', named, '--remove']);
+            expect(auth.request.mock.calls.filter(([config]) => config.path === '/api/loader/agent')).toHaveLength(0);
+            expect(alerts.forgetLoaderToken).toHaveBeenCalled();
+        });
+
+        test('without the API and no readable line, Remove falls back to agent.jar', async () => {
+            installAgentJar();
+            installAgentJar(path.join(downloadsDir, 'agent-0.9.0.jar'));
+            fs.utimesSync(agentJar, new Date(2020, 1, 1), new Date(2020, 1, 1));
+            statusWith({ settingsPath: path.join(dir, 'missing-settings.json') });
+            access = new Error('socket hang up');
+
+            await setup().loader.remove();
+
+            expect(runsOf('--remove')[0].args).toEqual(['-jar', agentJar, '--remove']);
+        });
+
+        test('the downloaded jar is checked again right before Java runs it', async () => {
+            const managedJava = path.join(dir, 'jdk', 'bin', 'java');
+            const realSpawn = spawn.getMockImplementation();
+            spawn.mockImplementation((command, args, options) => {
+                if (args === PROBE_ARGS && command === 'java') {
+                    const child = realSpawn(command, ['none'], options);
+                    setImmediate(() => child.emit('error', Object.assign(new Error('spawn java ENOENT'), { code: 'ENOENT' })));
+                    return child;
+                }
+                return realSpawn(command, args, options);
+            });
+            managedJdk.install.mockImplementation(async () => {
+                fs.writeFileSync(path.join(downloadsDir, 'agent-1.0.0.jar'), Buffer.from(JAR).fill(0x41, 10, 12));
+                fs.mkdirSync(path.dirname(managedJava), { recursive: true });
+                fs.writeFileSync(managedJava, '');
+                return managedJava;
+            });
+            cli.status.stdout = JSON.stringify({ installed: false });
+            const { loader } = setup();
+
+            const result = await loader.install();
+
+            expect(result.error).toBe(MESSAGES.damaged);
+            expect(runsOf('--install')).toHaveLength(0);
+            expect(fs.existsSync(path.join(downloadsDir, 'agent-1.0.0.jar'))).toBe(false);
+        });
+
+        test('a body larger than the release says the download was damaged', async () => {
+            served = Object.assign(new Error(`maxContentLength size of ${JAR.length + 1} exceeded`), { code: 'ERR_BAD_RESPONSE' });
+            const { loader } = setup();
+
+            expect((await loader.install()).error).toBe('The Microbot download was damaged. Try again in a minute.');
+        });
+
+        test('unreadable launcher settings are never overwritten by the view choice', async () => {
+            fs.writeFileSync(settingsFile, '{ "runInBackground": tru');
+            const { ipcMain } = setup();
+
+            expect(await ipcMain.invoke('runelite-loader:set-mode', 'runelite')).toEqual({ error: 'Could not save the setting.', mode: 'runelite' });
+            expect(fs.readFileSync(settingsFile, 'utf8')).toBe('{ "runInBackground": tru');
+
+            access = { available: false, reason: 'not-in-audience' };
+            await ipcMain.invoke('runelite-loader:state');
+            expect(fs.readFileSync(settingsFile, 'utf8')).toBe('{ "runInBackground": tru');
         });
     });
 });

@@ -19,6 +19,9 @@ const VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
 const SHA_PATTERN = /^[a-f0-9]{64}$/;
 const AGENT_FILE_PATTERN = /^agent-.+\.jar(?:\..+\.part)?$/;
 const TOKEN_TEXT = /mbc_[A-Za-z0-9_-]+/g;
+const INSTALLED_JAR_PATTERN = /^agent(?:-[0-9a-f]{8})?\.jar$/;
+const DOWNLOADED_JAR_PATTERN = /^agent-.+\.jar$/;
+const AGENT_PREFIX = '-javaagent:';
 const MODE_KEY = 'launcherMode';
 const MODES = ['client', 'runelite'];
 
@@ -63,25 +66,30 @@ module.exports = function setupRuneliteLoader(deps) {
         try {
             if (!settingsFile || !fs.existsSync(settingsFile)) return {};
             const value = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-            return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+            return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
         } catch (error) {
             log.warn(`Could not read launcher settings: ${error?.message || error}`);
-            return {};
+            return null;
         }
     };
 
-    const readMode = () => (readSettings()[MODE_KEY] === 'runelite' ? 'runelite' : 'client');
+    const readMode = () => (readSettings()?.[MODE_KEY] === 'runelite' ? 'runelite' : 'client');
 
     const writeMode = (mode) => {
-        if (!settingsFile) return;
-        fs.writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), [MODE_KEY]: mode }, null, 2));
+        if (!settingsFile) return false;
+        const current = readSettings();
+        if (!current) {
+            log.warn('Launcher settings could not be read, so the launcher view was not saved.');
+            return false;
+        }
+        fs.writeFileSync(settingsFile, JSON.stringify({ ...current, [MODE_KEY]: mode }, null, 2));
+        return true;
     };
 
     const fallBackToClient = (access) => {
         if (access.reason === 'unreachable' || readMode() !== 'runelite') return;
         try {
-            writeMode('client');
-            log.info('Microbot in RuneLite is not available for this account; showing the Microbot client.');
+            if (writeMode('client')) log.info('Microbot in RuneLite is not available for this account; showing the Microbot client.');
         } catch (error) {
             log.warn(`Could not save the launcher view: ${error?.message || error}`);
         }
@@ -154,6 +162,10 @@ module.exports = function setupRuneliteLoader(deps) {
             const status = error?.response?.status;
             if (status === 401) throw failure(MESSAGES.signedOut);
             if (status === 403 || status === 404) throw failure(MESSAGES.unavailable);
+            if (/maxContentLength/i.test(String(error?.message))) {
+                log.warn(`The Microbot agent ${agent.version} download was larger than its release (${agent.size} bytes); stopped it.`);
+                throw failure(MESSAGES.damaged);
+            }
             log.warn(`Could not download the Microbot agent ${agent.version}: ${error?.message || error}`);
             throw failure(error?.response ? MESSAGES.download : MESSAGES.offline);
         }
@@ -295,9 +307,56 @@ module.exports = function setupRuneliteLoader(deps) {
         return status;
     };
 
+    const loaderHome = agentJar ? path.dirname(agentJar) : null;
+
+    const listJars = (directory, pattern) => {
+        try {
+            if (!directory || !fs.existsSync(directory)) return [];
+            return fs
+                .readdirSync(directory)
+                .filter((name) => pattern.test(name))
+                .map((name) => path.join(directory, name))
+                .filter((file) => fs.statSync(file).isFile())
+                .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+        } catch (error) {
+            return [];
+        }
+    };
+
+    const localJars = () => {
+        const installed = agentJar && fs.existsSync(agentJar) ? [agentJar] : [];
+        const sideBySide = listJars(loaderHome, INSTALLED_JAR_PATTERN).filter((file) => file !== agentJar);
+        return [...installed, ...sideBySide, ...listJars(downloadsDir, DOWNLOADED_JAR_PATTERN)];
+    };
+
     const statusJar = (agent) => {
         if (agent && fileMatches(agentPath(agent), agent)) return agentPath(agent);
-        return agentJar && fs.existsSync(agentJar) ? agentJar : null;
+        return localJars()[0] || null;
+    };
+
+    const isOurLine = (argument) => {
+        if (typeof argument !== 'string' || !argument.startsWith(AGENT_PREFIX)) return false;
+        const normalized = lineJarPath(argument).replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
+        const slash = normalized.lastIndexOf('/');
+        const name = normalized.slice(slash + 1);
+        if (name.startsWith('microbot-agent')) return true;
+        if (!INSTALLED_JAR_PATTERN.test(name)) return false;
+        const directory = slash < 0 ? '' : normalized.slice(0, slash);
+        const home = loaderHome ? loaderHome.replace(/\\/g, '/').toLowerCase() : null;
+        return directory.endsWith('/.microbot/loader') || directory === home;
+    };
+
+    const lineJar = (status) => {
+        if (!status?.settingsPath) return null;
+        try {
+            const settings = JSON.parse(fs.readFileSync(status.settingsPath, 'utf8'));
+            const lines = Array.isArray(settings?.jvmArguments) ? settings.jvmArguments : [];
+            const jar = lines.filter(isOurLine).map(lineJarPath).find((file) => fs.existsSync(file));
+            return jar || null;
+        } catch (error) {
+            log.warn(`Could not read RuneLite's settings to find the Microbot agent: ${error?.message || error}`);
+            return null;
+        }
     };
 
     const currentStatus = async (agent) => {
@@ -308,26 +367,33 @@ module.exports = function setupRuneliteLoader(deps) {
     };
 
     const viewFor = (access, status) => {
-        if (!access.available) {
-            fallBackToClient(access);
-            return { visible: false };
-        }
-        return { ...cardFor(access, status), mode: readMode() };
+        if (operation) return { visible: true, state: 'working', progress: progressText, mode: readMode() };
+        if (access.available) return { ...cardFor(access, status), mode: readMode() };
+        if (status?.installed) return { visible: true, state: 'remove-only', mode: readMode() };
+        fallBackToClient(access);
+        return { visible: false };
     };
 
     const cardFor = (access, status) => {
-        if (operation) return { visible: true, state: 'working', progress: progressText };
-        if (!status?.installed) return { visible: true, state: 'not-added', version: access.agent.version };
-        const current = status.agentSha256 === access.agent.sha256;
-        if (!current) return { visible: true, state: 'update', reason: 'new-version', version: access.agent.version };
-        if (status.signedIn === false) return { visible: true, state: 'update', reason: 'signed-out', version: access.agent.version };
-        return { visible: true, state: 'added', version: access.agent.version };
+        const version = access.agent.version;
+        if (!status?.installed) return { visible: true, state: 'not-added', version };
+        if (status.agentSha256 !== access.agent.sha256) return { visible: true, state: 'update', reason: 'new-version', version };
+        if (status.willLoad === false) return { visible: true, state: 'update', reason: 'not-loading', version };
+        if (status.signedIn === false || tokenRefused(status.lastStart)) return { visible: true, state: 'update', reason: 'signed-out', version };
+        return { visible: true, state: 'added', version };
     };
 
     const state = async () => {
         const access = await checkAccess();
-        if (!access.available || operation) return viewFor(access, null);
-        return viewFor(access, await currentStatus(access.agent));
+        if (operation) return viewFor(access, null);
+        return viewFor(access, await currentStatus(access.available ? access.agent : null));
+    };
+
+    const ensureUnchanged = (jar, agent) => {
+        if (fileMatches(jar, agent)) return;
+        log.warn(`The Microbot agent ${agent.version} changed on disk after it was checked; deleted it.`);
+        removeFile(jar);
+        throw failure(MESSAGES.damaged);
     };
 
     const obtainToken = async () => {
@@ -354,6 +420,7 @@ module.exports = function setupRuneliteLoader(deps) {
         sendProgress('Linking your Microbot account...');
         const token = await obtainToken();
         sendProgress('Adding Microbot to RuneLite...');
+        ensureUnchanged(jar, access.agent);
         const result = await runAgent(java, jar, ['--install', '--token-stdin'], {
             timeoutMs: INSTALL_TIMEOUT_MS,
             input: token,
@@ -378,6 +445,12 @@ module.exports = function setupRuneliteLoader(deps) {
         if (!jar && agent) jar = await downloadAgent(agent);
         if (!jar) throw failure(access.reason === 'unreachable' ? MESSAGES.offline : MESSAGES.remove);
         const java = await findJava({ install: true });
+        if (agent && jar === agentPath(agent)) {
+            ensureUnchanged(jar, agent);
+        } else if (!agent) {
+            const named = lineJar(await readStatus(java, jar));
+            jar = named || (agentJar && fs.existsSync(agentJar) ? agentJar : jar);
+        }
         sendProgress('Removing Microbot from RuneLite...');
         const result = await runAgent(java, jar, ['--remove'], { timeoutMs: REMOVE_TIMEOUT_MS });
         if (result.code !== 0) {
@@ -434,7 +507,7 @@ module.exports = function setupRuneliteLoader(deps) {
     ipcMain.handle('runelite-loader:set-mode', async (_event, mode) => {
         if (!MODES.includes(mode)) return { error: 'Unknown view.', mode: readMode() };
         try {
-            writeMode(mode);
+            if (!writeMode(mode)) return { error: 'Could not save the setting.', mode };
         } catch (error) {
             log.warn(`Could not save the launcher view: ${error?.message || error}`);
             return { error: 'Could not save the setting.', mode: readMode() };
@@ -471,11 +544,34 @@ function parseStatus(stdout) {
                 launchMode: typeof value.launchMode === 'string' ? value.launchMode : null,
                 signedIn: typeof value.signedIn === 'boolean' ? value.signedIn : null,
                 agentVersion: typeof value.agentVersion === 'string' ? value.agentVersion : null,
-                agentSha256: typeof value.agentSha256 === 'string' ? value.agentSha256.trim().toLowerCase() : null
+                agentSha256: typeof value.agentSha256 === 'string' ? value.agentSha256.trim().toLowerCase() : null,
+                willLoad: typeof value.willLoad === 'boolean' ? value.willLoad : null,
+                lastStart: parseLastStart(value.lastStart)
             };
         } catch (_) {}
     }
     return null;
+}
+
+function parseLastStart(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    return {
+        state: typeof value.state === 'string' ? value.state : null,
+        reason: typeof value.reason === 'string' ? value.reason : null
+    };
+}
+
+function tokenRefused(lastStart) {
+    if (!lastStart) return false;
+    const text = `${lastStart.state || ''} ${lastStart.reason || ''}`;
+    if (/unauthori[sz]ed|\b401\b/i.test(text)) return true;
+    return /token/i.test(text) && /refus|reject|invalid|revok|expired|denied/i.test(text);
+}
+
+function lineJarPath(argument) {
+    const value = argument.slice(AGENT_PREFIX.length);
+    const options = value.indexOf('=');
+    return options >= 0 ? value.slice(0, options) : value;
 }
 
 function sentence(text) {
@@ -515,4 +611,5 @@ function withTimeout(promise, ms) {
 module.exports.parseAgent = parseAgent;
 module.exports.parseStatus = parseStatus;
 module.exports.sentence = sentence;
+module.exports.tokenRefused = tokenRefused;
 module.exports.MESSAGES = MESSAGES;

@@ -39,6 +39,23 @@ describe('Microbot in RuneLite card', () => {
         expect(cardView({ visible: true, state: 'update', reason: 'signed-out' })).toMatchObject({ button: 'Update', hint: TEXT.signedOut });
     });
 
+    test('Update explains when RuneLite will not load Microbot', () => {
+        expect(cardView({ visible: true, state: 'update', reason: 'not-loading' })).toMatchObject({
+            button: 'Update',
+            hint: "RuneLite won't load Microbot right now. Press Update to fix it."
+        });
+    });
+
+    test('without access but still installed, only Remove is offered', () => {
+        expect(cardView({ visible: true, state: 'remove-only' })).toEqual({
+            hidden: false,
+            hint: 'Microbot is still in your RuneLite.',
+            button: null,
+            remove: true,
+            error: ''
+        });
+    });
+
     test('errors show under the hint', () => {
         expect(cardView({ visible: true, state: 'not-added', error: 'Close RuneLite first, then try again.' }).error).toBe('Close RuneLite first, then try again.');
     });

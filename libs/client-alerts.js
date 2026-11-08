@@ -363,17 +363,41 @@ module.exports = function setupClientAlerts(deps) {
 
     const tokenForProfile = (rawProfile) => tokenForLaunch(rawProfile, null);
 
+    const revokeUnsavedLoaderLinks = async () => {
+        let links;
+        try {
+            const { data } = await auth.request({ method: 'get', path: LIST_PATH, timeout: REQUEST_TIMEOUT_MS });
+            links = Array.isArray(data) ? data : [];
+        } catch (error) {
+            if (error?.response?.status === 401) throw error;
+            log.warn(`Could not list the client links to clear old RuneLite links: ${error?.message || error}`);
+            return;
+        }
+        for (const link of links.filter((entry) => entry?.id && entry.label === LOADER_LABEL)) {
+            try {
+                await auth.request({ method: 'delete', path: `${LINKS_PATH}/${encodeURIComponent(link.id)}`, timeout: REQUEST_TIMEOUT_MS });
+            } catch (error) {
+                if (error?.response?.status === 401) throw error;
+                if (error?.response?.status !== 404) log.warn(`Could not revoke an old RuneLite link: ${error?.message || error}`);
+            }
+        }
+    };
+
+    const replaceUnsavedLoaderLink = async (email) => {
+        log.info('Secure storage is not available, so the RuneLite link is not saved on this PC; replacing any earlier one.');
+        await revokeUnsavedLoaderLinks();
+        return (await createLink(email, LOADER_LABEL)).token;
+    };
+
     const tokenForLoader = async () => {
         const email = signedInEmail();
         if (!email || !auth) throw signedOutError();
-        if (!canPersist()) {
-            log.info('Secure storage is not available, so the RuneLite link is not saved on this PC.');
-            return (await createLink(email, LOADER_LABEL)).token;
-        }
-        retryRevokes();
+        const persist = canPersist();
+        if (persist) retryRevokes();
         const key = `${email}\n${LOADER_SLOT.kind}\n${LOADER_SLOT.key}`;
         if (!pending.has(key)) {
-            pending.set(key, resolveToken(LOADER_SLOT, email).finally(() => pending.delete(key)));
+            const work = persist ? resolveToken(LOADER_SLOT, email) : replaceUnsavedLoaderLink(email);
+            pending.set(key, work.finally(() => pending.delete(key)));
         }
         const token = await pending.get(key);
         if (!token) throw new Error('No client link was created for RuneLite');
@@ -382,7 +406,12 @@ module.exports = function setupClientAlerts(deps) {
 
     const forgetLoaderToken = async () => {
         const email = signedInEmail();
-        if (!email || !auth || !canPersist()) return;
+        if (!email || !auth) return;
+        if (!canPersist()) {
+            await revokeUnsavedLoaderLinks();
+            log.info('Unlinked Microbot in RuneLite from the dashboard.');
+            return;
+        }
         const store = readStore(email);
         const entry = ownEntry(store.loader, LOADER_KEY);
         if (!entry) return;

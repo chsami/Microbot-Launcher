@@ -7,6 +7,8 @@
         added: 'Added. Open RuneLite the usual way; Microbot is in the sidebar.',
         newVersion: 'A new version of Microbot is ready for your RuneLite.',
         signedOut: 'Microbot in RuneLite needs your Microbot sign-in again.',
+        notLoading: "RuneLite won't load Microbot right now. Press Update to fix it.",
+        removeOnly: 'Microbot is still in your RuneLite.',
         working: 'Working...',
         failed: 'Something went wrong. Try again in a minute.'
     };
@@ -23,8 +25,10 @@
         const base = { hidden: false, button: null, remove: false, error: view.error || '', hint: '' };
         if (view.state === 'working') return { ...base, hint: view.progress || TEXT.working };
         if (view.state === 'added') return { ...base, hint: TEXT.added, remove: true };
+        if (view.state === 'remove-only') return { ...base, hint: TEXT.removeOnly, remove: true };
         if (view.state === 'update') {
-            return { ...base, hint: view.reason === 'signed-out' ? TEXT.signedOut : TEXT.newVersion, button: TEXT.update, remove: true };
+            const hints = { 'signed-out': TEXT.signedOut, 'not-loading': TEXT.notLoading };
+            return { ...base, hint: hints[view.reason] || TEXT.newVersion, button: TEXT.update, remove: true };
         }
         return { ...base, button: TEXT.add };
     };

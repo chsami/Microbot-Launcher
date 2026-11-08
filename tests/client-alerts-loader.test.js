@@ -151,6 +151,57 @@ describe('client-alerts RuneLite link', () => {
         expect(serverLinks).toEqual([]);
     });
 
+    test('without secure storage the earlier RuneLite links are revoked before a new one is made', async () => {
+        created = [{ id: NEXT_ID, token: NEXT_TOKEN }];
+        serverLinks = [LOADER_ID, PROFILE_ID];
+        const labels = { [LOADER_ID]: 'RuneLite (Microbot Loader)', [PROFILE_ID]: 'Microbot client' };
+        const request = auth.request;
+        auth.request = jest.fn(async (config) => {
+            if (config.method === 'get') return { data: serverLinks.map((id) => ({ id, label: labels[id] })) };
+            return request(config);
+        });
+        const alerts = setup({ safeStorage: { ...safeStorage, isEncryptionAvailable: () => false } });
+
+        expect(await alerts.tokenForLoader()).toBe(NEXT_TOKEN);
+
+        const calls = auth.request.mock.calls.map(([config]) => `${config.method} ${config.path}`);
+        expect(calls).toEqual([
+            'get /api/alerts/client-links?includeHidden=true',
+            `delete /api/alerts/client-links/${LOADER_ID}`,
+            'post /api/alerts/client-links'
+        ]);
+        expect(serverLinks).toEqual([PROFILE_ID, NEXT_ID]);
+        expect(fs.existsSync(linksFile)).toBe(false);
+    });
+
+    test('without secure storage Remove revokes the RuneLite links by name', async () => {
+        serverLinks = [LOADER_ID, PROFILE_ID];
+        const labels = { [LOADER_ID]: 'RuneLite (Microbot Loader)', [PROFILE_ID]: 'Microbot client' };
+        const request = auth.request;
+        auth.request = jest.fn(async (config) => {
+            if (config.method === 'get') return { data: serverLinks.map((id) => ({ id, label: labels[id] })) };
+            return request(config);
+        });
+        const alerts = setup({ safeStorage: { ...safeStorage, isEncryptionAvailable: () => false } });
+
+        await alerts.forgetLoaderToken();
+
+        expect(serverLinks).toEqual([PROFILE_ID]);
+    });
+
+    test('without secure storage a failed listing still creates the link', async () => {
+        created = [{ id: LOADER_ID, token: LOADER_TOKEN }];
+        const request = auth.request;
+        auth.request = jest.fn(async (config) => {
+            if (config.method === 'get') throw Object.assign(new Error('HTTP 500'), { response: { status: 500 } });
+            return request(config);
+        });
+        const alerts = setup({ safeStorage: { ...safeStorage, isEncryptionAvailable: () => false } });
+
+        expect(await alerts.tokenForLoader()).toBe(LOADER_TOKEN);
+        expect(log.warn).toHaveBeenCalled();
+    });
+
     test('without secure storage a link is still created but not saved', async () => {
         created = [{ id: LOADER_ID, token: LOADER_TOKEN }];
         const alerts = setup({ safeStorage: { ...safeStorage, isEncryptionAvailable: () => false } });
