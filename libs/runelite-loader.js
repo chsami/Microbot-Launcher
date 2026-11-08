@@ -1,6 +1,6 @@
 const path = require('path');
 const crypto = require('crypto');
-const { makeFinder, launch } = require('./runelite-launch.js');
+const { makeFinder, launch, describeSpec } = require('./runelite-launch.js');
 
 const ACCESS_PATH = '/api/loader/access';
 const AGENT_PATH = '/api/loader/agent';
@@ -101,6 +101,11 @@ module.exports = function setupRuneliteLoader(deps) {
     const rememberedRuneLite = () => {
         const value = readSettings()?.[RUNELITE_PATH_KEY];
         return typeof value === 'string' ? value : null;
+    };
+
+    const runeliteInfo = () => {
+        const spec = findRuneLite();
+        return spec ? { opener: 'open', starts: describeSpec(spec, home) } : { opener: 'find' };
     };
 
     const findRuneLite = () => {
@@ -404,11 +409,11 @@ module.exports = function setupRuneliteLoader(deps) {
         const version = access.agent.version;
         if (!status?.installed) return { visible: true, state: 'not-added', version };
         if (status.agentSha256 !== access.agent.sha256) return { visible: true, state: 'update', reason: 'new-version', version };
+        if (status.enabled === false) return { visible: true, state: 'switched-off', ...runeliteInfo(), version };
         if (status.willLoad === false) return { visible: true, state: 'update', reason: 'not-loading', version };
         if (status.signedIn === false || status.lastStart?.code === 'signed-out') return { visible: true, state: 'update', reason: 'signed-out', version };
-        const opener = findRuneLite() ? 'open' : 'find';
-        if (status.lastStart?.code === 'not-ready') return { visible: true, state: 'added', note: 'not-ready', opener, version };
-        return { visible: true, state: 'added', opener, version };
+        if (status.lastStart?.code === 'not-ready') return { visible: true, state: 'added', note: 'not-ready', ...runeliteInfo(), version };
+        return { visible: true, state: 'added', ...runeliteInfo(), version };
     };
 
     const state = async () => {
@@ -521,12 +526,21 @@ module.exports = function setupRuneliteLoader(deps) {
     };
 
     const startRuneLite = async (spec) => {
-        const result = await launch({ spawn, spec, env, platform, home });
+        const result = await launch({
+            spawn,
+            spec,
+            env,
+            platform,
+            home,
+            onEarlyExit: ({ code, signal, seconds }) =>
+                log.warn(`RuneLite (${spec.source}) closed ${seconds.toFixed(1)} s after starting, exit code ${code === null ? 'none' : code}${signal ? `, signal ${signal}` : ''}.`)
+        });
         if (result.ok) {
             log.info(`Started RuneLite (${spec.source}).`);
             return { ok: true, message: MESSAGES.starting };
         }
-        log.warn(`Could not start RuneLite (${spec.source}): ${result.error?.message || 'unknown error'}`);
+        const code = typeof result.error?.code === 'string' && /^[A-Z0-9_]{2,32}$/.test(result.error.code) ? result.error.code : 'unknown';
+        log.warn(`Could not start RuneLite (${spec.source}): error code ${code}.`);
         return { ok: false, error: MESSAGES.launchFailed };
     };
 
@@ -569,7 +583,7 @@ module.exports = function setupRuneliteLoader(deps) {
             } catch (error) {
                 log.warn(`Could not remember where RuneLite is: ${error?.message || error}`);
             }
-            return { ...(await startRuneLite(spec)), opener: 'open' };
+            return { ...(await startRuneLite(spec)), opener: 'open', starts: describeSpec(spec, home) };
         });
 
     const install = () => run('install', installNow);
@@ -628,6 +642,7 @@ function parseStatus(stdout) {
                 agentVersion: typeof value.agentVersion === 'string' ? value.agentVersion : null,
                 agentSha256: typeof value.agentSha256 === 'string' ? value.agentSha256.trim().toLowerCase() : null,
                 willLoad: typeof value.willLoad === 'boolean' ? value.willLoad : null,
+                enabled: typeof value.enabled === 'boolean' ? value.enabled : true,
                 lastStart: parseLastStart(value.lastStart)
             };
         } catch (_) {}

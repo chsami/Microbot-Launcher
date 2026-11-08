@@ -587,6 +587,31 @@ webview#website {
     display: none;
 }
 
+.loader-card-starts {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--faint);
+}
+
+.loader-card-starts[hidden] {
+    display: none;
+}
+
+.loader-card-starts-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.loader-card-starts .loader-card-link {
+    margin-left: 0;
+    flex: none;
+}
+
 .loader-card-error {
     font-size: 12px;
     color: var(--red-text);
@@ -598,9 +623,13 @@ webview#website {
 
 .loader-card-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    gap: 8px;
+}
+
+.loader-card-actions .account-action {
+    white-space: nowrap;
 }
 
 .loader-card-actions:not(:has(button:not([hidden]))) {

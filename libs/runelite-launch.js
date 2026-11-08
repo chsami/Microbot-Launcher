@@ -2,6 +2,7 @@ const path = require('path');
 
 const FLATPAK_ID = 'net.runelite.RuneLite';
 const SPAWN_WAIT_MS = 3000;
+const EARLY_EXIT_MS = 20000;
 const APPIMAGE_PATTERN = /runelite.*\.appimage$/i;
 const MENTIONS_RUNELITE = /runelite/i;
 const FIELD_CODES = /%[fFuUdDnNickvm]/g;
@@ -265,7 +266,7 @@ function makeFinder({ fs, platform, env = {}, home }) {
     return { find, search, fromPath };
 }
 
-function launch({ spawn, spec, env, platform, home, waitMs = SPAWN_WAIT_MS }) {
+function launch({ spawn, spec, env, platform, home, waitMs = SPAWN_WAIT_MS, earlyExitMs = EARLY_EXIT_MS, onEarlyExit = null, now = Date.now }) {
     return new Promise((resolve) => {
         let done = false;
         let timer = null;
@@ -288,8 +289,13 @@ function launch({ spawn, spec, env, platform, home, waitMs = SPAWN_WAIT_MS }) {
             finish({ ok: false, error });
             return;
         }
+        const started = now();
         child.on('error', (error) => finish({ ok: false, error }));
         child.on('spawn', () => finish({ ok: true }));
+        child.on('exit', (code, signal) => {
+            const seconds = (now() - started) / 1000;
+            if (onEarlyExit && seconds * 1000 <= earlyExitMs && (code !== 0 || signal)) onEarlyExit({ code, signal, seconds });
+        });
         timer = setTimeout(() => finish({ ok: true }), waitMs);
         try {
             child.unref();
@@ -297,4 +303,19 @@ function launch({ spawn, spec, env, platform, home, waitMs = SPAWN_WAIT_MS }) {
     });
 }
 
-module.exports = { FLATPAK_ID, cleanEnv, splitExec, parseDesktopEntry, makeFinder, launch };
+function describeSpec(spec, home) {
+    if (!spec) return null;
+    let target = spec.command;
+    if (spec.source === 'flatpak') return `flatpak ${FLATPAK_ID}`;
+    if (spec.command === 'open' && spec.args[0] === '-a') target = spec.args[1];
+    if (home && typeof target === 'string') {
+        const windows = /^[A-Za-z]:\\/.test(home);
+        const sep = windows ? '\\' : '/';
+        const prefix = home.endsWith(sep) ? home : home + sep;
+        const matches = windows ? target.toLowerCase().startsWith(prefix.toLowerCase()) : target.startsWith(prefix);
+        if (matches) return `~${sep}${target.slice(prefix.length)}`;
+    }
+    return target;
+}
+
+module.exports = { FLATPAK_ID, cleanEnv, splitExec, parseDesktopEntry, makeFinder, launch, describeSpec };

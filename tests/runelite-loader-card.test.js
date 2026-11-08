@@ -13,6 +13,10 @@ describe('Microbot in RuneLite card', () => {
             hint: '',
             button: 'Add Microbot to my RuneLite',
             action: 'install',
+            secondary: null,
+            secondaryAction: null,
+            starts: '',
+            change: false,
             remove: false,
             error: '',
             note: ''
@@ -57,6 +61,31 @@ describe('Microbot in RuneLite card', () => {
         expect(cardView({ visible: true, state: 'added' }).note).toBe('');
     });
 
+    test('Added names the RuneLite it starts and offers Change…', () => {
+        expect(cardView({ visible: true, state: 'added', opener: 'open', starts: '~/Downloads/RuneLite.AppImage' })).toMatchObject({
+            starts: 'Starts ~/Downloads/RuneLite.AppImage',
+            change: true
+        });
+        expect(cardView({ visible: true, state: 'added', opener: 'find' })).toMatchObject({ starts: '', change: false });
+    });
+
+    test('switched off offers Turn Microbot on, Open RuneLite and Remove', () => {
+        expect(cardView({ visible: true, state: 'switched-off', opener: 'open', starts: '~/Downloads/RuneLite.AppImage' })).toEqual({
+            hidden: false,
+            hint: 'Microbot is switched off in your RuneLite.',
+            note: '',
+            button: 'Turn Microbot on',
+            action: 'install',
+            secondary: 'Open RuneLite',
+            secondaryAction: 'open',
+            starts: 'Starts ~/Downloads/RuneLite.AppImage',
+            change: true,
+            remove: true,
+            error: ''
+        });
+        expect(cardView({ visible: true, state: 'switched-off', opener: 'find' })).toMatchObject({ secondary: 'Find RuneLite…', secondaryAction: 'find' });
+    });
+
     test('update offers Update and removal', () => {
         expect(cardView({ visible: true, state: 'update', reason: 'new-version' })).toMatchObject({ button: 'Update', remove: true, hint: TEXT.newVersion });
         expect(cardView({ visible: true, state: 'update', reason: 'signed-out' })).toMatchObject({ button: 'Update', hint: TEXT.signedOut });
@@ -75,6 +104,10 @@ describe('Microbot in RuneLite card', () => {
             hint: 'Microbot is still in your RuneLite.',
             button: null,
             action: null,
+            secondary: null,
+            secondaryAction: null,
+            starts: '',
+            change: false,
             remove: true,
             error: '',
             note: ''
@@ -141,7 +174,7 @@ describe('Microbot client / Microbot in RuneLite switch', () => {
     let findResult;
 
     function loadCard(states) {
-        const ids = ['launcher-mode', 'runelite-view', 'runelite-loader', 'runelite-loader-hint', 'runelite-loader-note', 'runelite-loader-error', 'runelite-loader-action', 'runelite-loader-remove'];
+        const ids = ['launcher-mode', 'runelite-view', 'runelite-loader', 'runelite-loader-hint', 'runelite-loader-note', 'runelite-loader-starts', 'runelite-loader-starts-label', 'runelite-loader-change', 'runelite-loader-open', 'runelite-loader-error', 'runelite-loader-action', 'runelite-loader-remove'];
         const elements = Object.fromEntries(ids.map((id) => [id, fakeElement()]));
         const options = [fakeElement({ dataset: { mode: 'client' } }), fakeElement({ dataset: { mode: 'runelite' } })];
         const sidebar = fakeElement();
@@ -308,6 +341,38 @@ describe('Microbot client / Microbot in RuneLite switch', () => {
 
         expect(card.elements['runelite-loader-action'].textContent).toBe('Find RuneLite…');
         expect(card.elements['runelite-loader-error'].textContent).toBe("RuneLite wasn't found on this PC. Press Find RuneLite… to choose it.");
+    });
+
+    test('switched off: Turn Microbot on installs, the second button opens RuneLite', async () => {
+        openResult = { ok: true, message: 'RuneLite is starting. Microbot will be in the sidebar.' };
+        const card = loadCard([{ visible: true, state: 'switched-off', opener: 'open', starts: '~/Downloads/RuneLite.AppImage', mode: 'runelite' }]);
+        card.runeliteLoader.install.mockResolvedValue({ visible: true, state: 'added', opener: 'open', starts: '~/Downloads/RuneLite.AppImage', mode: 'runelite' });
+        await flush();
+        expect(card.elements['runelite-loader-action'].textContent).toBe('Turn Microbot on');
+        expect(card.elements['runelite-loader-open'].textContent).toBe('Open RuneLite');
+        expect(card.elements['runelite-loader-starts'].hidden).toBe(false);
+        expect(card.elements['runelite-loader-starts-label'].textContent).toBe('Starts ~/Downloads/RuneLite.AppImage');
+
+        card.elements['runelite-loader-open'].click();
+        await flush();
+        expect(card.runeliteLoader.open).toHaveBeenCalledTimes(1);
+
+        card.elements['runelite-loader-action'].click();
+        await flush();
+        expect(card.runeliteLoader.install).toHaveBeenCalledTimes(1);
+    });
+
+    test('Change… opens the picker and shows the new choice', async () => {
+        findResult = { ok: true, message: 'RuneLite is starting. Microbot will be in the sidebar.', opener: 'open', starts: '~/Games/RuneLite.AppImage' };
+        const card = loadCard([{ visible: true, state: 'added', opener: 'open', starts: '~/Downloads/RuneLite.AppImage', mode: 'runelite' }]);
+        await flush();
+        expect(card.elements['runelite-loader-change'].hidden).toBe(false);
+
+        card.elements['runelite-loader-change'].click();
+        await flush();
+
+        expect(card.runeliteLoader.find).toHaveBeenCalledTimes(1);
+        expect(card.elements['runelite-loader-starts-label'].textContent).toBe('Starts ~/Games/RuneLite.AppImage');
     });
 
     test('the switch cannot be used without access', async () => {

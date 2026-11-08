@@ -11,6 +11,8 @@
         removeOnly: 'Microbot is still in your RuneLite.',
         notReady: 'Microbot is waiting for an update for the latest RuneLite.',
         open: 'Open RuneLite',
+        switchedOff: 'Microbot is switched off in your RuneLite.',
+        turnOn: 'Turn Microbot on',
         find: 'Find RuneLite…',
         working: 'Working...',
         failed: 'Something went wrong. Try again in a minute.'
@@ -26,16 +28,49 @@
 
     const cardView = (view) => {
         if (!view?.visible) return { hidden: true };
-        const base = { hidden: false, button: null, action: null, remove: false, error: view.error || '', hint: '', note: '' };
+        const base = {
+            hidden: false,
+            button: null,
+            action: null,
+            secondary: null,
+            secondaryAction: null,
+            starts: '',
+            change: false,
+            remove: false,
+            error: view.error || '',
+            hint: '',
+            note: ''
+        };
+        const find = view.opener === 'find';
+        const opener = {
+            text: find ? TEXT.find : TEXT.open,
+            action: find ? 'find' : 'open',
+            starts: !find && view.starts ? `Starts ${view.starts}` : '',
+            change: !find
+        };
         if (view.state === 'working') return { ...base, hint: view.progress || TEXT.working };
         if (view.state === 'added') {
-            const find = view.opener === 'find';
             return {
                 ...base,
                 hint: view.flash || TEXT.added,
                 note: view.note === 'not-ready' ? TEXT.notReady : '',
-                button: find ? TEXT.find : TEXT.open,
-                action: find ? 'find' : 'open',
+                button: opener.text,
+                action: opener.action,
+                starts: opener.starts,
+                change: opener.change,
+                remove: true
+            };
+        }
+        if (view.state === 'switched-off') {
+            return {
+                ...base,
+                hint: view.flash || TEXT.switchedOff,
+                button: TEXT.turnOn,
+                action: 'install',
+                secondary: opener.text,
+                secondaryAction: opener.action,
+                starts: opener.starts,
+                change: opener.change,
                 remove: true
             };
         }
@@ -87,6 +122,24 @@
         button.textContent = shown.button || '';
         button.disabled = busy || Boolean(latest.flash);
         button.dataset.action = shown.action || '';
+        const secondary = $('runelite-loader-open');
+        if (secondary) {
+            secondary.hidden = !shown.secondary;
+            secondary.textContent = shown.secondary || '';
+            secondary.disabled = busy || Boolean(latest.flash);
+            secondary.dataset.action = shown.secondaryAction || '';
+        }
+        const starts = $('runelite-loader-starts');
+        if (starts) {
+            starts.hidden = !shown.starts;
+            const label = $('runelite-loader-starts-label');
+            if (label) label.textContent = shown.starts;
+        }
+        const change = $('runelite-loader-change');
+        if (change) {
+            change.hidden = !shown.change;
+            change.disabled = busy;
+        }
         const remove = $('runelite-loader-remove');
         remove.hidden = !shown.remove;
         remove.disabled = busy;
@@ -153,9 +206,10 @@
         busy = false;
         if (result?.cancelled) return render(latest);
         const opener = result?.opener || latest.opener;
-        if (!result?.ok) return render({ ...latest, opener, error: result?.error || TEXT.failed });
+        const starts = result?.starts || (opener === 'find' ? undefined : latest.starts);
+        if (!result?.ok) return render({ ...latest, opener, starts, error: result?.error || TEXT.failed });
         clearTimeout(flashTimer);
-        render({ ...latest, opener, error: '', flash: result.message });
+        render({ ...latest, opener, starts, error: '', flash: result.message });
         flashTimer = setTimeout(() => {
             if (latest.flash) render({ ...latest, flash: '' });
         }, FLASH_MS);
@@ -169,6 +223,11 @@
 
     const init = () => {
         $('runelite-loader-action')?.addEventListener('click', press);
+        $('runelite-loader-open')?.addEventListener('click', () => {
+            const action = $('runelite-loader-open').dataset.action;
+            if (action === 'open' || action === 'find') launchRuneLite(action);
+        });
+        $('runelite-loader-change')?.addEventListener('click', () => launchRuneLite('find'));
         $('runelite-loader-remove')?.addEventListener('click', () => act('remove'));
         document.querySelectorAll('.mode-option').forEach((option) => {
             option.addEventListener('click', () => choose(option.dataset.mode));

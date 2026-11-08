@@ -1,6 +1,6 @@
 const EventEmitter = require('events');
 const path = require('path');
-const { cleanEnv, splitExec, parseDesktopEntry, makeFinder, launch, FLATPAK_ID } = require('../libs/runelite-launch');
+const { cleanEnv, splitExec, parseDesktopEntry, makeFinder, launch, describeSpec, FLATPAK_ID } = require('../libs/runelite-launch');
 
 function fakeFs(entries) {
     const files = new Map();
@@ -302,5 +302,60 @@ describe('starting RuneLite', () => {
             throw new Error('bad');
         });
         expect((await launch({ spawn, spec: { command: '/x', args: [] }, env: {}, platform: 'linux', home: HOME })).ok).toBe(false);
+    });
+});
+
+describe('which RuneLite the card names', () => {
+    test('home is shortened to ~', () => {
+        expect(describeSpec({ command: '/home/zezima/Downloads/RuneLite.AppImage', args: [], source: 'appimage' }, '/home/zezima')).toBe('~/Downloads/RuneLite.AppImage');
+        expect(describeSpec({ command: '/home/zezima2/RuneLite.AppImage', args: [], source: 'appimage' }, '/home/zezima')).toBe('/home/zezima2/RuneLite.AppImage');
+        expect(describeSpec({ command: '/snap/bin/runelite', args: [], source: 'snap' }, '/home/zezima')).toBe('/snap/bin/runelite');
+    });
+
+    test('flatpak and macOS apps read naturally', () => {
+        expect(describeSpec({ command: '/usr/bin/flatpak', args: ['run', FLATPAK_ID], source: 'flatpak' }, '/home/z')).toBe('flatpak net.runelite.RuneLite');
+        expect(describeSpec({ command: 'open', args: ['-a', '/Users/z/Applications/RuneLite.app'], source: 'app' }, '/Users/z')).toBe('~/Applications/RuneLite.app');
+    });
+
+    test('Windows paths, case-insensitively', () => {
+        expect(describeSpec({ command: 'C:\\Users\\Zezima\\AppData\\Local\\RuneLite\\RuneLite.exe', args: [], source: 'installed' }, 'c:\\users\\zezima')).toBe(
+            '~\\AppData\\Local\\RuneLite\\RuneLite.exe'
+        );
+    });
+
+    test('nothing found names nothing', () => {
+        expect(describeSpec(null, '/home/z')).toBeNull();
+    });
+});
+
+describe('early exits', () => {
+    const spawned = () => {
+        const child = new EventEmitter();
+        child.unref = jest.fn();
+        setImmediate(() => child.emit('spawn'));
+        return child;
+    };
+
+    test('a non-zero exit soon after the start is reported', async () => {
+        let child;
+        const onEarlyExit = jest.fn();
+        let clock = 1000;
+        await launch({ spawn: () => (child = spawned()), spec: { command: '/x', args: [] }, env: {}, platform: 'linux', home: HOME, onEarlyExit, now: () => clock });
+        clock = 3500;
+        child.emit('exit', 1, null);
+
+        expect(onEarlyExit).toHaveBeenCalledWith({ code: 1, signal: null, seconds: 2.5 });
+    });
+
+    test('a clean exit of a wrapper and a late exit are not', async () => {
+        let child;
+        const onEarlyExit = jest.fn();
+        let clock = 0;
+        await launch({ spawn: () => (child = spawned()), spec: { command: 'open', args: ['-a', '/Applications/RuneLite.app'] }, env: {}, platform: 'darwin', home: '/Users/z', onEarlyExit, now: () => clock });
+        child.emit('exit', 0, null);
+        clock = 60000;
+        child.emit('exit', 1, null);
+
+        expect(onEarlyExit).not.toHaveBeenCalled();
     });
 });

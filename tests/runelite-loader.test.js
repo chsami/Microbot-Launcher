@@ -259,6 +259,7 @@ describe('runelite-loader', () => {
                 agentVersion: '1.0.0',
                 agentSha256: 'abc',
                 willLoad: null,
+                enabled: true,
                 lastStart: null
             });
             expect(parseStatus('{"installed":"yes"}')).toMatchObject({ installed: false, signedIn: null, agentSha256: null });
@@ -827,7 +828,7 @@ describe('runelite-loader', () => {
             const dialog = { showOpenDialog: jest.fn(async () => ({ canceled: false, filePaths: [chosen] })) };
             const { ipcMain } = setup({ spawn: launchSpawn, dialog, finder: undefined, platform: 'linux' });
 
-            expect(await ipcMain.invoke('runelite-loader:find')).toEqual({ ok: true, message: 'RuneLite is starting. Microbot will be in the sidebar.', opener: 'open' });
+            expect(await ipcMain.invoke('runelite-loader:find')).toEqual({ ok: true, message: 'RuneLite is starting. Microbot will be in the sidebar.', opener: 'open', starts: '~/RuneLite.AppImage' });
 
             expect(JSON.parse(fs.readFileSync(settingsFile, 'utf8'))).toEqual({ launcherMode: 'runelite', runelitePath: chosen });
             expect(launchSpawn.mock.calls[0][0]).toBe(chosen);
@@ -872,6 +873,102 @@ describe('runelite-loader', () => {
             const options = { finder: undefined, platform: 'linux', home: emptyHome, env: { PATH: '' } };
 
             expect(await setup(options).loader.state()).toMatchObject({ state: 'added', opener: 'open' });
+        });
+    });
+
+    describe('switched off, and which RuneLite starts', () => {
+        const installed = (fields) => {
+            fs.mkdirSync(path.dirname(agentJar), { recursive: true });
+            fs.writeFileSync(agentJar, JAR);
+            cli.status.stdout = JSON.stringify({ installed: true, signedIn: true, willLoad: true, agentVersion: '1.0.0', agentSha256: JAR_SHA, ...fields });
+        };
+        const appImageSpec = (home) => ({ command: `${home}/Downloads/RuneLite.AppImage`, args: [], source: 'appimage', label: `${home}/Downloads/RuneLite.AppImage` });
+
+        test('enabled false shows the switched-off state, with Open RuneLite still there', async () => {
+            installed({ enabled: false, lastStart: { code: 'switched-off', at: '2026-11-08T07:00:00Z', message: null } });
+            const { loader } = setup({ finder: { find: () => appImageSpec(dir), fromPath: () => null } });
+
+            expect(await loader.state()).toEqual({ visible: true, state: 'switched-off', opener: 'open', starts: '~/Downloads/RuneLite.AppImage', version: '1.0.0', mode: 'client' });
+        });
+
+        test('a missing enabled reads as on', async () => {
+            installed({});
+
+            expect(await setup().loader.state()).toMatchObject({ state: 'added' });
+            expect(parseStatus('{"installed":true}').enabled).toBe(true);
+            expect(parseStatus('{"installed":true,"enabled":"no"}').enabled).toBe(true);
+            expect(parseStatus('{"installed":true,"enabled":false}').enabled).toBe(false);
+        });
+
+        test('a newer release still comes first', async () => {
+            installed({ enabled: false });
+            access.agent.sha256 = OTHER_SHA;
+
+            expect(await setup().loader.state()).toMatchObject({ state: 'update', reason: 'new-version' });
+        });
+
+        test('Turn Microbot on runs the same install', async () => {
+            installed({ enabled: false });
+            const { loader } = setup();
+            expect((await loader.state()).state).toBe('switched-off');
+            cli.status.stdout = JSON.stringify({ installed: true, signedIn: true, enabled: true, agentSha256: JAR_SHA });
+
+            const result = await loader.install();
+
+            expect(runsOf('--install')).toHaveLength(1);
+            expect(runsOf('--install')[0].args).toEqual(['-jar', path.join(downloadsDir, 'agent-1.0.0.jar'), '--install', '--token-stdin']);
+            expect(result.state).toBe('added');
+        });
+
+        test('Added says which RuneLite it starts, with the home folder as ~', async () => {
+            installed({});
+            const { loader } = setup({ finder: { find: () => appImageSpec(dir), fromPath: () => null } });
+
+            expect(await loader.state()).toMatchObject({ state: 'added', opener: 'open', starts: '~/Downloads/RuneLite.AppImage' });
+        });
+
+        test('a start error logs only the OS error code, no path', async () => {
+            const secretHome = path.join(dir, 'token-mbc_SECRET');
+            const failing = jest.fn(() => {
+                const child = new EventEmitter();
+                child.unref = jest.fn();
+                setImmediate(() => child.emit('error', Object.assign(new Error(`spawn ${secretHome}/Downloads/RuneLite.AppImage EACCES`), { code: 'EACCES' })));
+                return child;
+            });
+            const { loader } = setup({ spawn: failing, home: secretHome, finder: { find: () => appImageSpec(secretHome), fromPath: () => null } });
+
+            expect((await loader.openRuneLite()).error).toBe('RuneLite could not be started. Try opening it the usual way.');
+            expect(log.warn).toHaveBeenCalledWith('Could not start RuneLite (appimage): error code EACCES.');
+            expect(logged()).not.toContain(secretHome);
+            expect(logged()).not.toContain('Downloads');
+        });
+
+        test('an error without a code logs unknown', async () => {
+            const failing = jest.fn(() => {
+                throw new Error('weird /home/someone/path');
+            });
+            const { loader } = setup({ spawn: failing, finder: { find: () => appImageSpec(dir), fromPath: () => null } });
+
+            await loader.openRuneLite();
+
+            expect(log.warn).toHaveBeenCalledWith('Could not start RuneLite (appimage): error code unknown.');
+        });
+
+        test('RuneLite closing right after it started is logged with its exit code', async () => {
+            let child;
+            const launching = jest.fn(() => {
+                child = new EventEmitter();
+                child.unref = jest.fn();
+                setImmediate(() => child.emit('spawn'));
+                return child;
+            });
+            const { loader } = setup({ spawn: launching, finder: { find: () => appImageSpec(dir), fromPath: () => null } });
+
+            expect((await loader.openRuneLite()).ok).toBe(true);
+            child.emit('exit', 127, null);
+
+            expect(log.warn).toHaveBeenCalledWith(expect.stringMatching(/^RuneLite \(appimage\) closed \d+\.\d s after starting, exit code 127\.$/));
+            expect(logged()).not.toContain('Downloads');
         });
     });
 });
