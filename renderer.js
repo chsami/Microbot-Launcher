@@ -1930,9 +1930,10 @@ let refreshingClientJars = false;
 
 /**
  * Rescan the .microbot folder and rebuild the version list. Keeps the current
- * pick; if exactly one new jar showed up, selects it instead.
+ * pick; on a click, if exactly one new jar showed up, selects it instead.
  *
- * @param {boolean} quiet Skip the rebuild when nothing changed (window focus).
+ * @param {boolean} quiet Window-focus rescan: no rebuild when nothing changed,
+ *     no switching to new jars, no error dialogs.
  */
 async function refreshClientJars(quiet = false) {
     const clientSelect = document.getElementById('client');
@@ -1949,8 +1950,9 @@ async function refreshClientJars(quiet = false) {
         const previous = clientSelect.value;
         const added = after.filter((file) => !before.includes(file));
         populateSelectElement('client', jars);
+        // Only a click may switch to a new jar; focus rescans also see jars that remote/profile starts download.
         const pick =
-            added.length === 1 ? added[0] : after.includes(previous) ? previous : after[0];
+            !quiet && added.length === 1 ? added[0] : after.includes(previous) ? previous : after[0];
         if (pick) {
             clientSelect.value = pick;
             if (pick !== previous) {

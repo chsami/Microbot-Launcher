@@ -176,6 +176,17 @@ describe('renderer client version select', () => {
         expect(properties.version_pref).toBe('my-build');
     });
 
+    test('a focus rescan lists a new jar without switching to it', async () => {
+        await context.__renderer.populateAndSelectClientVersion('2.6.2');
+        fs.writeFileSync(path.join(microbotDir, 'microbot-2.6.30.jar'), 'jar');
+
+        await context.__renderer.refreshClientJars(true);
+
+        expect(select.options.map((o) => o.value)).toContain('microbot-2.6.30.jar');
+        expect(select.value).toBe('microbot-2.6.2.jar');
+        expect(properties.version_pref).toBe('2.6.2');
+    });
+
     test('refresh keeps the current pick, and falls back when its jar is gone', async () => {
         await context.__renderer.populateAndSelectClientVersion('2.6.2');
 
