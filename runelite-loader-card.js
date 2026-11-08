@@ -4,7 +4,6 @@
     const TEXT = {
         add: 'Add Microbot to my RuneLite',
         update: 'Update',
-        notAdded: 'Adds Microbot to the RuneLite you already use. Open RuneLite the usual way afterwards.',
         added: 'Added. Open RuneLite the usual way; Microbot is in the sidebar.',
         newVersion: 'A new version of Microbot is ready for your RuneLite.',
         signedOut: 'Microbot in RuneLite needs your Microbot sign-in again.',
@@ -27,7 +26,7 @@
         if (view.state === 'update') {
             return { ...base, hint: view.reason === 'signed-out' ? TEXT.signedOut : TEXT.newVersion, button: TEXT.update, remove: true };
         }
-        return { ...base, hint: TEXT.notAdded, button: TEXT.add };
+        return { ...base, button: TEXT.add };
     };
 
     if (typeof document === 'undefined') {

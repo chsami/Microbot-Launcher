@@ -524,8 +524,16 @@ webview#website {
     display: none !important;
 }
 
+.sidebar.mode-runelite #remote-start-row {
+    display: none !important;
+}
+
 .runelite-view {
     width: 100%;
+}
+
+#runelite-loader-hint:empty {
+    display: none;
 }
 
 .runelite-view-intro {

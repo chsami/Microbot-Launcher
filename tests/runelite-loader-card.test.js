@@ -10,7 +10,7 @@ describe('Microbot in RuneLite card', () => {
     test('not added offers the one button', () => {
         expect(cardView({ visible: true, state: 'not-added' })).toEqual({
             hidden: false,
-            hint: 'Adds Microbot to the RuneLite you already use. Open RuneLite the usual way afterwards.',
+            hint: '',
             button: 'Add Microbot to my RuneLite',
             remove: false,
             error: ''
@@ -242,7 +242,17 @@ describe('Microbot client / Microbot in RuneLite switch', () => {
             expect(hiddenIn(null)(id)).toBe(false);
         });
 
-        test.each(['user-session', 'launcher-mode', 'runelite-view', 'runelite-loader', 'launcher-update-banner'])(
+        test('the dashboard start switch is hidden in the RuneLite view and left alone in the client view', () => {
+            expect(hiddenIn('mode-runelite')('remote-start-row')).toBe(true);
+            expect(hiddenIn('mode-runelite')('remote-start-switch')).toBe(true);
+            expect(hiddenIn(null)('remote-start-row')).toBe(false);
+        });
+
+        test('an empty card description takes no space', () => {
+            expect(css).toMatch(/#runelite-loader-hint:empty\s*\{\s*display:\s*none;/);
+        });
+
+        test.each(['user-session', 'session-email', 'signout-btn', 'launcher-mode', 'runelite-view', 'runelite-loader', 'runelite-loader-action', 'launcher-update-banner'])(
             '#%s stays visible in the RuneLite view',
             (id) => {
                 expect(hiddenIn('mode-runelite')(id)).toBe(false);
