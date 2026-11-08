@@ -512,6 +512,17 @@
                         <span class="hwid-spoof-switch" aria-hidden="true"></span>
                     </label>
                 </section>
+                <section id="runelite-loader" class="loader-card" aria-live="polite" hidden>
+                    <div class="loader-card-text">
+                        <span class="loader-card-title">Microbot in RuneLite</span>
+                        <span id="runelite-loader-hint" class="account-hint"></span>
+                        <span id="runelite-loader-error" class="loader-card-error" role="alert"></span>
+                    </div>
+                    <div class="loader-card-actions">
+                        <button id="runelite-loader-action" class="account-action primary" type="button" hidden></button>
+                        <button id="runelite-loader-remove" class="loader-card-link" type="button" hidden>Remove from RuneLite</button>
+                    </div>
+                </section>
                 <div class="play-buttons">
                     <button id="play" class="play-button loadingButton">
                         Login Jagex Account
@@ -652,6 +663,7 @@
     </script>
     <script src="profiles-screen.js"></script>
     <script src="setup-guide.js"></script>
+    <script src="runelite-loader-card.js"></script>
     <script src="halloween.js"></script>
 
 

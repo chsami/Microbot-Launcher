@@ -210,14 +210,18 @@ module.exports = function setupApiAuth(deps) {
         error: 'Use "Forgot password?" on the sign-in screen to change your password.'
     }));
 
-    const send = (config, current) =>
-        axios.request({
+    const send = (config, current) => {
+        const options = {
             method: config.method,
             url: `${baseUrl}${config.path}`,
             data: config.data,
             timeout: config.timeout || REQUEST_TIMEOUT_MS,
             headers: { Authorization: `Bearer ${current.accessToken}` }
-        });
+        };
+        if (config.responseType) options.responseType = config.responseType;
+        if (config.maxContentLength) options.maxContentLength = config.maxContentLength;
+        return axios.request(options);
+    };
 
     const request = async (config) => {
         restore();

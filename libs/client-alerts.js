@@ -8,6 +8,9 @@ const DEFAULT_PROFILE = 'default';
 const TOKEN_PATTERN = /^mbc_[A-Za-z0-9_-]{43}$/;
 const MAX_LABEL_LENGTH = 60;
 const MAX_ACCOUNT_ID_LENGTH = 128;
+const LOADER_LABEL = 'RuneLite (Microbot Loader)';
+const LOADER_KEY = 'runelite';
+const LOADER_SLOT = { kind: 'loader', key: LOADER_KEY, profile: null, label: LOADER_LABEL };
 
 module.exports = function setupClientAlerts(deps) {
     const { ipcMain, log, fs, safeStorage, auth, linksFile, settingsFile, accountsFile } = deps;
@@ -115,27 +118,30 @@ module.exports = function setupClientAlerts(deps) {
         writeSettings(state);
     };
 
-    const slotEnabled = (slot) => (slot.kind === 'accounts' ? isAccountEnabled(slot.key, slot.profile) : isEnabled(slot.profile));
+    const slotEnabled = (slot) => slot.kind === 'loader' || (slot.kind === 'accounts' ? isAccountEnabled(slot.key, slot.profile) : isEnabled(slot.profile));
 
     const readStore = (email) => {
-        const empty = { profiles: {}, accounts: {}, revoke: [] };
+        const empty = { profiles: {}, accounts: {}, loader: {}, revoke: [] };
         try {
             if (!canPersist() || !fs.existsSync(linksFile)) return empty;
             const value = JSON.parse(safeStorage.decryptString(fs.readFileSync(linksFile)));
             if (value?.email !== email || !value?.profiles || typeof value.profiles !== 'object') return empty;
             const revoke = Array.isArray(value.revoke) ? value.revoke.filter((id) => typeof id === 'string') : [];
             const accounts = value.accounts && typeof value.accounts === 'object' && !Array.isArray(value.accounts) ? value.accounts : {};
-            return { profiles: value.profiles, accounts, revoke };
+            const loader = value.loader && typeof value.loader === 'object' && !Array.isArray(value.loader) ? value.loader : {};
+            return { profiles: value.profiles, accounts, loader, revoke };
         } catch (error) {
             log.warn(`Could not read alert links: ${error?.message || error}`);
             return empty;
         }
     };
 
-    const writeStore = (email, { profiles, accounts = {}, revoke }) => {
+    const writeStore = (email, { profiles, accounts = {}, loader = {}, revoke }) => {
         if (!canPersist()) return;
+        const value = { email, profiles, accounts, revoke };
+        if (Object.keys(loader).length) value.loader = loader;
         try {
-            fs.writeFileSync(linksFile, safeStorage.encryptString(JSON.stringify({ email, profiles, accounts, revoke })), { mode: 0o600 });
+            fs.writeFileSync(linksFile, safeStorage.encryptString(JSON.stringify(value)), { mode: 0o600 });
             fs.chmodSync(linksFile, 0o600);
         } catch (error) {
             log.warn(`Could not save alert links: ${error?.message || error}`);
@@ -252,7 +258,7 @@ module.exports = function setupClientAlerts(deps) {
         }
         if (stored && readEntry(email, slot)?.id === stored.id) writeEntry(email, slot, null);
         const created = await createLink(email, slot.label);
-        writeEntry(email, slot, slot.kind === 'accounts' ? { ...created, profile: slot.profile } : { ...created, noJagex: true });
+        writeEntry(email, slot, newEntry(slot, created));
         if (!slotEnabled(slot)) {
             log.info(`The dashboard switch for ${describe(slot)} was turned off while it was being linked; keeping the link for later.`);
             return null;
@@ -357,6 +363,37 @@ module.exports = function setupClientAlerts(deps) {
 
     const tokenForProfile = (rawProfile) => tokenForLaunch(rawProfile, null);
 
+    const tokenForLoader = async () => {
+        const email = signedInEmail();
+        if (!email || !auth) throw signedOutError();
+        if (!canPersist()) {
+            log.info('Secure storage is not available, so the RuneLite link is not saved on this PC.');
+            return (await createLink(email, LOADER_LABEL)).token;
+        }
+        retryRevokes();
+        const key = `${email}\n${LOADER_SLOT.kind}\n${LOADER_SLOT.key}`;
+        if (!pending.has(key)) {
+            pending.set(key, resolveToken(LOADER_SLOT, email).finally(() => pending.delete(key)));
+        }
+        const token = await pending.get(key);
+        if (!token) throw new Error('No client link was created for RuneLite');
+        return token;
+    };
+
+    const forgetLoaderToken = async () => {
+        const email = signedInEmail();
+        if (!email || !auth || !canPersist()) return;
+        const store = readStore(email);
+        const entry = ownEntry(store.loader, LOADER_KEY);
+        if (!entry) return;
+        const loader = { ...store.loader };
+        delete loader[LOADER_KEY];
+        const revoke = entry.id ? [...store.revoke.filter((id) => id !== String(entry.id)), String(entry.id)] : store.revoke;
+        writeStore(email, { ...store, loader, revoke });
+        log.info('Unlinked Microbot in RuneLite from the dashboard.');
+        await retryRevokes();
+    };
+
     const storedToken = (email, slot) => {
         const stored = readEntry(email, slot);
         return stored && TOKEN_PATTERN.test(String(stored.token)) ? stored.token : null;
@@ -452,7 +489,7 @@ module.exports = function setupClientAlerts(deps) {
         return linked;
     };
 
-    return { tokenForLaunch, tokenForProfile, retryRevokes, linkedProfiles, linkedAccounts, profilesWithoutAccount };
+    return { tokenForLaunch, tokenForProfile, tokenForLoader, forgetLoaderToken, retryRevokes, linkedProfiles, linkedAccounts, profilesWithoutAccount };
 };
 
 function hasOwn(object, key) {
@@ -471,7 +508,18 @@ function isAccountId(value) {
     return typeof value === 'string' && value.length > 0 && value.length <= MAX_ACCOUNT_ID_LENGTH;
 }
 
+function signedOutError() {
+    return Object.assign(new Error('Not signed in'), { response: { status: 401 } });
+}
+
+function newEntry(slot, created) {
+    if (slot.kind === 'accounts') return { ...created, profile: slot.profile };
+    if (slot.kind === 'loader') return created;
+    return { ...created, noJagex: true };
+}
+
 function describe(slot) {
+    if (slot.kind === 'loader') return 'Microbot in RuneLite';
     return slot.kind === 'accounts' ? `the Jagex account on profile "${slot.profile}"` : `profile "${slot.profile}"`;
 }
 

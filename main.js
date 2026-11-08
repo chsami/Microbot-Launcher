@@ -122,6 +122,26 @@ async function loadLibraries() {
         } catch (alertsError) {
             log.error('Error setting up bot alerts:', alertsError);
         }
+        if (apiAuth) {
+            try {
+                const loaderHome = path.join(require('os').homedir(), '.microbot', 'loader');
+                require(path.join(__dirname, 'libs', 'runelite-loader.js'))({
+                    ipcMain,
+                    log,
+                    fs,
+                    spawn,
+                    axios,
+                    auth: apiAuth,
+                    alerts: deps.alerts,
+                    microbotDir,
+                    downloadsDir: path.join(loaderHome, 'downloads'),
+                    agentJar: path.join(loaderHome, 'agent.jar'),
+                    getWindow: () => mainWindow
+                });
+            } catch (loaderError) {
+                log.error('Error setting up Microbot in RuneLite:', loaderError);
+            }
+        }
         if (typeof handler === 'function') {
             const launcher = await handler(deps);
             if (apiAuth && launcher) {

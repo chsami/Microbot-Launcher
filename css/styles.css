@@ -474,6 +474,86 @@ webview#website {
     background: rgba(255, 177, 59, 0.12);
 }
 
+.loader-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
+    margin: -8px 0 20px;
+    padding: 12px 14px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+
+.loader-card[hidden] {
+    display: none;
+}
+
+.loader-card-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.loader-card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-strong);
+}
+
+.loader-card.is-working .account-hint {
+    color: var(--gold-soft);
+}
+
+.loader-card-error {
+    font-size: 12px;
+    color: var(--red-text);
+}
+
+.loader-card-error:empty {
+    display: none;
+}
+
+.loader-card-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.loader-card-actions:not(:has(button:not([hidden]))) {
+    display: none;
+}
+
+.loader-card-actions [hidden] {
+    display: none;
+}
+
+.loader-card-link {
+    margin-left: auto;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: var(--body);
+    font-size: 12px;
+    text-decoration: underline;
+}
+
+.loader-card-link:hover,
+.loader-card-link:focus-visible {
+    color: var(--gold);
+}
+
+.loader-card-link:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
 .auth-card {
     position: relative;
 }
