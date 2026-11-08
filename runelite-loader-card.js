@@ -12,6 +12,13 @@
         failed: 'Something went wrong. Try again in a minute.'
     };
 
+    const MODES = ['client', 'runelite'];
+
+    const layout = (view, chosen) => {
+        if (!view?.visible) return { switchHidden: true, mode: 'client' };
+        return { switchHidden: false, mode: MODES.includes(chosen) ? chosen : 'client' };
+    };
+
     const cardView = (view) => {
         if (!view?.visible) return { hidden: true };
         const base = { hidden: false, button: null, remove: false, error: view.error || '', hint: '' };
@@ -24,17 +31,33 @@
     };
 
     if (typeof document === 'undefined') {
-        module.exports = { TEXT, cardView };
+        module.exports = { TEXT, MODES, cardView, layout };
         return;
     }
 
     const $ = (id) => document.getElementById(id);
     let busy = false;
     let latest = { visible: false };
+    let mode = 'client';
     let requests = 0;
+
+    const applyLayout = () => {
+        const shown = layout(latest, mode);
+        const modeSwitch = $('launcher-mode');
+        if (modeSwitch) modeSwitch.hidden = shown.switchHidden;
+        document.querySelectorAll('.mode-option').forEach((option) => {
+            option.setAttribute('aria-pressed', option.dataset.mode === shown.mode ? 'true' : 'false');
+        });
+        document.querySelector('.sidebar')?.classList.toggle('mode-runelite', shown.mode === 'runelite');
+        const runeliteView = $('runelite-view');
+        if (runeliteView) runeliteView.hidden = shown.mode !== 'runelite';
+    };
 
     const render = (view) => {
         latest = view || { visible: false };
+        if (!latest.visible) mode = 'client';
+        else if (MODES.includes(latest.mode)) mode = latest.mode;
+        applyLayout();
         const card = $('runelite-loader');
         if (!card) return;
         const shown = cardView(latest);
@@ -67,12 +90,24 @@
         render(view);
     };
 
+    const choose = async (next) => {
+        if (!MODES.includes(next) || !latest.visible || next === mode) return;
+        mode = next;
+        latest = { ...latest, mode: next };
+        applyLayout();
+        try {
+            await api()?.setMode?.(next);
+        } catch (error) {
+            window.electron?.logError?.(`Could not save the launcher view: ${error?.message || error}`);
+        }
+    };
+
     const act = async (action) => {
         if (busy || !api()) return;
         const before = latest;
         busy = true;
         requests += 1;
-        render({ visible: true, state: 'working', progress: TEXT.working });
+        render({ visible: true, state: 'working', progress: TEXT.working, mode });
         let view;
         try {
             view = await api()[action]();
@@ -86,8 +121,11 @@
     const init = () => {
         $('runelite-loader-action')?.addEventListener('click', () => act('install'));
         $('runelite-loader-remove')?.addEventListener('click', () => act('remove'));
+        document.querySelectorAll('.mode-option').forEach((option) => {
+            option.addEventListener('click', () => choose(option.dataset.mode));
+        });
         api()?.onProgress?.((data) => {
-            if (busy && data?.text) render({ visible: true, state: 'working', progress: data.text });
+            if (busy && data?.text) render({ visible: true, state: 'working', progress: data.text, mode });
         });
         window.electron?.ipcRenderer?.receive('auth:changed', () => refresh());
         refresh();

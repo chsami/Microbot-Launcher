@@ -42,6 +42,7 @@ describe('runelite-loader', () => {
     let spawn;
     let children;
     let managedJdk;
+    let settingsFile;
 
     const logged = () => [...log.info.mock.calls, ...log.warn.mock.calls, ...log.error.mock.calls].map((args) => args.join(' ')).join('\n');
     const agentRuns = () => children.filter((child) => child.args[0] === '-jar');
@@ -61,6 +62,7 @@ describe('runelite-loader', () => {
             microbotDir: dir,
             downloadsDir,
             agentJar,
+            settingsFile,
             managedJdk,
             getWindow: () => ({ isDestroyed: () => false, webContents }),
             ...overrides
@@ -78,6 +80,7 @@ describe('runelite-loader', () => {
         dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runelite-loader-'));
         downloadsDir = path.join(dir, 'loader', 'downloads');
         agentJar = path.join(dir, 'loader', 'agent.jar');
+        settingsFile = path.join(dir, 'launcher-settings.json');
         log = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
         email = 'admin@example.com';
         access = { available: true, agent: { version: '1.0.0', sha256: JAR_SHA, size: JAR.length, url: '/api/loader/agent' } };
@@ -197,7 +200,7 @@ describe('runelite-loader', () => {
         test('not added when no agent is on this PC, without starting Java', async () => {
             const { ipcMain } = setup();
 
-            expect(await ipcMain.invoke('runelite-loader:state')).toEqual({ visible: true, state: 'not-added', version: '1.0.0' });
+            expect(await ipcMain.invoke('runelite-loader:state')).toEqual({ visible: true, state: 'not-added', version: '1.0.0', mode: 'client' });
             expect(spawn).not.toHaveBeenCalled();
         });
 
@@ -206,7 +209,7 @@ describe('runelite-loader', () => {
             fs.writeFileSync(agentJar, JAR);
             const { ipcMain } = setup();
 
-            expect(await ipcMain.invoke('runelite-loader:state')).toEqual({ visible: true, state: 'added', version: '1.0.0' });
+            expect(await ipcMain.invoke('runelite-loader:state')).toEqual({ visible: true, state: 'added', version: '1.0.0', mode: 'client' });
             expect(runsOf('--status')).toHaveLength(1);
             expect(runsOf('--status')[0].args).toEqual(['-jar', agentJar, '--status', '--json']);
         });
@@ -266,7 +269,7 @@ describe('runelite-loader', () => {
 
             const result = await loader.install();
 
-            expect(result).toEqual({ visible: true, state: 'added', version: '1.0.0', message: 'Microbot was added to RuneLite.' });
+            expect(result).toEqual({ visible: true, state: 'added', version: '1.0.0', mode: 'client', message: 'Microbot was added to RuneLite.' });
             const target = path.join(downloadsDir, 'agent-1.0.0.jar');
             expect(fs.readFileSync(target)).toEqual(JAR);
             expect(fs.readdirSync(downloadsDir)).toEqual(['agent-1.0.0.jar']);
@@ -483,7 +486,7 @@ describe('runelite-loader', () => {
 
             const result = await ipcMain.invoke('runelite-loader:remove');
 
-            expect(result).toEqual({ visible: true, state: 'not-added', version: '1.0.0', message: 'Microbot was removed from RuneLite.' });
+            expect(result).toEqual({ visible: true, state: 'not-added', version: '1.0.0', mode: 'client', message: 'Microbot was removed from RuneLite.' });
             expect(runsOf('--remove')).toHaveLength(1);
             expect(runsOf('--remove')[0].args).toEqual(['-jar', agentJar, '--remove']);
             expect(runsOf('--remove')[0].stdinText).toBe('');
@@ -499,6 +502,64 @@ describe('runelite-loader', () => {
 
             expect(result).toMatchObject({ state: 'added', error: 'Close RuneLite first, then try again.' });
             expect(alerts.forgetLoaderToken).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('which screen the launcher shows', () => {
+        const settings = () => JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+
+        test('the Microbot client is the default', async () => {
+            const { ipcMain } = setup();
+
+            expect(await ipcMain.invoke('runelite-loader:state')).toMatchObject({ visible: true, mode: 'client' });
+        });
+
+        test('the choice is remembered in the launcher settings, next to the other settings', async () => {
+            fs.writeFileSync(settingsFile, JSON.stringify({ runInBackground: true, remoteStartFor: 'admin@example.com' }));
+            const { ipcMain } = setup();
+
+            expect(await ipcMain.invoke('runelite-loader:set-mode', 'runelite')).toEqual({ mode: 'runelite' });
+
+            expect(settings()).toEqual({ runInBackground: true, remoteStartFor: 'admin@example.com', launcherMode: 'runelite' });
+            expect(await setup().ipcMain.invoke('runelite-loader:state')).toMatchObject({ visible: true, mode: 'runelite' });
+        });
+
+        test('an unknown choice is refused', async () => {
+            const { ipcMain } = setup();
+
+            expect(await ipcMain.invoke('runelite-loader:set-mode', 'other')).toEqual({ error: 'Unknown view.', mode: 'client' });
+            expect(fs.existsSync(settingsFile)).toBe(false);
+        });
+
+        test.each([
+            ['the API leaves the account out', () => { access = { available: false, reason: 'not-in-audience' }; }],
+            ['the session is gone', () => { access = httpError(401); }],
+            ['the endpoint is forbidden', () => { access = httpError(403); }],
+            ['the endpoint is missing', () => { access = httpError(404); }],
+            ['the account signed out', () => { email = null; }]
+        ])('falls back to the Microbot client when %s', async (_name, loseAccess) => {
+            const { ipcMain } = setup();
+            await ipcMain.invoke('runelite-loader:set-mode', 'runelite');
+            loseAccess();
+
+            expect(await ipcMain.invoke('runelite-loader:state')).toEqual({ visible: false });
+            expect(settings().launcherMode).toBe('client');
+        });
+
+        test('an API outage hides the switch but keeps the choice for later', async () => {
+            const { ipcMain } = setup();
+            await ipcMain.invoke('runelite-loader:set-mode', 'runelite');
+            access = new Error('socket hang up');
+
+            expect(await ipcMain.invoke('runelite-loader:state')).toEqual({ visible: false });
+            expect(settings().launcherMode).toBe('runelite');
+        });
+
+        test('install results carry the chosen screen', async () => {
+            const { ipcMain, loader } = setup();
+            await ipcMain.invoke('runelite-loader:set-mode', 'runelite');
+
+            expect(await loader.install()).toMatchObject({ state: 'added', mode: 'runelite' });
         });
     });
 });

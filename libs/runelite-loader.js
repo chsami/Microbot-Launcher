@@ -19,6 +19,8 @@ const VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
 const SHA_PATTERN = /^[a-f0-9]{64}$/;
 const AGENT_FILE_PATTERN = /^agent-.+\.jar(?:\..+\.part)?$/;
 const TOKEN_TEXT = /mbc_[A-Za-z0-9_-]+/g;
+const MODE_KEY = 'launcherMode';
+const MODES = ['client', 'runelite'];
 
 const MESSAGES = {
     unavailable: 'Microbot in RuneLite is not available for your account.',
@@ -37,7 +39,7 @@ const MESSAGES = {
 };
 
 module.exports = function setupRuneliteLoader(deps) {
-    const { ipcMain, log, fs, spawn, auth, alerts, axios, microbotDir, downloadsDir, agentJar } = deps;
+    const { ipcMain, log, fs, spawn, auth, alerts, axios, microbotDir, downloadsDir, agentJar, settingsFile } = deps;
     const javaRuntime = deps.javaRuntime || require('./java-runtime.js');
     const managedJdk = deps.managedJdk || require('./managed-jdk.js');
     const platform = deps.platform || process.platform;
@@ -54,6 +56,34 @@ module.exports = function setupRuneliteLoader(deps) {
             if (win && !win.isDestroyed()) win.webContents.send('runelite-loader:progress', { text });
         } catch (error) {
             log.warn(`Could not show RuneLite progress: ${error?.message || error}`);
+        }
+    };
+
+    const readSettings = () => {
+        try {
+            if (!settingsFile || !fs.existsSync(settingsFile)) return {};
+            const value = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+            return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+        } catch (error) {
+            log.warn(`Could not read launcher settings: ${error?.message || error}`);
+            return {};
+        }
+    };
+
+    const readMode = () => (readSettings()[MODE_KEY] === 'runelite' ? 'runelite' : 'client');
+
+    const writeMode = (mode) => {
+        if (!settingsFile) return;
+        fs.writeFileSync(settingsFile, JSON.stringify({ ...readSettings(), [MODE_KEY]: mode }, null, 2));
+    };
+
+    const fallBackToClient = (access) => {
+        if (access.reason === 'unreachable' || readMode() !== 'runelite') return;
+        try {
+            writeMode('client');
+            log.info('Microbot in RuneLite is not available for this account; showing the Microbot client.');
+        } catch (error) {
+            log.warn(`Could not save the launcher view: ${error?.message || error}`);
         }
     };
 
@@ -278,7 +308,14 @@ module.exports = function setupRuneliteLoader(deps) {
     };
 
     const viewFor = (access, status) => {
-        if (!access.available) return { visible: false };
+        if (!access.available) {
+            fallBackToClient(access);
+            return { visible: false };
+        }
+        return { ...cardFor(access, status), mode: readMode() };
+    };
+
+    const cardFor = (access, status) => {
         if (operation) return { visible: true, state: 'working', progress: progressText };
         if (!status?.installed) return { visible: true, state: 'not-added', version: access.agent.version };
         const current = status.agentSha256 === access.agent.sha256;
@@ -289,8 +326,7 @@ module.exports = function setupRuneliteLoader(deps) {
 
     const state = async () => {
         const access = await checkAccess();
-        if (!access.available) return { visible: false };
-        if (operation) return viewFor(access, null);
+        if (!access.available || operation) return viewFor(access, null);
         return viewFor(access, await currentStatus(access.agent));
     };
 
@@ -362,7 +398,7 @@ module.exports = function setupRuneliteLoader(deps) {
     const run = (kind, work) => {
         if (operation) {
             if (operation.kind === kind) return operation.promise;
-            return Promise.resolve({ visible: true, state: 'working', progress: progressText, error: MESSAGES.busy });
+            return Promise.resolve({ visible: true, state: 'working', progress: progressText, mode: readMode(), error: MESSAGES.busy });
         }
         const promise = (async () => {
             try {
@@ -395,9 +431,19 @@ module.exports = function setupRuneliteLoader(deps) {
         }
     });
     ipcMain.handle('runelite-loader:install', () => install());
+    ipcMain.handle('runelite-loader:set-mode', async (_event, mode) => {
+        if (!MODES.includes(mode)) return { error: 'Unknown view.', mode: readMode() };
+        try {
+            writeMode(mode);
+        } catch (error) {
+            log.warn(`Could not save the launcher view: ${error?.message || error}`);
+            return { error: 'Could not save the setting.', mode: readMode() };
+        }
+        return { mode: readMode() };
+    });
     ipcMain.handle('runelite-loader:remove', () => remove());
 
-    return { state, install, remove, checkAccess };
+    return { state, install, remove, checkAccess, mode: readMode };
 };
 
 function parseAgent(agent) {

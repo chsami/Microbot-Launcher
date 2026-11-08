@@ -512,17 +512,24 @@
                         <span class="hwid-spoof-switch" aria-hidden="true"></span>
                     </label>
                 </section>
-                <section id="runelite-loader" class="loader-card" aria-live="polite" hidden>
-                    <div class="loader-card-text">
-                        <span class="loader-card-title">Microbot in RuneLite</span>
-                        <span id="runelite-loader-hint" class="account-hint"></span>
-                        <span id="runelite-loader-error" class="loader-card-error" role="alert"></span>
-                    </div>
-                    <div class="loader-card-actions">
-                        <button id="runelite-loader-action" class="account-action primary" type="button" hidden></button>
-                        <button id="runelite-loader-remove" class="loader-card-link" type="button" hidden>Remove from RuneLite</button>
-                    </div>
-                </section>
+                <div id="launcher-mode" class="mode-switch" role="group" aria-label="How you play" hidden>
+                    <button class="mode-option" type="button" data-mode="client" aria-pressed="true">Microbot client</button>
+                    <button class="mode-option" type="button" data-mode="runelite" aria-pressed="false">Microbot in RuneLite</button>
+                </div>
+                <div id="runelite-view" class="runelite-view" hidden>
+                    <p class="runelite-view-intro">Microbot runs inside the RuneLite you already use. You don't need this launcher open to play.</p>
+                    <section id="runelite-loader" class="loader-card" aria-live="polite" hidden>
+                        <div class="loader-card-text">
+                            <span class="loader-card-title">Microbot in RuneLite</span>
+                            <span id="runelite-loader-hint" class="account-hint"></span>
+                            <span id="runelite-loader-error" class="loader-card-error" role="alert"></span>
+                        </div>
+                        <div class="loader-card-actions">
+                            <button id="runelite-loader-action" class="account-action primary" type="button" hidden></button>
+                            <button id="runelite-loader-remove" class="loader-card-link" type="button" hidden>Remove from RuneLite</button>
+                        </div>
+                    </section>
+                </div>
                 <div class="play-buttons">
                     <button id="play" class="play-button loadingButton">
                         Login Jagex Account
