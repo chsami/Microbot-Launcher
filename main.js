@@ -228,6 +228,17 @@ app.on('web-contents-created', (_event, contents) => {
         if (/^https?:\/\//i.test(url)) shell.openExternal(url);
         return { action: 'deny' };
     });
+    // Under reduced motion the site skips its 3D hero, which redraws every frame on the GPU the clients share.
+    try {
+        contents.debugger.attach();
+        contents.debugger
+            .sendCommand('Emulation.setEmulatedMedia', {
+                features: [{ name: 'prefers-reduced-motion', value: 'reduce' }]
+            })
+            .catch((error) => log.warn(`Could not set reduced motion for the embedded site: ${error.message}`));
+    } catch (error) {
+        log.warn(`Could not set reduced motion for the embedded site: ${error.message}`);
+    }
 });
 
 app.whenReady().then(async () => {
