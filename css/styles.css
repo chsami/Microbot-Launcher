@@ -474,6 +474,194 @@ webview#website {
     background: rgba(255, 177, 59, 0.12);
 }
 
+.mode-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    width: 100%;
+    box-sizing: border-box;
+    margin: -8px 0 20px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface-2);
+}
+
+.mode-switch[hidden],
+.runelite-view[hidden] {
+    display: none;
+}
+
+.mode-option {
+    padding: 8px 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--body);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    cursor: pointer;
+    transition: background-color .15s ease, color .15s ease;
+}
+
+.mode-option:hover {
+    color: var(--text-strong);
+}
+
+.mode-option[aria-pressed="true"] {
+    background: rgba(255, 177, 59, .18);
+    color: var(--gold);
+}
+
+.mode-option:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+}
+
+.sidebar.mode-runelite > :not(.game-logo):not(#launcher-update-banner):not(#user-session):not(#launcher-mode):not(#runelite-view) {
+    display: none !important;
+}
+
+.sidebar.mode-runelite #remote-start-row {
+    display: none !important;
+}
+
+.runelite-view {
+    width: 100%;
+}
+
+#runelite-loader-hint:empty {
+    display: none;
+}
+
+.runelite-view-intro {
+    margin: 0 0 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text);
+}
+
+.loader-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0 0 20px;
+    padding: 12px 14px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+}
+
+.loader-card[hidden] {
+    display: none;
+}
+
+.loader-card-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.loader-card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-strong);
+}
+
+.loader-card.is-working .account-hint {
+    color: var(--gold-soft);
+}
+
+.loader-card-note {
+    font-size: 12px;
+    font-style: italic;
+    color: var(--faint);
+}
+
+.loader-card-note:empty {
+    display: none;
+}
+
+.loader-card-starts {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--faint);
+}
+
+.loader-card-starts[hidden] {
+    display: none;
+}
+
+.loader-card-starts-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.loader-card-starts .loader-card-link {
+    margin-left: 0;
+    flex: none;
+}
+
+.loader-card-error {
+    font-size: 12px;
+    color: var(--red-text);
+}
+
+.loader-card-error:empty {
+    display: none;
+}
+
+.loader-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.loader-card-actions .account-action {
+    white-space: nowrap;
+}
+
+.loader-card-actions:not(:has(button:not([hidden]))) {
+    display: none;
+}
+
+.loader-card-actions [hidden] {
+    display: none;
+}
+
+.loader-card-link {
+    margin-left: auto;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: var(--body);
+    font-size: 12px;
+    text-decoration: underline;
+}
+
+.loader-card-link:hover,
+.loader-card-link:focus-visible {
+    color: var(--gold);
+}
+
+.loader-card-link:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
 .auth-card {
     position: relative;
 }
@@ -1043,6 +1231,21 @@ h2 {
 .proxy-section select option {
     background: var(--surface-2);
     color: var(--text-strong);
+}
+
+/* Version select + refresh share one row, spaced like a lone select. */
+.client-refresh-row {
+    margin-bottom: 10px;
+}
+
+.client-refresh-row[hidden] {
+    display: none;
+}
+
+.client-refresh-row>select {
+    flex: 1;
+    min-width: 0;
+    margin-bottom: 0;
 }
 
 .load-custom-client-btn {

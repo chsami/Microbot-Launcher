@@ -1,6 +1,6 @@
 {
   "name": "microbot-launcher",
-  "version": "3.2.30",
+  "version": "3.2.31",
   "description": "Launcher for the microbot client",
   "main": "main.js",
   "scripts": {
@@ -52,6 +52,7 @@
       "renderer.js",
       "profiles-screen.js",
       "setup-guide.js",
+      "runelite-loader-card.js",
       "halloween.js",
       "preload.js",
       "package.json",
