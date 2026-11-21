@@ -22,6 +22,10 @@ class FakeIpcMain {
 
 const JAR = Buffer.from('PK\u0003\u0004 session recorder 1.0.0');
 const JAR_SHA = crypto.createHash('sha256').update(JAR).digest('hex');
+const NEXT_JAR = Buffer.from('PK\u0003\u0004 session recorder 1.0.1');
+const NEXT_SHA = crypto.createHash('sha256').update(NEXT_JAR).digest('hex');
+const HALF_HOUR = 30 * 60 * 1000;
+const ready = (recording) => STATUS_PREFIX + JSON.stringify({ state: 'ready', message: 'On.', recording, unrecorded: 0 }) + '\n';
 const httpError = (status) => Object.assign(new Error(`HTTP ${status}`), { response: { status } });
 const flush = async () => {
     for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
@@ -97,6 +101,7 @@ describe('session-recorder', () => {
     });
 
     afterEach(() => {
+        jest.useRealTimers();
         fs.rmSync(dir, { recursive: true, force: true });
     });
 
@@ -185,6 +190,51 @@ describe('session-recorder', () => {
 
         expect(view.message).toBe('The Session Recorder stopped. Turn it off and on to start it again.');
         expect(children).toHaveLength(1);
+    });
+
+    test('a newer version replaces an idle recorder on its own', async () => {
+        jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
+        const ipc = setup();
+        await ipc.invoke('session-recorder:set-on', true);
+        await flush();
+        say(children[0], ready(0));
+
+        info = { version: '1.0.1', sha256: NEXT_SHA, size: NEXT_JAR.length, url: '/api/loader/recorder' };
+        served = NEXT_JAR;
+        jest.advanceTimersByTime(HALF_HOUR);
+        await flush();
+
+        expect(children[0].written).toEqual(['stop\n']);
+        expect(sent.at(-1)).toMatchObject({ running: false, message: 'Updating the Session Recorder...' });
+        expect((await ipc.invoke('session-recorder:open')).ok).toBe(false);
+
+        say(children[0], STATUS_PREFIX + '{"state":"stopped","message":"The Session Recorder is off.","recording":0,"unrecorded":0}\n');
+        children[0].emit('close', 0);
+        await flush();
+
+        expect(children).toHaveLength(2);
+        expect(children[1].args[1]).toBe(path.join(dir, 'session-recorder-1.0.1.jar'));
+        expect(fs.existsSync(path.join(dir, 'session-recorder-1.0.0.jar'))).toBe(false);
+    });
+
+    test('it never updates while recording or right after Open RuneLite', async () => {
+        jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
+        const ipc = setup();
+        await ipc.invoke('session-recorder:set-on', true);
+        await flush();
+        info = { version: '1.0.1', sha256: NEXT_SHA, size: NEXT_JAR.length, url: '/api/loader/recorder' };
+        served = NEXT_JAR;
+
+        say(children[0], ready(1));
+        jest.advanceTimersByTime(HALF_HOUR);
+        await flush();
+        expect(children[0].written).toEqual([]);
+
+        say(children[0], ready(0));
+        await ipc.invoke('session-recorder:open');
+        jest.advanceTimersByTime(5 * 60 * 1000);
+        await flush();
+        expect(children[0].written).toEqual(['open\n']);
     });
 
     test('parsing refuses odd answers', () => {
