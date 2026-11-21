@@ -125,7 +125,7 @@ async function loadLibraries() {
         if (apiAuth) {
             try {
                 const loaderHome = path.join(require('os').homedir(), '.microbot', 'loader');
-                require(path.join(__dirname, 'libs', 'runelite-loader.js'))({
+                const runelite = require(path.join(__dirname, 'libs', 'runelite-loader.js'))({
                     ipcMain,
                     log,
                     fs,
@@ -138,6 +138,16 @@ async function loadLibraries() {
                     agentJar: path.join(loaderHome, 'agent.jar'),
                     settingsFile: path.join(microbotDir, 'launcher-settings.json'),
                     dialog,
+                    getWindow: () => mainWindow
+                });
+                require(path.join(__dirname, 'libs', 'session-recorder.js'))({
+                    ipcMain,
+                    log,
+                    fs,
+                    spawn,
+                    auth: apiAuth,
+                    runelite,
+                    directory: loaderHome,
                     getWindow: () => mainWindow
                 });
             } catch (loaderError) {

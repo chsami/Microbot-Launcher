@@ -149,8 +149,37 @@
     };
 
     const api = () => window.electron?.runeliteLoader;
+    const recorderApi = () => window.electron?.sessionRecorder;
+    let recorder = { visible: false };
+
+    const renderRecorder = (view) => {
+        recorder = view || { visible: false };
+        const row = $('session-recorder-row');
+        if (!row) return;
+        row.classList.toggle('hidden', !recorder.visible);
+        $('session-recorder-switch').checked = recorder.on === true;
+        $('session-recorder-hint').textContent = recorder.message || '';
+    };
+
+    const refreshRecorder = async () => {
+        if (!recorderApi()) return renderRecorder(null);
+        try {
+            renderRecorder(await recorderApi().state());
+        } catch (error) {
+            renderRecorder(null);
+        }
+    };
+
+    const toggleRecorder = async (on) => {
+        try {
+            renderRecorder(await recorderApi().setOn(on));
+        } catch (error) {
+            renderRecorder({ ...recorder, message: TEXT.failed });
+        }
+    };
 
     const refresh = async () => {
+        refreshRecorder();
         if (!api()) return render({ visible: false });
         const request = ++requests;
         let view;
@@ -199,7 +228,7 @@
         render({ ...latest, error: '' });
         let result;
         try {
-            result = await api()[action]();
+            result = action === 'open' && recorder.on && recorder.running ? await recorderApi().open() : await api()[action]();
         } catch (error) {
             result = { ok: false, error: TEXT.failed };
         }
@@ -232,6 +261,8 @@
         document.querySelectorAll('.mode-option').forEach((option) => {
             option.addEventListener('click', () => choose(option.dataset.mode));
         });
+        $('session-recorder-switch')?.addEventListener('change', (event) => toggleRecorder(event.target.checked));
+        recorderApi()?.onStatus?.((view) => renderRecorder(view));
         api()?.onProgress?.((data) => {
             if (busy && data?.text) render({ visible: true, state: 'working', progress: data.text, mode });
         });

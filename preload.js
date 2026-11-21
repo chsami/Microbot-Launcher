@@ -120,6 +120,12 @@ contextBridge.exposeInMainWorld('electron', {
         find: () => ipcRenderer.invoke('runelite-loader:find'),
         onProgress: (func) => ipcRenderer.on('runelite-loader:progress', (event, data) => func(data))
     },
+    sessionRecorder: {
+        state: () => ipcRenderer.invoke('session-recorder:state'),
+        setOn: (on) => ipcRenderer.invoke('session-recorder:set-on', on),
+        open: () => ipcRenderer.invoke('session-recorder:open'),
+        onStatus: (func) => ipcRenderer.on('session-recorder:status', (event, data) => func(data))
+    },
     ipcRenderer: {
         send: (channel, data) => ipcRenderer.send(channel, data),
         receive: (channel, func) =>

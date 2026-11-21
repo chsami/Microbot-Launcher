@@ -612,7 +612,26 @@ module.exports = function setupRuneliteLoader(deps) {
     });
     ipcMain.handle('runelite-loader:remove', () => remove());
 
-    return { state, install, remove, checkAccess, mode: readMode, openRuneLite, findAndOpen };
+    const javaForTools = () => findJava({ install: true });
+
+    const installedAgentJar = async () => {
+        const status = await currentStatus(null);
+        return status?.enabled === false ? null : lineJar(status);
+    };
+
+    return {
+        state,
+        install,
+        remove,
+        checkAccess,
+        mode: readMode,
+        openRuneLite,
+        findAndOpen,
+        javaForTools,
+        installedAgentJar,
+        readSetting: (key) => readSettings()?.[key],
+        writeSetting
+    };
 };
 
 function parseAgent(agent) {
