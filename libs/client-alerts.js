@@ -93,8 +93,6 @@ module.exports = function setupClientAlerts(deps) {
         return state.accountsMigrated ? state : migrateAccounts(state);
     };
 
-    const readDisabled = () => settings().disabled;
-
     const accountOn = (state, accountId, profile) => {
         if (hasOwn(state.accounts, accountId)) return state.accounts[accountId];
         return state.accountsMigrated || !state.disabled.includes(profile);
@@ -421,12 +419,16 @@ module.exports = function setupClientAlerts(deps) {
     const linkedProfiles = () => {
         const email = signedInEmail();
         if (!email || !canPersist()) return {};
-        const disabled = readDisabled();
-        // Only a Jagex account can start a client, so a profile no account uses has nothing to start.
-        const used = new Set((readAccountProfiles() || []).map((account) => profileName(account.profile)));
+        // Only a Jagex account with its dashboard switch on can start a client for its profile.
+        const state = settings();
+        const enabled = new Set(
+            (readAccountProfiles() || [])
+                .filter((account) => accountOn(state, account.accountId, profileName(account.profile)))
+                .map((account) => profileName(account.profile))
+        );
         const linked = {};
         Object.entries(readStore(email).profiles).forEach(([profile, link]) => {
-            if (link?.id && !link.noJagex && used.has(profile) && !disabled.includes(profile)) linked[profile] = String(link.id);
+            if (link?.id && !link.noJagex && enabled.has(profile)) linked[profile] = String(link.id);
         });
         return linked;
     };

@@ -74,9 +74,14 @@ module.exports = async function (deps) {
         return { commandArgs };
     }
 
+    const NO_LOGIN = 'Log in with a Jagex account first.';
+
     async function prepareLaunch({ version, proxy, account, ramPreference, hwidSpoof }) {
         const built = buildCommandArgs({ version, proxy, ramPreference, hwidSpoof, profile: account && account.profile });
         if (built.error) return built;
+        if (!jagexCredentials(account)) {
+            return { error: NO_LOGIN, problem: { kind: 'jagex-account-needed', title: 'Jagex Account Needed', message: NO_LOGIN } };
+        }
         const token = await alertToken(account && account.profile, account);
         return {
             commandArgs: built.commandArgs,
@@ -89,7 +94,7 @@ module.exports = async function (deps) {
         const prepared = await prepareLaunch(options);
         if (prepared.error) {
             log.error(prepared.error);
-            return { problem: { kind: 'invalid-proxy', title: 'Invalid Proxy', message: prepared.error } };
+            return { problem: prepared.problem || { kind: 'invalid-proxy', title: 'Invalid Proxy', message: prepared.error } };
         }
         return checkJavaAndRunJar(prepared.commandArgs, prepared.secrets, options.progress, prepared.env, {
             interactive: false
@@ -106,10 +111,6 @@ module.exports = async function (deps) {
                     return { error: prepared.error };
                 }
                 const credentials = jagexCredentials(account);
-                if (!credentials) {
-                    log.error('Refused to start a client without a Jagex account login.');
-                    return { error: 'Log in with a Jagex account first.' };
-                }
                 startInTurn(event, () => {
                     try {
                         deps.writeCredentials?.(credentials);

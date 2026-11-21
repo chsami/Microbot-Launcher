@@ -491,7 +491,7 @@ describe('open-client launch diagnostics with real Java runtimes', () => {
 describe('launch without anyone at the screen', () => {
     const quietLaunch = async (harness, options = {}) => {
         const { launch: start } = await require('../libs/jar-executor')(harness.deps);
-        return start({ version: VERSION, account: { profile: 'main', displayName: 'Zezima' }, ...options });
+        return start({ version: VERSION, account: { accountId: '1', sessionId: 'session', profile: 'main', displayName: 'Zezima' }, ...options });
     };
 
     test('missing Java is reported back instead of offering an install', async () => {

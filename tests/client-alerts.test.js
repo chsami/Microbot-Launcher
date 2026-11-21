@@ -561,6 +561,16 @@ describe('client-alerts', () => {
             expect(setup().alerts.linkedProfiles()).toEqual({});
         });
 
+        test('an old profile link follows the dashboard switch of the account on that profile', async () => {
+            writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Main PC' } });
+            fs.writeFileSync(settingsFile, JSON.stringify({ disabled: ['Main'], accounts: {}, accountsMigrated: true }));
+            const { alerts, ipcMain } = setup({ accountsFile: writeAccounts([accountOn('Main')]) });
+
+            expect(alerts.linkedProfiles()).toEqual({ Main: FIRST_ID });
+            await ipcMain.invoke('alerts:set-account-enabled', 'acct-Main', false);
+            expect(alerts.linkedProfiles()).toEqual({});
+        });
+
         test('links of clients started without an account are revoked once and dropped', async () => {
             writeOldStore({
                 Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Main PC' },

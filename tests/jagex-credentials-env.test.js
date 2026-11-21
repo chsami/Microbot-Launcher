@@ -177,18 +177,17 @@ describe('Jagex character in the client environment', () => {
         await started;
     });
 
-    test('a dashboard start writes the file and passes the character only for an account with a game session', async () => {
+    test('a dashboard start writes the file and passes the character, and refuses an account without a game session', async () => {
         inherit({ JX_CHARACTER_ID: '9999', JX_SESSION_ID: 'session-parent', JX_DISPLAY_NAME: 'Parent' });
         const launcher = dashboard([ZEZIMA, { accountId: '1003', displayName: 'NoSession', profile: 'Spare' }]);
 
         await launcher.launchProfile('Spare');
-        expect(harness.launches).toHaveLength(1);
-        expect(Object.keys(harness.launches[0].options.env).filter((key) => key.startsWith('JX_'))).toEqual([]);
+        expect(harness.launches).toHaveLength(0);
         expect(fs.existsSync(harness.credentialsFile)).toBe(false);
 
         await launcher.launchProfile('Main');
-        expect(harness.launches).toHaveLength(2);
-        expect(characterOf(harness.launches[1].options.env)).toEqual({
+        expect(harness.launches).toHaveLength(1);
+        expect(characterOf(harness.launches[0].options.env)).toEqual({
             JX_CHARACTER_ID: '1001',
             JX_SESSION_ID: 'session-zezima',
             JX_DISPLAY_NAME: 'Zezima'
@@ -215,11 +214,10 @@ describe('Jagex character in the client environment', () => {
         expect(await harness.handlers['open-client']({}, VERSION, null, account, '')).toEqual({ error: 'Log in with a Jagex account first.' });
 
         const count = harness.launches.length;
-        await harness.executor.launch({ version: VERSION, account, ramPreference: '' });
-        await waitFor(() => harness.launches.length > count);
-        const env = harness.launches[count].options.env;
-
-        expect(Object.keys(env).filter((key) => key.startsWith('JX_'))).toEqual([]);
+        expect(await harness.executor.launch({ version: VERSION, account, ramPreference: '' })).toEqual({
+            problem: { kind: 'jagex-account-needed', title: 'Jagex Account Needed', message: 'Log in with a Jagex account first.' }
+        });
+        expect(harness.launches).toHaveLength(count);
     });
 
     test('the session id never reaches the launcher log', async () => {
