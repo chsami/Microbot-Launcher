@@ -97,17 +97,20 @@ describe('client-alerts', () => {
         fs.writeFileSync(file, JSON.stringify(accounts));
         return file;
     };
+    // One nameless Jagex account per profile, so its link gets the neutral numbered name.
+    const accountOn = (profile) => ({ accountId: `acct-${profile || 'default'}`, profile });
+    const tokenFor = (alerts, profile) => alerts.tokenForLaunch(profile, accountOn(profile));
     const writeOldStore = (profiles) => {
         fs.writeFileSync(linksFile, safeStorage.encryptString(JSON.stringify({ email, profiles, revoke: [] })));
         serverLinks = Object.values(profiles).map((link) => link.id);
     };
 
-    test('creates a link once per profile and reuses it on later launches', async () => {
+    test('creates a link once per account and reuses it on later launches', async () => {
         const { alerts } = setup();
 
-        expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
-        expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
-        expect(await setup().alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
+        expect(await tokenFor(alerts, 'Main')).toBe(FIRST_TOKEN);
+        expect(await tokenFor(alerts, 'Main')).toBe(FIRST_TOKEN);
+        expect(await tokenFor(setup().alerts, 'Main')).toBe(FIRST_TOKEN);
 
         expect(posts()).toHaveLength(1);
         expect(posts()[0][0]).toMatchObject({ path: '/api/alerts/client-links', data: { label: 'Microbot client' } });
@@ -116,11 +119,11 @@ describe('client-alerts', () => {
         gets.forEach(([config]) => expect(config.path).toBe('/api/alerts/client-links?includeHidden=true'));
     });
 
-    test('each profile gets its own link with a neutral numbered name', async () => {
+    test('each account without a name gets its own link with a neutral numbered name', async () => {
         const { alerts } = setup();
 
-        expect(await alerts.tokenForProfile(undefined)).toBe(FIRST_TOKEN);
-        expect(await alerts.tokenForProfile('Ironman')).toBe(SECOND_TOKEN);
+        expect(await tokenFor(alerts, undefined)).toBe(FIRST_TOKEN);
+        expect(await tokenFor(alerts, 'Ironman')).toBe(SECOND_TOKEN);
 
         expect(posts().map(([config]) => config.data.label)).toEqual(['Microbot client', 'Microbot client 2']);
     });
@@ -128,7 +131,7 @@ describe('client-alerts', () => {
     test('two launches at once create a single link', async () => {
         const { alerts } = setup();
 
-        const tokens = await Promise.all([alerts.tokenForProfile('Main'), alerts.tokenForProfile('Main')]);
+        const tokens = await Promise.all([tokenFor(alerts, 'Main'), tokenFor(alerts, 'Main')]);
 
         expect(tokens).toEqual([FIRST_TOKEN, FIRST_TOKEN]);
         expect(posts()).toHaveLength(1);
@@ -137,7 +140,7 @@ describe('client-alerts', () => {
     test('the token is stored encrypted and never logged', async () => {
         const { alerts } = setup();
 
-        await alerts.tokenForProfile('Main');
+        await tokenFor(alerts, 'Main');
 
         expect(fs.readFileSync(linksFile).toString()).not.toContain(FIRST_TOKEN);
         const logged = JSON.stringify([log.info.mock.calls, log.warn.mock.calls, log.error.mock.calls]);
@@ -146,18 +149,18 @@ describe('client-alerts', () => {
 
     test('a revoked link is dropped and replaced with a new one', async () => {
         const { alerts } = setup();
-        await alerts.tokenForProfile('Main');
+        await tokenFor(alerts, 'Main');
         serverLinks = [];
 
-        expect(await alerts.tokenForProfile('Main')).toBe(SECOND_TOKEN);
-        expect(await alerts.tokenForProfile('Main')).toBe(SECOND_TOKEN);
+        expect(await tokenFor(alerts, 'Main')).toBe(SECOND_TOKEN);
+        expect(await tokenFor(alerts, 'Main')).toBe(SECOND_TOKEN);
 
         expect(posts()).toHaveLength(2);
     });
 
     test('a revoked link whose replacement fails is not reused', async () => {
         const { alerts } = setup();
-        await alerts.tokenForProfile('Main');
+        await tokenFor(alerts, 'Main');
         serverLinks = [];
         created = [];
         auth.request.mockImplementation(async (config) => {
@@ -165,13 +168,13 @@ describe('client-alerts', () => {
             throw httpError(409);
         });
 
-        expect(await alerts.tokenForProfile('Main')).toBeNull();
-        expect(JSON.parse(safeStorage.decryptString(fs.readFileSync(linksFile))).profiles).toEqual({});
+        expect(await tokenFor(alerts, 'Main')).toBeNull();
+        expect(JSON.parse(safeStorage.decryptString(fs.readFileSync(linksFile))).accounts).toEqual({});
     });
 
     test('replacing a revoked link keeps a link another profile saved meanwhile', async () => {
         const { alerts } = setup();
-        await alerts.tokenForProfile('Main');
+        await tokenFor(alerts, 'Main');
         serverLinks = [];
         created.push({ id: '33333333-3333-3333-3333-333333333333', token: `mbc_${'C'.repeat(43)}` });
         let releaseCheck;
@@ -182,24 +185,24 @@ describe('client-alerts', () => {
             return { data: [] };
         });
 
-        const main = alerts.tokenForProfile('Main');
+        const main = tokenFor(alerts, 'Main');
         await new Promise((resolve) => setImmediate(resolve));
-        const ironman = await alerts.tokenForProfile('Ironman');
+        const ironman = await tokenFor(alerts, 'Ironman');
         releaseCheck();
         await main;
 
-        const stored = JSON.parse(safeStorage.decryptString(fs.readFileSync(linksFile))).profiles;
-        expect(stored.Ironman.token).toBe(ironman);
-        expect(Object.keys(stored).sort()).toEqual(['Ironman', 'Main']);
+        const stored = JSON.parse(safeStorage.decryptString(fs.readFileSync(linksFile))).accounts;
+        expect(stored['acct-Ironman'].token).toBe(ironman);
+        expect(Object.keys(stored).sort()).toEqual(['acct-Ironman', 'acct-Main']);
     });
 
     test('a slow API does not hold the launch and the stored link is used', async () => {
         const { alerts } = setup({ launchBudgetMs: 20 });
-        await alerts.tokenForProfile('Main');
+        await tokenFor(alerts, 'Main');
         auth.request.mockImplementation(() => new Promise(() => {}));
 
-        expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
-        expect(await alerts.tokenForProfile('Ironman')).toBeNull();
+        expect(await tokenFor(alerts, 'Main')).toBe(FIRST_TOKEN);
+        expect(await tokenFor(alerts, 'Ironman')).toBeNull();
     });
 
     test('a link created after the launch budget is saved for the next launch', async () => {
@@ -213,35 +216,35 @@ describe('client-alerts', () => {
             return { data: { id: FIRST_ID, label: config.data.label, token: FIRST_TOKEN, createdAt: '2026-10-21T10:00:00Z' } };
         });
 
-        expect(await alerts.tokenForProfile('Main')).toBeNull();
+        expect(await tokenFor(alerts, 'Main')).toBeNull();
         releaseCreate();
         await new Promise((resolve) => setImmediate(resolve));
 
-        expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
+        expect(await tokenFor(alerts, 'Main')).toBe(FIRST_TOKEN);
         expect(posts()).toHaveLength(1);
     });
 
     test('an expired sign-in launches without a token', async () => {
         const { alerts } = setup();
-        await alerts.tokenForProfile('Main');
+        await tokenFor(alerts, 'Main');
         auth.request.mockRejectedValue(httpError(401));
 
-        expect(await alerts.tokenForProfile('Main')).toBeNull();
+        expect(await tokenFor(alerts, 'Main')).toBeNull();
     });
 
     test('the stored link is still used when the API cannot be reached', async () => {
         const { alerts } = setup();
-        await alerts.tokenForProfile('Main');
+        await tokenFor(alerts, 'Main');
         auth.request.mockRejectedValue(new Error('ECONNREFUSED'));
 
-        expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
+        expect(await tokenFor(alerts, 'Main')).toBe(FIRST_TOKEN);
     });
 
     test('a failed link launches without a token', async () => {
         auth.request.mockRejectedValue(new Error('ECONNREFUSED'));
         const { alerts } = setup();
 
-        expect(await alerts.tokenForProfile('Main')).toBeNull();
+        expect(await tokenFor(alerts, 'Main')).toBeNull();
         expect(fs.existsSync(linksFile)).toBe(false);
     });
 
@@ -249,75 +252,30 @@ describe('client-alerts', () => {
         email = null;
         const { alerts } = setup();
 
-        expect(await alerts.tokenForProfile('Main')).toBeNull();
+        expect(await tokenFor(alerts, 'Main')).toBeNull();
         expect(auth.request).not.toHaveBeenCalled();
     });
 
     test('without the API sign-in there is no token', async () => {
-        const { alerts, ipcMain } = setup({ auth: null });
+        const { alerts } = setup({ auth: null });
 
-        expect(await alerts.tokenForProfile('Main')).toBeNull();
-        expect(await ipcMain.invoke('alerts:status', ['default'])).toEqual({
-            signedIn: false,
-            available: false,
-            enabled: { default: true },
-            labels: { default: 'Microbot client' }
-        });
+        expect(await tokenFor(alerts, 'Main')).toBeNull();
     });
 
     test('links of another account are not reused', async () => {
         const { alerts } = setup();
-        await alerts.tokenForProfile('Main');
+        await tokenFor(alerts, 'Main');
         email = 'other@example.com';
 
-        expect(await alerts.tokenForProfile('Main')).toBe(SECOND_TOKEN);
+        expect(await tokenFor(alerts, 'Main')).toBe(SECOND_TOKEN);
         expect(posts()).toHaveLength(2);
     });
 
     test('no token and no API call without secure storage', async () => {
         const { alerts } = setup({ safeStorage: { ...safeStorage, isEncryptionAvailable: () => false } });
 
-        expect(await alerts.tokenForProfile('Main')).toBeNull();
+        expect(await tokenFor(alerts, 'Main')).toBeNull();
         expect(auth.request).not.toHaveBeenCalled();
-    });
-
-    test('the Alerts toggle is on by default and turning it off skips the link', async () => {
-        const { alerts, ipcMain } = setup();
-
-        expect(await ipcMain.invoke('alerts:status', ['default', 'Main'])).toEqual({
-            signedIn: true,
-            available: true,
-            enabled: { default: true, Main: true },
-            labels: { default: 'Microbot client', Main: 'Microbot client' }
-        });
-
-        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', false)).toEqual({ enabled: false, label: 'Microbot client' });
-        expect(await alerts.tokenForProfile('Main')).toBeNull();
-        expect(auth.request).not.toHaveBeenCalled();
-        expect((await ipcMain.invoke('alerts:status', ['default', 'Main'])).enabled).toEqual({ default: true, Main: false });
-
-        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', true)).toEqual({ enabled: true, label: 'Microbot client' });
-        expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
-    });
-
-    test('switching a profile off keeps its link, and switching it on again reuses that link', async () => {
-        const { alerts, ipcMain } = setup();
-        await alerts.tokenForProfile('Main');
-        await alerts.tokenForProfile('Ironman');
-
-        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', false)).toEqual({ enabled: false, label: 'Microbot client' });
-
-        expect(deletes()).toEqual([]);
-        expect(serverLinks).toEqual([FIRST_ID, SECOND_ID]);
-        expect(stored().profiles.Main).toEqual({ id: FIRST_ID, token: FIRST_TOKEN, label: 'Microbot client', noJagex: true });
-        expect(stored().revoke).toEqual([]);
-        expect(await alerts.tokenForProfile('Main')).toBeNull();
-        expect(alerts.linkedProfiles()).toEqual({ Ironman: SECOND_ID });
-
-        expect(await ipcMain.invoke('alerts:set-enabled', 'Main', true)).toEqual({ enabled: true, label: 'Microbot client' });
-        expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
-        expect(posts()).toHaveLength(2);
-        expect(alerts.linkedProfiles()).toEqual({ Main: FIRST_ID, Ironman: SECOND_ID });
     });
 
     test('revokes queued by an older launcher are still sent, and retried when they fail', async () => {
@@ -330,7 +288,7 @@ describe('client-alerts', () => {
         });
         const { alerts } = setup();
 
-        await alerts.tokenForProfile('Main');
+        await tokenFor(alerts, 'Main');
         await alerts.retryRevokes();
         expect(stored().revoke).toEqual([THIRD_ID]);
 
@@ -340,7 +298,7 @@ describe('client-alerts', () => {
         expect(deletes()).toEqual(Array(3).fill(`/api/alerts/client-links/${THIRD_ID}`));
         expect(serverLinks).toEqual([FIRST_ID]);
         expect(stored().revoke).toEqual([]);
-        expect(stored().profiles.Main.token).toBe(FIRST_TOKEN);
+        expect(stored().accounts['acct-Main'].token).toBe(FIRST_TOKEN);
     });
 
     test('a queued revoke already gone on the server is not retried', async () => {
@@ -359,29 +317,6 @@ describe('client-alerts', () => {
         expect(stored().revoke).toEqual([]);
     });
 
-    test('status returns the dashboard name of each linked profile', async () => {
-        const { alerts, ipcMain } = setup();
-        await alerts.tokenForProfile('Main');
-        serverLabels[FIRST_ID] = 'Main PC';
-
-        expect((await ipcMain.invoke('alerts:status', ['default', 'Main'])).labels).toEqual({ default: 'Microbot client', Main: 'Main PC' });
-
-        auth.request.mockRejectedValue(new Error('ECONNREFUSED'));
-        expect((await ipcMain.invoke('alerts:status', ['default', 'Main'])).labels).toEqual({ default: 'Microbot client', Main: 'Main PC' });
-    });
-
-    test('status shows the default name once the linked client is gone from the dashboard', async () => {
-        const { alerts, ipcMain } = setup();
-        await alerts.tokenForProfile('Main');
-        serverLabels[FIRST_ID] = 'Main PC';
-        await ipcMain.invoke('alerts:status', ['Main']);
-        serverLinks = [];
-
-        expect((await ipcMain.invoke('alerts:status', ['Main'])).labels).toEqual({ Main: 'Microbot client' });
-        expect(await alerts.tokenForProfile('Main')).toBe(SECOND_TOKEN);
-        expect(posts()[1][0]).toMatchObject({ data: { label: 'Microbot client' } });
-    });
-
     test('switching alerts off while the link is being created keeps the new link for later', async () => {
         const { alerts, ipcMain } = setup();
         let releaseCreate;
@@ -393,26 +328,26 @@ describe('client-alerts', () => {
             return { data: { id: FIRST_ID, label: config.data.label, token: FIRST_TOKEN, createdAt: '2026-10-21T10:00:00Z' } };
         });
 
-        const launch = alerts.tokenForProfile('Main');
+        const launch = tokenFor(alerts, 'Main');
         await new Promise((resolve) => setImmediate(resolve));
-        await ipcMain.invoke('alerts:set-enabled', 'Main', false);
+        await ipcMain.invoke('alerts:set-account-enabled', 'acct-Main', false);
         releaseCreate();
 
         expect(await launch).toBeNull();
         await alerts.retryRevokes();
         expect(deletes()).toEqual([]);
-        expect(stored().profiles.Main).toMatchObject({ id: FIRST_ID, token: FIRST_TOKEN });
+        expect(stored().accounts['acct-Main']).toMatchObject({ id: FIRST_ID, token: FIRST_TOKEN });
         expect(stored().revoke).toEqual([]);
-        expect(alerts.linkedProfiles()).toEqual({});
+        expect(alerts.linkedAccounts([accountOn('Main')])).toEqual({});
 
-        await ipcMain.invoke('alerts:set-enabled', 'Main', true);
-        expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
+        await ipcMain.invoke('alerts:set-account-enabled', 'acct-Main', true);
+        expect(await tokenFor(alerts, 'Main')).toBe(FIRST_TOKEN);
         expect(posts()).toHaveLength(1);
     });
 
     test('switching alerts off while the link is being checked does not hand out its token', async () => {
         const { alerts, ipcMain } = setup();
-        await alerts.tokenForProfile('Main');
+        await tokenFor(alerts, 'Main');
         let releaseCheck;
         const online = auth.request.getMockImplementation();
         auth.request.mockImplementationOnce(async (config) => {
@@ -422,14 +357,14 @@ describe('client-alerts', () => {
             return online(config);
         });
 
-        const launch = alerts.tokenForProfile('Main');
+        const launch = tokenFor(alerts, 'Main');
         await new Promise((resolve) => setImmediate(resolve));
-        await ipcMain.invoke('alerts:set-enabled', 'Main', false);
+        await ipcMain.invoke('alerts:set-account-enabled', 'acct-Main', false);
         releaseCheck();
 
         expect(await launch).toBeNull();
         expect(deletes()).toEqual([]);
-        expect(stored().profiles.Main.id).toBe(FIRST_ID);
+        expect(stored().accounts['acct-Main'].id).toBe(FIRST_ID);
     });
 
     describe('a link per Jagex account', () => {
@@ -466,20 +401,6 @@ describe('client-alerts', () => {
             expect(logged).not.toMatch(/Zezima|1001/);
         });
 
-        test('a launch without a Jagex account keeps the profile link next to the account links', async () => {
-            const { alerts } = setup();
-            created.push({ id: THIRD_ID, token: THIRD_TOKEN });
-
-            expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
-            expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBe(SECOND_TOKEN);
-            expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
-            expect(await alerts.tokenForLaunch('Main', LYNX)).toBe(THIRD_TOKEN);
-
-            expect(posts().map(([config]) => config.data.label)).toEqual(['Microbot client', 'Zezima', 'Lynx']);
-            expect(stored().profiles.Main.id).toBe(FIRST_ID);
-            expect(patches()).toEqual([]);
-        });
-
         test('the first account on a profile takes over its old link and its name, the next account gets a new one', async () => {
             writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Microbot client' }, Ironman: { id: THIRD_ID, token: THIRD_TOKEN, label: 'Iron PC' } });
             created = [{ id: SECOND_ID, token: SECOND_TOKEN }];
@@ -497,20 +418,6 @@ describe('client-alerts', () => {
             expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBe(FIRST_TOKEN);
             expect(patches()).toHaveLength(1);
             expect(serverLinks).toContain(FIRST_ID);
-        });
-
-        test('a launch without an account after the takeover gets a fresh profile link that no account takes over later', async () => {
-            writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Microbot client' } });
-            created = [{ id: SECOND_ID, token: SECOND_TOKEN }, { id: THIRD_ID, token: THIRD_TOKEN }];
-            const { alerts } = setup();
-
-            await alerts.tokenForLaunch('Main', ZEZIMA);
-            expect(await alerts.tokenForProfile('Main')).toBe(SECOND_TOKEN);
-            expect(stored().profiles.Main).toEqual({ id: SECOND_ID, token: SECOND_TOKEN, label: 'Microbot client', noJagex: true });
-
-            expect(await alerts.tokenForLaunch('Main', LYNX)).toBe(THIRD_TOKEN);
-            expect(stored().profiles.Main.id).toBe(SECOND_ID);
-            expect(await alerts.tokenForProfile('Main')).toBe(SECOND_TOKEN);
         });
 
         test('a client still running with the old profile link keeps working after the takeover', async () => {
@@ -532,41 +439,11 @@ describe('client-alerts', () => {
             const tokens = await Promise.all([
                 alerts.tokenForLaunch('Main', ZEZIMA),
                 alerts.tokenForLaunch('Main', LYNX),
-                alerts.tokenForProfile('Main'),
                 alerts.tokenForLaunch('Main', ZEZIMA)
             ]);
 
-            expect(tokens[0]).toBe(FIRST_TOKEN);
-            expect(tokens[3]).toBe(FIRST_TOKEN);
-            expect(new Set(tokens.slice(0, 3)).size).toBe(3);
-            expect(tokens).not.toContain(null);
-            expect(Object.values(stored().accounts).map((link) => link.id).sort()).toEqual(
-                [FIRST_ID, tokens[1] === SECOND_TOKEN ? SECOND_ID : THIRD_ID].sort()
-            );
-            expect(stored().profiles.Main.noJagex).toBe(true);
-        });
-
-        test('a profile link already checked when an account takes it over is not handed to the launch without an account', async () => {
-            writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Microbot client' } });
-            created = [{ id: SECOND_ID, token: SECOND_TOKEN }];
-            const online = auth.request.getMockImplementation();
-            let releaseCheck;
-            auth.request.mockImplementationOnce(async (config) => {
-                await new Promise((resolve) => {
-                    releaseCheck = resolve;
-                });
-                return online(config);
-            });
-            const { alerts } = setup();
-
-            const plain = alerts.tokenForProfile('Main');
-            await new Promise((resolve) => setImmediate(resolve));
-            expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBe(FIRST_TOKEN);
-            releaseCheck();
-
-            expect(await plain).toBe(SECOND_TOKEN);
-            expect(stored().profiles.Main.id).toBe(SECOND_ID);
-            expect(stored().accounts[1001].id).toBe(FIRST_ID);
+            expect(tokens).toEqual([FIRST_TOKEN, SECOND_TOKEN, FIRST_TOKEN]);
+            expect(Object.values(stored().accounts).map((link) => link.id).sort()).toEqual([FIRST_ID, SECOND_ID]);
         });
 
         test('a failed rename keeps the old name and is tried again at the next launch', async () => {
@@ -628,34 +505,14 @@ describe('client-alerts', () => {
             expect(stored()).toEqual({ email, profiles: { Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Microbot client' } }, revoke: [] });
         });
 
-        test('the profile switch only decides launches without a Jagex account', async () => {
-            const { alerts, ipcMain } = setup({ accountsFile: writeAccounts([ZEZIMA, LYNX]) });
-            created.push({ id: THIRD_ID, token: THIRD_TOKEN });
-            await alerts.tokenForLaunch('Main', ZEZIMA);
-            await alerts.tokenForLaunch('Main', LYNX);
-            await alerts.tokenForProfile('Main');
-
-            await ipcMain.invoke('alerts:set-enabled', 'Main', false);
-
-            expect(deletes()).toEqual([]);
-            expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBe(FIRST_TOKEN);
-            expect(await alerts.tokenForLaunch('Main', LYNX)).toBe(SECOND_TOKEN);
-            expect(await alerts.tokenForProfile('Main')).toBeNull();
-            expect(alerts.linkedAccounts([ZEZIMA, LYNX])).toEqual({ 1001: FIRST_ID, 1002: SECOND_ID });
-            expect(alerts.linkedProfiles()).toEqual({});
-            expect(stored().profiles.Main.id).toBe(THIRD_ID);
-        });
-
         test('an account keeps its own switch when it moves to another profile', async () => {
             const { alerts, ipcMain } = setup({ accountsFile: writeAccounts([ZEZIMA]) });
             await alerts.tokenForLaunch('Main', ZEZIMA);
-            await ipcMain.invoke('alerts:set-enabled', 'Ironman', false);
 
             expect(await alerts.tokenForLaunch('Ironman', { ...ZEZIMA, profile: 'Ironman' })).toBe(FIRST_TOKEN);
             expect(stored().accounts[1001].profile).toBe('Ironman');
 
             await ipcMain.invoke('alerts:set-account-enabled', '1001', false);
-            await ipcMain.invoke('alerts:set-enabled', 'Ironman', true);
             expect(await alerts.tokenForLaunch('Ironman', { ...ZEZIMA, profile: 'Ironman' })).toBeNull();
             expect(deletes()).toEqual([]);
         });
@@ -667,7 +524,6 @@ describe('client-alerts', () => {
             await alerts.tokenForLaunch('Main', LYNX);
             await alerts.tokenForLaunch(undefined, { accountId: '1003', displayName: 'Iron Ted' });
             await ipcMain.invoke('alerts:set-account-enabled', '1002', false);
-            await ipcMain.invoke('alerts:set-enabled', 'default', false);
 
             expect(
                 alerts.linkedAccounts([
@@ -683,31 +539,42 @@ describe('client-alerts', () => {
             expect(alerts.linkedAccounts([{ accountId: '1001', profile: 'Main' }])).toEqual({});
         });
 
-        test('only profile links made for clients without an account are listed as such', async () => {
-            writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Main PC' } });
-            created = [{ id: SECOND_ID, token: SECOND_TOKEN }];
-            const { alerts } = setup();
+        test('old profile links stay startable until an account takes them over, links of clients without an account do not', async () => {
+            writeOldStore({
+                Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Main PC' },
+                Ironman: { id: SECOND_ID, token: SECOND_TOKEN, label: 'Microbot client', noJagex: true }
+            });
+            const { alerts } = setup({ accountsFile: writeAccounts([accountOn('Main')]) });
 
-            expect(alerts.profilesWithoutAccount()).toEqual([]);
-            await alerts.tokenForProfile('Ironman');
-            expect(alerts.profilesWithoutAccount()).toEqual(['Ironman']);
-            email = null;
-            expect(alerts.profilesWithoutAccount()).toEqual([]);
+            expect(await alerts.tokenForLaunch('Main', null)).toBeNull();
+            expect(auth.request).not.toHaveBeenCalled();
+
+            expect(alerts.linkedProfiles()).toEqual({ Main: FIRST_ID });
+            expect(stored().profiles.Ironman.id).toBe(SECOND_ID);
+            expect(alerts.linkedAccounts([])).toEqual({});
         });
 
-        test('a user without Jagex accounts keeps one link per profile', async () => {
+        test('an old profile link is not startable once no Jagex account uses its profile', () => {
             writeOldStore({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Main PC' } });
-            created = [{ id: SECOND_ID, token: SECOND_TOKEN }];
+
+            expect(setup({ accountsFile: writeAccounts([accountOn('Ironman')]) }).alerts.linkedProfiles()).toEqual({});
+            expect(setup().alerts.linkedProfiles()).toEqual({});
+        });
+
+        test('links of clients started without an account are revoked once and dropped', async () => {
+            writeOldStore({
+                Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Main PC' },
+                Ironman: { id: SECOND_ID, token: SECOND_TOKEN, label: 'Microbot client', noJagex: true }
+            });
             const { alerts } = setup();
 
-            expect(await alerts.tokenForProfile('Main')).toBe(FIRST_TOKEN);
-            expect(await alerts.tokenForLaunch('Ironman', null)).toBe(SECOND_TOKEN);
+            await alerts.retryRevokes();
+            await alerts.retryRevokes();
 
-            expect(stored().profiles.Main).toEqual({ id: FIRST_ID, token: FIRST_TOKEN, label: 'Main PC' });
-            expect(stored().accounts).toEqual({});
-            expect(alerts.linkedProfiles()).toEqual({ Main: FIRST_ID, Ironman: SECOND_ID });
-            expect(alerts.linkedAccounts([])).toEqual({});
-            expect(patches()).toEqual([]);
+            expect(deletes()).toEqual([`/api/alerts/client-links/${SECOND_ID}`]);
+            expect(serverLinks).toEqual([FIRST_ID]);
+            expect(stored().profiles).toEqual({ Main: { id: FIRST_ID, token: FIRST_TOKEN, label: 'Main PC' } });
+            expect(stored().revoke).toEqual([]);
         });
     });
 
@@ -763,7 +630,7 @@ describe('client-alerts', () => {
             expect(stored().accounts[1001].id).toBe(SECOND_ID);
         });
 
-        test('starts as the switch of the profile each account uses, and keeps it when that profile switch changes', async () => {
+        test('starts as the switch of the profile each account uses', async () => {
             fs.writeFileSync(settingsFile, JSON.stringify({ disabled: ['Main'] }));
             const accountsFile = writeAccounts([ZEZIMA, { ...LYNX, profile: 'Ironman' }, IRON_TED]);
             const { alerts, ipcMain } = setup({ accountsFile });
@@ -771,13 +638,9 @@ describe('client-alerts', () => {
             expect((await ipcMain.invoke('alerts:accounts', ['1001', '1002', '1003'])).enabled).toEqual({ 1001: false, 1002: true, 1003: true });
             expect(settings()).toEqual({ disabled: ['Main'], accounts: { 1001: false, 1002: true, 1003: true }, accountsMigrated: true });
 
-            await ipcMain.invoke('alerts:set-enabled', 'Main', true);
-            await ipcMain.invoke('alerts:set-enabled', 'default', false);
-
             expect((await ipcMain.invoke('alerts:accounts', ['1001', '1003'])).enabled).toEqual({ 1001: false, 1003: true });
             expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBeNull();
             expect(await alerts.tokenForLaunch(undefined, IRON_TED)).toBe(FIRST_TOKEN);
-            expect(await alerts.tokenForProfile(undefined)).toBeNull();
         });
 
         test('the switch values are kept per account and an account added later starts on', async () => {
@@ -802,9 +665,9 @@ describe('client-alerts', () => {
             expect(settings()).toEqual({ disabled: ['Main'] });
 
             writeAccounts([ZEZIMA]);
-            await ipcMain.invoke('alerts:set-enabled', 'Main', true);
+            await ipcMain.invoke('alerts:accounts', ['1001']);
 
-            expect(settings()).toEqual({ disabled: [], accounts: { 1001: false }, accountsMigrated: true });
+            expect(settings()).toEqual({ disabled: ['Main'], accounts: { 1001: false }, accountsMigrated: true });
             expect(await alerts.tokenForLaunch('Main', ZEZIMA)).toBeNull();
         });
 
@@ -852,9 +715,9 @@ describe('client-alerts', () => {
 
     test('the renderer never gets the token or the link id', async () => {
         const { alerts, ipcMain } = setup();
-        await alerts.tokenForProfile('Main');
+        await tokenFor(alerts, 'Main');
 
-        const status = await ipcMain.invoke('alerts:status', ['Main']);
+        const status = await ipcMain.invoke('alerts:accounts', ['acct-Main']);
 
         expect(JSON.stringify(status)).not.toContain(FIRST_TOKEN);
         expect(JSON.stringify(status)).not.toContain(FIRST_ID);
@@ -934,32 +797,18 @@ describe('jar-executor alert token', () => {
     test('the token reaches the client only through MICROBOT_CLIENT_TOKEN', async () => {
         const alerts = { tokenForLaunch: jest.fn().mockResolvedValue(FIRST_TOKEN) };
         const harness = createHarness(alerts);
-        const account = { accountId: '1001', profile: 'Main', displayName: 'Hero' };
+        const account = { accountId: '1001', sessionId: 'session', profile: 'Main', displayName: 'Hero' };
 
         expect(await launch(harness, account)).toEqual({ success: true });
 
         expect(alerts.tokenForLaunch).toHaveBeenCalledWith('Main', account);
         expect(harness.launches).toHaveLength(1);
         const [{ args, options }] = harness.launches;
-        expect(options.env).toEqual({ ...process.env, MICROBOT_CLIENT_TOKEN: FIRST_TOKEN });
+        expect(options.env.MICROBOT_CLIENT_TOKEN).toBe(FIRST_TOKEN);
+        expect(Object.values(options.env).filter((value) => value === FIRST_TOKEN)).toHaveLength(1);
         expect(args.join(' ')).not.toContain(FIRST_TOKEN);
         const logged = JSON.stringify([harness.log.info.mock.calls, harness.log.warn.mock.calls, harness.log.error.mock.calls]);
         expect(logged).not.toContain(FIRST_TOKEN);
-    });
-
-    test('the no-Jagex launch passes the preferred profile token the same way', async () => {
-        const alerts = { tokenForLaunch: jest.fn().mockResolvedValue(FIRST_TOKEN) };
-        const harness = createHarness(alerts);
-        fs.writeFileSync(path.join(harness.deps.microbotDir, 'non-jagex-preferred-profile.json'), JSON.stringify({ profile: 'Ironman' }));
-        await require('../libs/jar-executor')(harness.deps);
-
-        await harness.handlers['play-no-jagex-account']({}, VERSION, null, '');
-        await waitFor(() => harness.launches.length > 0);
-        fs.rmSync(harness.deps.microbotDir, { recursive: true, force: true });
-
-        expect(alerts.tokenForLaunch).toHaveBeenCalledWith('Ironman', null);
-        expect(harness.launches[0].options.env.MICROBOT_CLIENT_TOKEN).toBe(FIRST_TOKEN);
-        expect(harness.launches[0].args.join(' ')).not.toContain(FIRST_TOKEN);
     });
 
     test('signed out launches pass no token to the client', async () => {
@@ -977,7 +826,7 @@ describe('jar-executor alert token', () => {
         });
         const harness = createHarness(alerts);
 
-        await launch(harness, { profile: 'Main' });
+        await launch(harness, { accountId: '1001', sessionId: 'session', profile: 'Main' });
         fs.rmSync(dir, { recursive: true, force: true });
 
         expect(request).not.toHaveBeenCalled();
@@ -989,7 +838,7 @@ describe('jar-executor alert token', () => {
         const alerts = { tokenForLaunch: jest.fn().mockRejectedValue(new Error('boom')) };
         const harness = createHarness(alerts);
 
-        expect(await launch(harness, { profile: 'Main' })).toEqual({ success: true });
+        expect(await launch(harness, { accountId: '1001', sessionId: 'session', profile: 'Main' })).toEqual({ success: true });
 
         expect(harness.launches).toHaveLength(1);
         expect(harness.launches[0].options.env).not.toHaveProperty('MICROBOT_CLIENT_TOKEN');

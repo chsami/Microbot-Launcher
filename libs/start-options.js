@@ -37,7 +37,7 @@ function cleanLabel(value, fallback) {
     return (label || fallback).slice(0, MAX_LABEL_LENGTH);
 }
 
-function profileNames({ profiles = [], accounts = [], nonJagexProfile = null }) {
+function profileNames({ profiles = [], accounts = [] }) {
     const names = [DEFAULT_PROFILE];
     const add = (value) => {
         if (typeof value !== 'string') return;
@@ -46,7 +46,6 @@ function profileNames({ profiles = [], accounts = [], nonJagexProfile = null }) 
     };
     (Array.isArray(profiles) ? profiles : []).forEach(add);
     accounts.forEach((account) => add(account.profile));
-    add(nonJagexProfile);
     return names;
 }
 
@@ -69,7 +68,6 @@ function buildStartOptions({
     accounts = [],
     profiles = [],
     properties = {},
-    nonJagexProfile = null,
     versions = [],
     latestVersion = null,
     linked = {},
@@ -78,7 +76,7 @@ function buildStartOptions({
     ids
 }) {
     const usableAccounts = accounts.filter((account) => typeof account?.accountId === 'string' && account.accountId).slice(0, MAX_ACCOUNTS);
-    const names = profileNames({ profiles, accounts: usableAccounts, nonJagexProfile }).slice(0, MAX_PROFILES);
+    const names = profileNames({ profiles, accounts: usableAccounts }).slice(0, MAX_PROFILES);
     const reported = new Set(proxies.map((proxy) => proxy.id));
     const proxyIdOf = (address) => {
         const value = typeof address === 'string' ? address.trim() : '';
@@ -110,7 +108,7 @@ function buildStartOptions({
         ramChoices: ramChoicesFor(properties),
         defaults: {
             accountId: account ? ids.account(account.accountId) : null,
-            profileId: profileIdOf(account ? account.profile : nonJagexProfile),
+            profileId: profileIdOf(account?.profile),
             channel,
             version: channel === 'stable' ? stableVersion(properties.version_pref) : null,
             ram: sanitizeRam(properties.client_ram),

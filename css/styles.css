@@ -882,15 +882,12 @@ h2 {
     border-color: var(--gold-hover);
 }
 
-/* Legacy accounts are the minority path, so they get the quieter button. */
-#play-no-jagex-account,
 .add-accounts {
     background: var(--surface-2);
     border-color: var(--line-strong);
     color: var(--text-strong);
 }
 
-#play-no-jagex-account:hover,
 .add-accounts:hover {
     background: var(--surface-3);
     border-color: var(--line-strong);
@@ -2360,24 +2357,6 @@ button.hamburger {
     display: block;
 }
 
-.profile-row.has-alerts-hint {
-    flex-wrap: wrap;
-    row-gap: 6px;
-}
-
-.profile-row.has-alerts-hint .profile-main {
-    flex: 1 1 0;
-}
-
-.profile-alerts-hint {
-    flex-basis: 100%;
-    margin: 0;
-    font-size: 12px;
-    color: var(--muted);
-    text-align: right;
-    overflow-wrap: anywhere;
-}
-
 .profile-main {
     min-width: 0;
     display: flex;
@@ -2491,79 +2470,6 @@ button.hamburger {
     border-color: var(--red);
 }
 
-.alerts-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 12px;
-    color: var(--gold-soft);
-}
-
-.alerts-chip svg {
-    width: 12px;
-    height: 12px;
-}
-
-.profile-alerts-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    background: transparent;
-    color: var(--muted);
-    border: 1px solid transparent;
-    border-radius: 6px;
-    padding: 6px 8px;
-    font-family: var(--body);
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.profile-alerts-toggle:hover:not(:disabled) {
-    border-color: var(--line);
-    color: var(--text);
-}
-
-.profile-alerts-toggle:disabled {
-    cursor: default;
-    opacity: .5;
-}
-
-.profile-alerts-toggle.is-on {
-    color: var(--gold);
-}
-
-.profile-alerts-switch {
-    position: relative;
-    width: 26px;
-    height: 14px;
-    border-radius: 999px;
-    background: var(--line-strong);
-    transition: background-color .15s ease;
-}
-
-.profile-alerts-switch::after {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--muted);
-    transition: transform .15s ease, background-color .15s ease;
-}
-
-.profile-alerts-toggle.is-on .profile-alerts-switch {
-    background: rgba(255, 177, 59, .35);
-}
-
-.profile-alerts-toggle.is-on .profile-alerts-switch::after {
-    transform: translateX(12px);
-    background: var(--gold);
-}
-
-.profile-alerts-toggle:focus-visible,
 .profile-icon-button:focus-visible,
 .profile-use-button:focus-visible,
 .profiles-new-button:focus-visible,

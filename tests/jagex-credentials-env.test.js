@@ -208,26 +208,16 @@ describe('Jagex character in the client environment', () => {
         expect(file).not.toContain('undefined');
     });
 
-    test('a non-Jagex start never inherits a Jagex character from the launcher', async () => {
-        inherit({ JX_CHARACTER_ID: '9999', JX_SESSION_ID: 'session-parent', JX_DISPLAY_NAME: 'Parent', JX_REFRESH_TOKEN: 'r', jx_access_token: 'a', MICROBOT_TEST_KEPT: 'kept' });
-
-        await harness.handlers['play-no-jagex-account']({}, VERSION, null, '');
-        await waitFor(() => harness.launches.length > 0);
-        const dashboard = harness.executor.launch({ version: VERSION, noJagexProfile: 'Ironman', ramPreference: '' });
-        await waitFor(() => harness.launches.length > 1);
-        await dashboard;
-
-        for (const { options } of harness.launches) {
-            expect(Object.keys(options.env).filter((key) => key.toUpperCase().startsWith('JX_'))).toEqual([]);
-            expect(options.env.MICROBOT_TEST_KEPT).toBe('kept');
-        }
-        expect(fs.existsSync(harness.credentialsFile)).toBe(false);
-    });
-
     test('an account without a game session does not pass an inherited character', async () => {
         inherit({ JX_CHARACTER_ID: '9999', JX_SESSION_ID: 'session-parent', JX_DISPLAY_NAME: 'Parent' });
 
-        const env = await openClient({ accountId: '1003', displayName: 'NoSession', profile: 'Main' });
+        const account = { accountId: '1003', displayName: 'NoSession', profile: 'Main' };
+        expect(await harness.handlers['open-client']({}, VERSION, null, account, '')).toEqual({ error: 'Log in with a Jagex account first.' });
+
+        const count = harness.launches.length;
+        await harness.executor.launch({ version: VERSION, account, ramPreference: '' });
+        await waitFor(() => harness.launches.length > count);
+        const env = harness.launches[count].options.env;
 
         expect(Object.keys(env).filter((key) => key.startsWith('JX_'))).toEqual([]);
     });

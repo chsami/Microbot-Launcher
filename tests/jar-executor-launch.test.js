@@ -71,7 +71,7 @@ function createHarness({ clipboard = true, response = 0, startupWindowMs = 2500,
 
 async function launch(harness, { ram = '', proxy = null, profile, displayName, hwidSpoof } = {}) {
     await require('../libs/jar-executor')(harness.deps);
-    const account = profile || displayName ? { profile, displayName } : null;
+    const account = { accountId: '1', sessionId: 'session', profile, displayName };
     return harness.handlers['open-client']({}, VERSION, proxy, account, ram, hwidSpoof);
 }
 
@@ -427,8 +427,8 @@ describe('open-client launch diagnostics with real Java runtimes', () => {
         const harness = createHarness({ response: 0, installManagedJdk: jest.fn(async () => installed) });
         await require('../libs/jar-executor')(harness.deps);
         await Promise.all([
-            harness.handlers['open-client']({}, VERSION, null, null, ''),
-            harness.handlers['open-client']({}, VERSION, null, null, '')
+            harness.handlers['open-client']({}, VERSION, null, { accountId: '1', sessionId: 'session' }, ''),
+            harness.handlers['open-client']({}, VERSION, null, { accountId: '2', sessionId: 'session' }, '')
         ]);
         await waitFor(() => harness.spawnCalls.filter((call) => call.command === installed).length >= 3);
         expect(harness.dialogs).toHaveLength(1);
@@ -542,20 +542,6 @@ describe('launch without anyone at the screen', () => {
         expect(harness.dialogs).toHaveLength(0);
     }, 15000);
 
-    withJdk(17)('a profile without a Jagex account starts with the Jagex login cleared', async () => {
-        useJava(17);
-        process.env.M07_MODE = 'sleep';
-        process.env.M07_SLEEP_MS = '4000';
-        const harness = createHarness({ startupWindowMs: 1500 });
-        try {
-            await expect(quietLaunch(harness, { account: undefined, noJagexProfile: 'alt' })).resolves.toEqual({
-                started: true
-            });
-        } finally {
-            delete process.env.M07_SLEEP_MS;
-        }
-        expect(harness.spawnCalls[1].args).toEqual(expect.arrayContaining(['-clean-jagex-launcher', '-profile=alt']));
-    }, 15000);
 });
 
 describe('Play while another client is starting', () => {

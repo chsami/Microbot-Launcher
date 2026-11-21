@@ -92,24 +92,26 @@ describe('client-alerts RuneLite link', () => {
         expect(logged()).not.toContain(LOADER_TOKEN);
     });
 
-    test('keeps its own slot next to a profile called runelite', async () => {
+    test('keeps its own slot next to a Jagex account called runelite', async () => {
         created = [{ id: PROFILE_ID, token: PROFILE_TOKEN }, { id: LOADER_ID, token: LOADER_TOKEN }];
         const alerts = setup();
 
-        expect(await alerts.tokenForProfile('runelite')).toBe(PROFILE_TOKEN);
-        expect(await alerts.tokenForLoader()).toBe(LOADER_TOKEN);
-        expect(await alerts.tokenForProfile('runelite')).toBe(PROFILE_TOKEN);
+        const account = { accountId: 'runelite' };
 
-        expect(stored().profiles.runelite.token).toBe(PROFILE_TOKEN);
+        expect(await alerts.tokenForLaunch('runelite', account)).toBe(PROFILE_TOKEN);
+        expect(await alerts.tokenForLoader()).toBe(LOADER_TOKEN);
+        expect(await alerts.tokenForLaunch('runelite', account)).toBe(PROFILE_TOKEN);
+
+        expect(stored().accounts.runelite.token).toBe(PROFILE_TOKEN);
         expect(stored().loader.runelite.token).toBe(LOADER_TOKEN);
-        expect(alerts.linkedProfiles()).toEqual({ runelite: PROFILE_ID });
+        expect(alerts.linkedAccounts([account])).toEqual({ runelite: PROFILE_ID });
     });
 
-    test('profile writes keep the RuneLite link', async () => {
+    test('account writes keep the RuneLite link', async () => {
         created = [{ id: LOADER_ID, token: LOADER_TOKEN }, { id: PROFILE_ID, token: PROFILE_TOKEN }];
         const alerts = setup();
         await alerts.tokenForLoader();
-        await alerts.tokenForProfile('Main');
+        await alerts.tokenForLaunch('Main', { accountId: 'account-1' });
 
         expect(stored().loader.runelite.id).toBe(LOADER_ID);
     });

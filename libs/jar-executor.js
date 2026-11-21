@@ -53,14 +53,13 @@ module.exports = async function (deps) {
         };
     }
 
-    function buildCommandArgs({ version, proxy, ramPreference, hwidSpoof, profile, cleanJagex, label }) {
+    function buildCommandArgs({ version, proxy, ramPreference, hwidSpoof, profile }) {
         const jarPath = path.join(microbotDir, `microbot-${version}.jar`);
         const memoryConfig = selectMemoryArgs(ramPreference);
         log.info(
-            `Launching ${label} with ${memoryConfig.source} memory settings: ${memoryConfig.args.join(' ')}`
+            `Launching client with ${memoryConfig.source} memory settings: ${memoryConfig.args.join(' ')}`
         );
         const commandArgs = [...memoryConfig.args, ...GC_FLAGS, '-jar', jarPath];
-        if (cleanJagex) commandArgs.push('-clean-jagex-launcher');
         commandArgs.unshift(...hwidAgentArgs({ fs, microbotDir, version, enabled: hwidSpoof }));
 
         const err = addProxyArgs(commandArgs, proxy);
@@ -75,28 +74,14 @@ module.exports = async function (deps) {
         return { commandArgs };
     }
 
-    async function prepareLaunch({ version, proxy, account, ramPreference, hwidSpoof, noJagexProfile }) {
-        const noJagex = noJagexProfile !== undefined;
-        const profile = noJagex
-            ? noJagexProfile && noJagexProfile !== 'default'
-                ? noJagexProfile
-                : null
-            : account && account.profile;
-        const built = buildCommandArgs({
-            version,
-            proxy,
-            ramPreference,
-            hwidSpoof,
-            profile,
-            cleanJagex: noJagex,
-            label: noJagex ? 'non-Jagex client' : 'client'
-        });
+    async function prepareLaunch({ version, proxy, account, ramPreference, hwidSpoof }) {
+        const built = buildCommandArgs({ version, proxy, ramPreference, hwidSpoof, profile: account && account.profile });
         if (built.error) return built;
-        const token = await alertToken(noJagex ? profile : account && account.profile, noJagex ? null : account);
+        const token = await alertToken(account && account.profile, account);
         return {
             commandArgs: built.commandArgs,
-            secrets: withToken(noJagex ? [] : accountSecrets(account), token),
-            env: clientEnv(token, noJagex ? null : jagexCredentials(account))
+            secrets: withToken(accountSecrets(account), token),
+            env: clientEnv(token, jagexCredentials(account))
         };
     }
 
@@ -121,22 +106,24 @@ module.exports = async function (deps) {
                     return { error: prepared.error };
                 }
                 const credentials = jagexCredentials(account);
+                if (!credentials) {
+                    log.error('Refused to start a client without a Jagex account login.');
+                    return { error: 'Log in with a Jagex account first.' };
+                }
                 startInTurn(event, () => {
-                    if (credentials) {
-                        try {
-                            deps.writeCredentials?.(credentials);
-                        } catch (error) {
-                            showLaunchProblem(
-                                {
-                                    kind: 'credentials-failed',
-                                    title: 'Could Not Save The Login',
-                                    message: `The launcher could not write credentials.properties: ${error.message}`,
-                                    recovery: 'Check that the .runelite folder in your home folder is writable, then try again.'
-                                },
-                                { secrets: prepared.secrets }
-                            );
-                            return { problem: { kind: 'credentials-failed' } };
-                        }
+                    try {
+                        deps.writeCredentials?.(credentials);
+                    } catch (error) {
+                        showLaunchProblem(
+                            {
+                                kind: 'credentials-failed',
+                                title: 'Could Not Save The Login',
+                                message: `The launcher could not write credentials.properties: ${error.message}`,
+                                recovery: 'Check that the .runelite folder in your home folder is writable, then try again.'
+                            },
+                            { secrets: prepared.secrets }
+                        );
+                        return { problem: { kind: 'credentials-failed' } };
                     }
                     return checkJavaAndRunJar(prepared.commandArgs, prepared.secrets, progressFor(event), prepared.env);
                 });
@@ -148,27 +135,6 @@ module.exports = async function (deps) {
         }
     );
 
-    ipcMain.handle(
-        'play-no-jagex-account',
-        async (event, version, proxy, ramPreference, hwidSpoof) => {
-            const prepared = await prepareLaunch({
-                version,
-                proxy,
-                ramPreference,
-                hwidSpoof,
-                noJagexProfile: readPreferredProfile()
-            });
-            if (prepared.error) {
-                log.error(prepared.error);
-                return { error: prepared.error };
-            }
-            startInTurn(event, () =>
-                checkJavaAndRunJar(prepared.commandArgs, prepared.secrets, progressFor(event), prepared.env)
-            );
-            return { success: true };
-        }
-    );
-
     function startInTurn(event, start) {
         const queue = deps.launchQueue;
         if (!queue) {
@@ -177,17 +143,6 @@ module.exports = async function (deps) {
         }
         if (queue.busy()) progressFor(event)(5, 'Waiting for the previous client to finish starting...');
         queue.run(start).catch((error) => log.error(`Launch failed: ${error?.message || error}`));
-    }
-
-    function readPreferredProfile() {
-        const file = path.join(microbotDir, 'non-jagex-preferred-profile.json');
-        if (!fs.existsSync(file)) return null;
-        try {
-            return JSON.parse(fs.readFileSync(file, 'utf8'))?.profile || null;
-        } catch (error) {
-            log.error('Invalid non-jagex-preferred-profile.json:', error.message);
-            return null;
-        }
     }
 
     async function alertToken(profile, account) {

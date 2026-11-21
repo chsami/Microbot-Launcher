@@ -1,7 +1,6 @@
 const LINKS_PATH = '/api/alerts/client-links';
 const LIST_PATH = `${LINKS_PATH}?includeHidden=true`;
 const REQUEST_TIMEOUT_MS = 8000;
-const STATUS_TIMEOUT_MS = 3000;
 const LAUNCH_BUDGET_MS = 5000;
 const DEFAULT_LABEL = 'Microbot client';
 const DEFAULT_PROFILE = 'default';
@@ -96,15 +95,6 @@ module.exports = function setupClientAlerts(deps) {
 
     const readDisabled = () => settings().disabled;
 
-    const isEnabled = (profile) => !readDisabled().includes(profile);
-
-    const setEnabled = (profile, enabled) => {
-        const state = settings();
-        const disabled = state.disabled.filter((name) => name !== profile);
-        if (!enabled) disabled.push(profile);
-        writeSettings({ ...state, disabled });
-    };
-
     const accountOn = (state, accountId, profile) => {
         if (hasOwn(state.accounts, accountId)) return state.accounts[accountId];
         return state.accountsMigrated || !state.disabled.includes(profile);
@@ -118,7 +108,7 @@ module.exports = function setupClientAlerts(deps) {
         writeSettings(state);
     };
 
-    const slotEnabled = (slot) => slot.kind === 'loader' || (slot.kind === 'accounts' ? isAccountEnabled(slot.key, slot.profile) : isEnabled(slot.profile));
+    const slotEnabled = (slot) => slot.kind === 'loader' || isAccountEnabled(slot.key, slot.profile);
 
     const readStore = (email) => {
         const empty = { profiles: {}, accounts: {}, loader: {}, revoke: [] };
@@ -147,10 +137,6 @@ module.exports = function setupClientAlerts(deps) {
             log.warn(`Could not save alert links: ${error?.message || error}`);
         }
     };
-
-    const readLinks = (email) => readStore(email).profiles;
-
-    const writeLinks = (email, profiles) => writeStore(email, { ...readStore(email), profiles });
 
     const readEntry = (email, slot) => ownEntry(readStore(email)[slot.kind], slot.key);
 
@@ -267,9 +253,22 @@ module.exports = function setupClientAlerts(deps) {
         return created.token;
     };
 
+    // Links made by clients started without an account can never start again, so revoke them.
+    const queueNoJagexLinks = (email) => {
+        const store = readStore(email);
+        const dead = Object.entries(store.profiles).filter(([, link]) => link?.noJagex);
+        if (!dead.length) return;
+        const profiles = { ...store.profiles };
+        dead.forEach(([profile]) => delete profiles[profile]);
+        const ids = dead.filter(([, link]) => link.id).map(([, link]) => String(link.id));
+        writeStore(email, { ...store, profiles, revoke: [...store.revoke.filter((id) => !ids.includes(id)), ...ids] });
+        log.info(`Removing ${dead.length} alert link(s) made by clients started without a Jagex account.`);
+    };
+
     const revokeQueued = async () => {
         const email = signedInEmail();
         if (!email || !auth || !canPersist()) return;
+        queueNoJagexLinks(email);
         for (const id of readStore(email).revoke) {
             try {
                 await auth.request({ method: 'delete', path: `${LINKS_PATH}/${encodeURIComponent(id)}`, timeout: REQUEST_TIMEOUT_MS });
@@ -289,52 +288,13 @@ module.exports = function setupClientAlerts(deps) {
         return revoking;
     };
 
-    const linkLabels = async (email, profiles) => {
-        const stored = email ? readLinks(email) : {};
-        const labels = {};
-        profiles.forEach((profile) => {
-            const cached = stored[profile]?.label;
-            labels[profile] = typeof cached === 'string' && cached ? cached : defaultLabel(profile);
-        });
-        const linked = profiles.filter((profile) => stored[profile]?.id);
-        if (!linked.length || !auth) return labels;
-        try {
-            const { data } = await auth.request({ method: 'get', path: LIST_PATH, timeout: STATUS_TIMEOUT_MS });
-            if (!Array.isArray(data)) return labels;
-            const byId = new Map(data.map((link) => [String(link?.id).toLowerCase(), link?.label]));
-            const changed = {};
-            linked.forEach((profile) => {
-                const id = String(stored[profile].id).toLowerCase();
-                if (!byId.has(id)) {
-                    labels[profile] = defaultLabel(profile);
-                    return;
-                }
-                const label = byId.get(id);
-                if (typeof label !== 'string' || !label) return;
-                labels[profile] = label;
-                if (label !== stored[profile].label) changed[profile] = label;
-            });
-            if (Object.keys(changed).length) {
-                const current = readLinks(email);
-                Object.entries(changed).forEach(([profile, label]) => {
-                    if (current[profile]?.id === stored[profile].id) current[profile] = { ...current[profile], label };
-                });
-                writeLinks(email, current);
-            }
-        } catch (error) {
-            log.warn(`Could not load alert link names: ${error?.message || error}`);
-        }
-        return labels;
-    };
-
     const tokenForLaunch = async (rawProfile, account) => {
         const profile = profileName(rawProfile);
         const email = signedInEmail();
         if (!email || !auth) return null;
-        const accountId = isAccountId(account?.accountId) ? account.accountId : null;
-        const slot = accountId
-            ? { kind: 'accounts', key: accountId, profile, label: accountLabel(account) }
-            : { kind: 'profiles', key: profile, profile, label: null };
+        // Clients only start with a Jagex account, so only accounts get an alert link.
+        if (!isAccountId(account?.accountId)) return null;
+        const slot = { kind: 'accounts', key: account.accountId, profile, label: accountLabel(account) };
         if (!slotEnabled(slot)) return null;
         if (!canPersist()) {
             log.info('Bot alerts need secure storage, which is not available; launching without alerts.');
@@ -360,8 +320,6 @@ module.exports = function setupClientAlerts(deps) {
         }
         return withinBudget(pending.get(key), () => storedToken(email, slot));
     };
-
-    const tokenForProfile = (rawProfile) => tokenForLaunch(rawProfile, null);
 
     const revokeUnsavedLoaderLinks = async () => {
         let links;
@@ -439,32 +397,6 @@ module.exports = function setupClientAlerts(deps) {
         return Promise.race([work, deadline]).finally(() => clearTimeout(timer));
     };
 
-    ipcMain.handle('alerts:status', async (_event, names) => {
-        const email = signedInEmail();
-        const signedIn = Boolean(email);
-        const disabled = readDisabled();
-        const enabled = {};
-        const profiles = (Array.isArray(names) ? names : []).map(profileName);
-        profiles.forEach((profile) => {
-            enabled[profile] = !disabled.includes(profile);
-        });
-        const available = signedIn && canPersist();
-        if (available) retryRevokes();
-        const labels = await linkLabels(available ? email : null, profiles);
-        return { signedIn, available, enabled, labels };
-    });
-
-    ipcMain.handle('alerts:set-enabled', async (_event, name, enabled) => {
-        const profile = profileName(name);
-        try {
-            setEnabled(profile, Boolean(enabled));
-        } catch (error) {
-            log.warn(`Could not save alert settings: ${error?.message || error}`);
-            return { error: 'Could not save the alert setting.', enabled: isEnabled(profile) };
-        }
-        return { enabled: isEnabled(profile), label: defaultLabel(profile) };
-    });
-
     ipcMain.handle('alerts:accounts', async (_event, accountIds) => {
         const email = signedInEmail();
         const signedIn = Boolean(email);
@@ -490,19 +422,13 @@ module.exports = function setupClientAlerts(deps) {
         const email = signedInEmail();
         if (!email || !canPersist()) return {};
         const disabled = readDisabled();
+        // Only a Jagex account can start a client, so a profile no account uses has nothing to start.
+        const used = new Set((readAccountProfiles() || []).map((account) => profileName(account.profile)));
         const linked = {};
-        Object.entries(readLinks(email)).forEach(([profile, link]) => {
-            if (link?.id && !disabled.includes(profile)) linked[profile] = String(link.id);
+        Object.entries(readStore(email).profiles).forEach(([profile, link]) => {
+            if (link?.id && !link.noJagex && used.has(profile) && !disabled.includes(profile)) linked[profile] = String(link.id);
         });
         return linked;
-    };
-
-    const profilesWithoutAccount = () => {
-        const email = signedInEmail();
-        if (!email || !canPersist()) return [];
-        return Object.entries(readLinks(email))
-            .filter(([, link]) => link?.id && link.noJagex === true)
-            .map(([profile]) => profile);
     };
 
     const linkedAccounts = (accounts) => {
@@ -518,7 +444,7 @@ module.exports = function setupClientAlerts(deps) {
         return linked;
     };
 
-    return { tokenForLaunch, tokenForProfile, tokenForLoader, forgetLoaderToken, retryRevokes, linkedProfiles, linkedAccounts, profilesWithoutAccount };
+    return { tokenForLaunch, tokenForLoader, forgetLoaderToken, retryRevokes, linkedProfiles, linkedAccounts };
 };
 
 function hasOwn(object, key) {
@@ -542,23 +468,17 @@ function signedOutError() {
 }
 
 function newEntry(slot, created) {
-    if (slot.kind === 'accounts') return { ...created, profile: slot.profile };
-    if (slot.kind === 'loader') return created;
-    return { ...created, noJagex: true };
+    return slot.kind === 'loader' ? created : { ...created, profile: slot.profile };
 }
 
 function describe(slot) {
     if (slot.kind === 'loader') return 'Microbot in RuneLite';
-    return slot.kind === 'accounts' ? `the Jagex account on profile "${slot.profile}"` : `profile "${slot.profile}"`;
+    return `the Jagex account on profile "${slot.profile}"`;
 }
 
 function accountLabel(account) {
     const name = typeof account?.displayName === 'string' ? account.displayName.replace(/[\u0000-\u001f\u007f]/g, '').trim() : '';
     return name ? name.slice(0, MAX_LABEL_LENGTH) : null;
-}
-
-function defaultLabel() {
-    return DEFAULT_LABEL;
 }
 
 function profileName(value) {
