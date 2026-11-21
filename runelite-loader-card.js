@@ -170,6 +170,12 @@
         }
     };
 
+    const openRecordings = async () => {
+        const webview = $('website');
+        const result = await window.electron?.dashboard?.open();
+        if (webview && result?.url) webview.src = new URL('/admin/mousedata?tab=runs', result.url).href;
+    };
+
     const toggleRecorder = async (on) => {
         try {
             renderRecorder(await recorderApi().setOn(on));
@@ -262,6 +268,7 @@
             option.addEventListener('click', () => choose(option.dataset.mode));
         });
         $('session-recorder-switch')?.addEventListener('change', (event) => toggleRecorder(event.target.checked));
+        $('session-recorder-recordings')?.addEventListener('click', () => openRecordings().catch(() => {}));
         recorderApi()?.onStatus?.((view) => renderRecorder(view));
         api()?.onProgress?.((data) => {
             if (busy && data?.text) render({ visible: true, state: 'working', progress: data.text, mode });

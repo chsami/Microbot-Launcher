@@ -640,6 +640,11 @@ webview#website {
     display: none;
 }
 
+#session-recorder-recordings {
+    margin-left: 0;
+    align-self: flex-start;
+}
+
 .loader-card-link {
     margin-left: auto;
     padding: 0;
