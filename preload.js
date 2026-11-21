@@ -2,6 +2,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electron', {
     closeLauncher: () => ipcRenderer.invoke('close-launcher'),
+    theme: {
+        read: () => ipcRenderer.invoke('theme:read'),
+        write: (value) => ipcRenderer.invoke('theme:write', value)
+    },
     minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
     maximizeWindow: () => ipcRenderer.invoke('maximize-window'),
     startAuthFlow: (proxy) => ipcRenderer.invoke('start-auth-flow', proxy),

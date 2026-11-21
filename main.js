@@ -218,6 +218,8 @@ async function createWindow() {
         mainWindow.setWindowButtonVisibility(false);
     }
 
+    require(path.join(__dirname, 'libs', 'theme-settings.js')).register(ipcMain, log);
+
     try {
         const extraHandlers = require(path.join(
             __dirname,
