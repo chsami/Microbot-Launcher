@@ -30,7 +30,15 @@ function write(value, home) {
     const next = normalize(value);
     const file = settingsFile(home);
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(next, null, 2));
+    // write a temp file and rename it over, so a client starting now never reads half a file
+    const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
+    try {
+        fs.writeFileSync(temp, JSON.stringify(next, null, 2));
+        fs.renameSync(temp, file);
+    } catch (error) {
+        fs.rmSync(temp, { force: true });
+        throw error;
+    }
     return next;
 }
 

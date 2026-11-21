@@ -23,6 +23,13 @@ describe('theme-settings', () => {
         expect(settings.read(home)).toEqual({ theme: 'slate', font: 'montserrat' });
     });
 
+    test('replaces the file without leaving temp files behind', () => {
+        settings.write({ theme: 'gold' }, home);
+        settings.write({ theme: 'classic' }, home);
+        expect(fs.readdirSync(path.join(home, '.microbot'))).toEqual(['theme.json']);
+        expect(settings.read(home).theme).toBe('classic');
+    });
+
     test('registers read and write handlers', async () => {
         const handlers = {};
         settings.register({ removeHandler: jest.fn(), handle: (name, fn) => (handlers[name] = fn) });

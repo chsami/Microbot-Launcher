@@ -53,6 +53,7 @@
       "profiles-screen.js",
       "setup-guide.js",
       "runelite-loader-card.js",
+      "theme-picker.js",
       "halloween.js",
       "preload.js",
       "package.json",
