@@ -651,11 +651,15 @@ describe('runelite-loader', () => {
             expect(JSON.parse(fs.readFileSync(settingsFile, 'utf8')).launcherMode).toBe('client');
         });
 
-        test('also when signed out or offline', async () => {
+        test('signed out it is hidden', async () => {
             installAgentJar(path.join(path.dirname(agentJar), 'agent-0a1b2c3d.jar'));
             email = null;
-            expect(await setup().loader.state()).toMatchObject({ visible: true, state: 'remove-only' });
-            email = 'admin@example.com';
+
+            expect(await setup().loader.state()).toEqual({ visible: false });
+        });
+
+        test('also when offline', async () => {
+            installAgentJar(path.join(path.dirname(agentJar), 'agent-0a1b2c3d.jar'));
             access = new Error('socket hang up');
             expect(await setup().loader.state()).toMatchObject({ visible: true, state: 'remove-only' });
         });

@@ -418,7 +418,7 @@ module.exports = function setupRuneliteLoader(deps) {
 
     const state = async () => {
         const access = await checkAccess();
-        if (operation) return viewFor(access, null);
+        if (operation || access.reason === 'signed-out') return viewFor(access, null);
         return viewFor(access, await currentStatus(access.available ? access.agent : null));
     };
 
