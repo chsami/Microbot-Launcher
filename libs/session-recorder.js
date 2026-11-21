@@ -235,14 +235,16 @@ module.exports = function setupSessionRecorder(deps) {
         return null;
     };
 
-    const open = async () => {
-        if (cannotOpen()) return cannotOpen();
-        const login = runelite.prepareCharacter ? await runelite.prepareCharacter() : { ok: true };
-        if (!login.ok) return login;
+    const send = () => {
         if (cannotOpen()) return cannotOpen();
         openedAt = Date.now();
         child.stdin.write('open\n');
         return { ok: true, message: MESSAGES.opening };
+    };
+
+    const open = async () => {
+        if (cannotOpen()) return cannotOpen();
+        return runelite.startInTurn ? runelite.startInTurn(async () => send()) : send();
     };
 
     ipcMain.handle('session-recorder:state', () => state());

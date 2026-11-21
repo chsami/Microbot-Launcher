@@ -859,7 +859,7 @@ describe('runelite-loader', () => {
             expect(fs.existsSync(settingsFile)).toBe(false);
         });
 
-        test('unreadable launcher settings are not overwritten by the chosen path', async () => {
+        test('unreadable launcher settings are not overwritten by the chosen path, and RuneLite does not start without knowing the character', async () => {
             const chosen = path.join(dir, 'RuneLite.AppImage');
             fs.writeFileSync(chosen, '');
             fs.writeFileSync(settingsFile, '{ broken');
@@ -867,7 +867,10 @@ describe('runelite-loader', () => {
             const dialog = { showOpenDialog: jest.fn(async () => ({ canceled: false, filePaths: [chosen] })) };
             const { loader } = setup({ spawn: launchSpawn, dialog, finder: undefined, platform: 'linux' });
 
-            expect((await loader.findAndOpen()).ok).toBe(true);
+            const result = await loader.findAndOpen();
+            expect(result.ok).toBe(false);
+            expect(result.error).toMatch(/launcher-settings\.json\) can't be read/);
+            expect(launchSpawn).not.toHaveBeenCalled();
             expect(fs.readFileSync(settingsFile, 'utf8')).toBe('{ broken');
         });
 

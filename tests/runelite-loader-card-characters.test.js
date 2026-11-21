@@ -6,24 +6,35 @@ const { TEXT, characterView, offersCharacters, cardView } = require('../runelite
 
 const CHARACTERS = {
     characters: [
-        { accountId: 'char-new', displayName: 'Lynx Titan', proxy: '203.0.113.7' },
+        { accountId: 'char-new', displayName: 'Lynx Titan', proxy: { host: '203.0.113.7' } },
+        { accountId: 'char-odd', displayName: 'Odd', proxy: { host: null } },
         { accountId: 'char-old', displayName: 'Zezima', proxy: null }
     ],
-    chosen: null
+    chosen: null,
+    picked: false,
+    missing: null
 };
+
+const PROXY_WARNING =
+    "Lynx Titan uses the proxy 203.0.113.7 in the Microbot client. RuneLite doesn't use proxies, so Lynx Titan will connect from your own IP. To keep the proxy, play Lynx Titan in the Microbot client.";
 
 describe('character picker data', () => {
     test('None comes first, then the characters in the order the launcher sends them', () => {
         expect(characterView(CHARACTERS)).toEqual({
             options: [
-                { value: '', label: 'None: log in inside RuneLite' },
+                { value: '', label: "None (I'll log in inside RuneLite)" },
                 { value: 'char-new', label: 'Lynx Titan' },
+                { value: 'char-odd', label: 'Odd' },
                 { value: 'char-old', label: 'Zezima' }
             ],
             value: '',
             name: null,
             warning: '',
-            addLabel: 'Add Jagex account'
+            relogin: false,
+            loginFor: null,
+            addLabel: 'Add Jagex account',
+            addTitle: '',
+            addNote: 'Logs in from your own IP.'
         });
     });
 
@@ -32,16 +43,34 @@ describe('character picker data', () => {
         expect(characterView({ characters: [], chosen: 'char-old' }).value).toBe('');
     });
 
-    test('a chosen character with a proxy warns that RuneLite starts without it', () => {
-        const view = characterView({ ...CHARACTERS, chosen: 'char-new' });
-
-        expect(view.value).toBe('char-new');
-        expect(view.warning).toBe('Lynx Titan is set to play from 203.0.113.7; Microbot in RuneLite starts RuneLite without that proxy.');
+    test('a chosen character with a proxy explains that RuneLite connects from the member’s own IP', () => {
+        expect(characterView({ ...CHARACTERS, chosen: 'char-new' }).warning).toBe(PROXY_WARNING);
+        expect(characterView({ ...CHARACTERS, chosen: 'char-odd' }).warning).toBe(
+            "Odd uses a proxy in the Microbot client. RuneLite doesn't use proxies, so Odd will connect from your own IP. To keep the proxy, play Odd in the Microbot client."
+        );
         expect(characterView({ ...CHARACTERS, chosen: 'char-old' }).warning).toBe('');
     });
 
-    test('after an expired login the add button offers to log in again', () => {
-        expect(characterView(CHARACTERS, { relogin: true }).addLabel).toBe('Log in again');
+    test('Log in again belongs to the expired character only', () => {
+        const expired = ['char-new'];
+
+        expect(characterView({ ...CHARACTERS, chosen: 'char-new' }, { expired })).toMatchObject({
+            relogin: true,
+            loginFor: 'char-new',
+            addLabel: 'Log in again',
+            addTitle: 'Log in to the Jagex account that has Lynx Titan.',
+            addNote: 'Logs in through 203.0.113.7.'
+        });
+        expect(characterView({ ...CHARACTERS, chosen: 'char-old' }, { expired })).toMatchObject({ relogin: false, loginFor: null, addLabel: 'Add Jagex account' });
+        expect(characterView({ ...CHARACTERS, chosen: 'char-old' }, { expired: ['char-old'] }).addNote).toBe('Logs in from your own IP.');
+    });
+
+    test('a picked character that left the launcher stays selected with a hint', () => {
+        const view = characterView({ ...CHARACTERS, missing: 'char-gone' });
+
+        expect(view.options.at(-1)).toEqual({ value: 'char-gone', label: 'Character no longer in the launcher' });
+        expect(view.value).toBe('char-gone');
+        expect(view.warning).toBe('That character is no longer in the launcher. Add its Jagex account again, or choose None.');
     });
 
     test('the picker is offered only where the card can open RuneLite', () => {
@@ -72,6 +101,7 @@ describe('character picker on the card', () => {
             hidden: true,
             disabled: false,
             textContent: '',
+            title: '',
             value: '',
             dataset: {},
             children: [],
@@ -95,7 +125,7 @@ describe('character picker on the card', () => {
         return element;
     }
 
-    function loadCard({ state, characters = CHARACTERS, openResult = { ok: true, message: 'RuneLite is starting. Microbot will be in the sidebar.' }, runJagexLogin, characterApi = true } = {}) {
+    function loadCard({ state, characters = CHARACTERS, openResult = { ok: true, message: 'RuneLite is starting. Microbot will be in the sidebar.' }, characterApi = true } = {}) {
         const ids = [
             'launcher-mode',
             'runelite-view',
@@ -112,36 +142,38 @@ describe('character picker on the card', () => {
             'runelite-loader-character',
             'runelite-loader-character-select',
             'runelite-loader-add-account',
-            'runelite-loader-character-warning'
+            'runelite-loader-add-note',
+            'runelite-loader-character-warning',
+            'runelite-loader-character-message'
         ];
         const elements = Object.fromEntries(ids.map((id) => [id, fakeElement()]));
         let data = JSON.parse(JSON.stringify(characters));
+        let launchStatus = null;
         const hints = [];
         const runeliteLoader = {
             state: jest.fn(async () => state || { visible: true, state: 'added', opener: 'open', mode: 'runelite' }),
             install: jest.fn(),
             remove: jest.fn(),
             open: jest.fn(async () => {
+                launchStatus?.({ text: "Checking Lynx Titan's Jagex login..." });
                 hints.push(elements['runelite-loader-hint'].textContent);
-                return openResult;
+                return typeof openResult === 'function' ? openResult() : openResult;
             }),
             find: jest.fn(async () => ({ cancelled: true })),
             setMode: jest.fn(async (mode) => ({ mode })),
             characters: jest.fn(async () => data),
             setCharacter: jest.fn(async (accountId) => {
-                data = { ...data, chosen: accountId };
+                data = { ...data, chosen: accountId, picked: true };
                 return data;
             }),
+            login: jest.fn(async () => data),
+            onLaunchStatus: jest.fn((fn) => (launchStatus = fn)),
             onProgress: jest.fn()
         };
         if (!characterApi) {
-            delete runeliteLoader.characters;
-            delete runeliteLoader.setCharacter;
+            ['characters', 'setCharacter', 'login', 'onLaunchStatus'].forEach((name) => delete runeliteLoader[name]);
         }
-        const window = {
-            electron: { runeliteLoader, logError: jest.fn(), ipcRenderer: { receive: () => {} } },
-            runJagexLogin
-        };
+        const window = { electron: { runeliteLoader, logError: jest.fn(), cancelAuthFlow: jest.fn(async () => true), ipcRenderer: { receive: () => {} } } };
         const context = vm.createContext({
             setTimeout: (...args) => setTimeout(...args),
             clearTimeout: (...args) => clearTimeout(...args),
@@ -158,20 +190,23 @@ describe('character picker on the card', () => {
         return {
             elements,
             runeliteLoader,
+            window,
             hints,
             setData: (next) => (data = next),
-            labels: () => elements['runelite-loader-character-select'].children.map((option) => option.textContent)
+            labels: () => elements['runelite-loader-character-select'].children.map((option) => option.textContent),
+            add: () => elements['runelite-loader-add-account']
         };
     }
 
-    test('shows None and the characters when RuneLite can be opened', async () => {
+    test('shows None and the characters when RuneLite can be opened, with the IP note', async () => {
         const card = loadCard();
         await flush();
 
         expect(card.elements['runelite-loader-character'].hidden).toBe(false);
-        expect(card.labels()).toEqual(['None: log in inside RuneLite', 'Lynx Titan', 'Zezima']);
+        expect(card.labels()).toEqual(["None (I'll log in inside RuneLite)", 'Lynx Titan', 'Odd', 'Zezima']);
         expect(card.elements['runelite-loader-character-select'].value).toBe('');
-        expect(card.elements['runelite-loader-add-account'].textContent).toBe('Add Jagex account');
+        expect(card.add().textContent).toBe('Add Jagex account');
+        expect(card.elements['runelite-loader-add-note'].textContent).toBe('Logs in from your own IP.');
     });
 
     test('stays hidden before Microbot is added to RuneLite', async () => {
@@ -181,12 +216,11 @@ describe('character picker on the card', () => {
         expect(card.elements['runelite-loader-character'].hidden).toBe(true);
     });
 
-    test('the remembered choice is selected', async () => {
-        const card = loadCard({ characters: { ...CHARACTERS, chosen: 'char-old' } });
+    test('never picked shows the character the login file holds', async () => {
+        const card = loadCard({ characters: { ...CHARACTERS, chosen: 'char-old', picked: false } });
         await flush();
 
         expect(card.elements['runelite-loader-character-select'].value).toBe('char-old');
-        expect(card.elements['runelite-loader-character-warning'].textContent).toBe('');
     });
 
     test('picking a character saves it and shows the proxy warning, and RuneLite can still be opened', async () => {
@@ -197,9 +231,7 @@ describe('character picker on the card', () => {
         await flush();
 
         expect(card.runeliteLoader.setCharacter).toHaveBeenCalledWith('char-new');
-        expect(card.elements['runelite-loader-character-warning'].textContent).toBe(
-            'Lynx Titan is set to play from 203.0.113.7; Microbot in RuneLite starts RuneLite without that proxy.'
-        );
+        expect(card.elements['runelite-loader-character-warning'].textContent).toBe(PROXY_WARNING);
         expect(card.elements['runelite-loader-action'].disabled).toBe(false);
 
         card.elements['runelite-loader-action'].click();
@@ -210,7 +242,7 @@ describe('character picker on the card', () => {
     });
 
     test('picking None saves null', async () => {
-        const card = loadCard({ characters: { ...CHARACTERS, chosen: 'char-old' } });
+        const card = loadCard({ characters: { ...CHARACTERS, chosen: 'char-old', picked: true } });
         await flush();
 
         card.elements['runelite-loader-character-select'].change('');
@@ -225,7 +257,7 @@ describe('character picker on the card', () => {
         await flush();
         let release;
         card.runeliteLoader.setCharacter.mockImplementation(
-            (accountId) => new Promise((resolve) => (release = () => resolve({ ...CHARACTERS, chosen: accountId })))
+            (accountId) => new Promise((resolve) => (release = () => resolve({ ...CHARACTERS, chosen: accountId, picked: true })))
         );
 
         card.elements['runelite-loader-character-select'].change('char-old');
@@ -238,9 +270,9 @@ describe('character picker on the card', () => {
         expect(card.runeliteLoader.open).toHaveBeenCalledTimes(1);
     });
 
-    test('an expired login shows the message and turns the add button into Log in again', async () => {
-        const error = "Zezima's Jagex login has expired. Press Log in again, then open RuneLite.";
-        const card = loadCard({ characters: { ...CHARACTERS, chosen: 'char-old' }, openResult: { ok: false, error, relogin: true } });
+    test('an expired login shows the message, turns Add into Log in again, and that follows the character', async () => {
+        const error = "Zezima's Jagex login has expired. Press Log in again, then press Open RuneLite.";
+        const card = loadCard({ characters: { ...CHARACTERS, chosen: 'char-old', picked: true }, openResult: { ok: false, error, relogin: true, accountId: 'char-old' } });
         await flush();
 
         card.elements['runelite-loader-action'].click();
@@ -248,42 +280,119 @@ describe('character picker on the card', () => {
 
         expect(card.elements['runelite-loader-error'].textContent).toBe(error);
         expect(card.elements['runelite-loader-hint'].textContent).toBe(TEXT.added);
-        expect(card.elements['runelite-loader-add-account'].textContent).toBe('Log in again');
+        expect(card.add().textContent).toBe('Log in again');
+        expect(card.add().title).toBe('Log in to the Jagex account that has Zezima.');
+
+        card.elements['runelite-loader-character-select'].change('char-new');
+        await flush();
+        expect(card.add().textContent).toBe('Add Jagex account');
+
+        card.elements['runelite-loader-character-select'].change('char-old');
+        await flush();
+        expect(card.add().textContent).toBe('Log in again');
     });
 
-    test('Add Jagex account runs the sidebar login on this button and refreshes the picker', async () => {
-        const runJagexLogin = jest.fn(async (button) => {
-            button.textContent = 'Cancel login';
-        });
-        const card = loadCard({ runJagexLogin });
+    test('Log in again logs in for that character and leaves the mode only when its session is renewed', async () => {
+        const error = "Zezima's Jagex login has expired. Press Log in again, then press Open RuneLite.";
+        const card = loadCard({ characters: { ...CHARACTERS, chosen: 'char-old', picked: true }, openResult: { ok: false, error, relogin: true, accountId: 'char-old' } });
         await flush();
-        card.setData({ characters: [...CHARACTERS.characters, { accountId: 'char-added', displayName: 'Woox', proxy: null }], chosen: null });
-
-        await card.elements['runelite-loader-add-account'].click();
+        card.elements['runelite-loader-action'].click();
         await flush();
 
-        expect(runJagexLogin).toHaveBeenCalledWith(card.elements['runelite-loader-add-account']);
-        expect(card.labels()).toEqual(['None: log in inside RuneLite', 'Lynx Titan', 'Zezima', 'Woox']);
-        expect(card.elements['runelite-loader-add-account'].textContent).toBe('Add Jagex account');
+        card.runeliteLoader.login.mockResolvedValueOnce({ ...CHARACTERS, chosen: 'char-old', picked: true, added: 0, renewed: false });
+        await card.add().click();
+        await flush();
+        expect(card.runeliteLoader.login).toHaveBeenLastCalledWith('char-old');
+        expect(card.add().textContent).toBe('Log in again');
+
+        card.runeliteLoader.login.mockResolvedValueOnce({ ...CHARACTERS, chosen: 'char-old', picked: true, added: 0, renewed: true });
+        await card.add().click();
+        await flush();
+        expect(card.add().textContent).toBe('Add Jagex account');
     });
 
-    test('a second click on Add while logging in cancels through the same login', async () => {
+    test('Add Jagex account logs in from the card and shows the one new character the launcher selected', async () => {
+        const card = loadCard();
+        await flush();
+        const added = { characters: [...CHARACTERS.characters, { accountId: 'char-woox', displayName: 'Woox', proxy: null }], chosen: 'char-woox', picked: true, added: 1, renewed: false };
+        card.runeliteLoader.login.mockResolvedValueOnce(added);
+
+        await card.add().click();
+        await flush();
+
+        expect(card.runeliteLoader.login).toHaveBeenCalledWith(null);
+        expect(card.labels()).toContain('Woox');
+        expect(card.elements['runelite-loader-character-select'].value).toBe('char-woox');
+        expect(card.elements['runelite-loader-character-message'].textContent).toBe('');
+    });
+
+    test('several new characters ask the member to pick one', async () => {
+        const card = loadCard();
+        await flush();
+        card.runeliteLoader.login.mockResolvedValueOnce({ ...CHARACTERS, added: 3, renewed: false });
+
+        await card.add().click();
+        await flush();
+
+        expect(card.elements['runelite-loader-character-message'].textContent).toBe('Added 3 characters. Pick one under Log in as.');
+    });
+
+    test('a login already open shows one sentence', async () => {
+        const card = loadCard();
+        await flush();
+        card.runeliteLoader.login.mockResolvedValueOnce({ ...CHARACTERS, error: 'A Jagex login is already open in your browser.' });
+
+        await card.add().click();
+        await flush();
+
+        expect(card.elements['runelite-loader-error'].textContent).toBe('A Jagex login is already open in your browser.');
+    });
+
+    test('a second click while logging in cancels the login', async () => {
+        const card = loadCard();
+        await flush();
         let finish;
-        const runJagexLogin = jest.fn((button) => (runJagexLogin.mock.calls.length === 1 ? new Promise((resolve) => (finish = resolve)) : Promise.resolve()));
-        const card = loadCard({ runJagexLogin });
-        await flush();
+        card.runeliteLoader.login.mockImplementationOnce(() => new Promise((resolve) => (finish = () => resolve({ ...CHARACTERS, cancelled: true }))));
 
-        card.elements['runelite-loader-add-account'].click();
+        card.add().click();
         await flush();
+        expect(card.add().textContent).toBe('Cancel login');
         expect(card.elements['runelite-loader-character-select'].disabled).toBe(true);
-        card.elements['runelite-loader-add-account'].click();
-        await flush();
 
-        expect(runJagexLogin).toHaveBeenCalledTimes(2);
-        expect(runJagexLogin.mock.calls[1][0]).toBe(card.elements['runelite-loader-add-account']);
+        card.add().click();
+        await flush();
+        expect(card.window.electron.cancelAuthFlow).toHaveBeenCalledTimes(1);
+        expect(card.runeliteLoader.login).toHaveBeenCalledTimes(1);
+
         finish();
         await flush();
+        expect(card.add().textContent).toBe('Add Jagex account');
         expect(card.elements['runelite-loader-character-select'].disabled).toBe(false);
+    });
+
+    test('the result is shown on the latest card state, not the one from before the check', async () => {
+        const card = loadCard({
+            characters: { ...CHARACTERS, chosen: 'char-old', picked: true },
+            openResult: () => ({ ok: true, message: 'RuneLite is starting as Zezima. Microbot will be in the sidebar.', opener: undefined })
+        });
+        await flush();
+
+        card.elements['runelite-loader-action'].click();
+        await flush();
+
+        expect(card.elements['runelite-loader-hint'].textContent).toBe('RuneLite is starting as Zezima. Microbot will be in the sidebar.');
+        jest.advanceTimersByTime(6000);
+        expect(card.elements['runelite-loader-hint'].textContent).toBe(TEXT.added);
+    });
+
+    test('the sidebar can refresh the picker', async () => {
+        const card = loadCard();
+        await flush();
+        card.setData({ ...CHARACTERS, characters: [CHARACTERS.characters[2]] });
+
+        await card.window.refreshRuneliteCharacters();
+
+        expect(card.labels()).toEqual([TEXT.none, 'Zezima']);
     });
 
     test('without the character calls (older main process) the card still works', async () => {
@@ -291,7 +400,7 @@ describe('character picker on the card', () => {
         await flush();
 
         expect(card.elements['runelite-loader-action'].textContent).toBe('Open RuneLite');
-        expect(card.labels()).toEqual(['None: log in inside RuneLite']);
+        expect(card.labels()).toEqual([TEXT.none]);
         card.elements['runelite-loader-action'].click();
         await flush();
         expect(card.runeliteLoader.open).toHaveBeenCalledTimes(1);
@@ -299,7 +408,7 @@ describe('character picker on the card', () => {
     });
 });
 
-describe('character picker markup', () => {
+describe('character picker markup and wiring', () => {
     const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
     const $ = cheerio.load(html);
 
@@ -310,16 +419,34 @@ describe('character picker markup', () => {
         expect($('#runelite-loader-character select#runelite-loader-character-select').length).toBe(1);
         expect($('#runelite-loader-add-account').text().trim()).toBe('Add Jagex account');
         expect($('#runelite-loader-add-account').attr('type')).toBe('button');
+        expect($('#runelite-loader-character #runelite-loader-add-note').length).toBe(1);
+        expect($('#runelite-loader-character #runelite-loader-character-message').length).toBe(1);
     });
 
-    test('the preload exposes the two character calls', () => {
+    test('the preload exposes the character calls', () => {
         const preload = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
         expect(preload).toContain("characters: () => ipcRenderer.invoke('runelite-loader:characters')");
         expect(preload).toContain("setCharacter: (accountId) => ipcRenderer.invoke('runelite-loader:set-character', accountId)");
+        expect(preload).toContain("login: (accountId) => ipcRenderer.invoke('runelite-loader:login', accountId)");
+        expect(preload).toContain("ipcRenderer.on('runelite-loader:launch-status'");
     });
 
-    test('the sidebar login the card reuses is a page-wide function', () => {
+    test('the sidebar refreshes the picker wherever it changes accounts', () => {
         const renderer = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
-        expect(renderer).toMatch(/^async function runJagexLogin\(button\)/m);
+        const calls = renderer.split('window.refreshRuneliteCharacters?.()').length - 1;
+        expect(calls).toBe(5);
+        expect(renderer).toMatch(/startAuthFlow\(getProxyValues\(\)\);\n\s*window\.refreshRuneliteCharacters\?\.\(\);/);
+        expect(renderer).toMatch(/deleteAccount\(accountId\);\n\s*window\.refreshRuneliteCharacters\?\.\(\);/);
+        expect(renderer).toMatch(/removeAccounts\(\);\n\s*window\.refreshRuneliteCharacters\?\.\(\);/);
+        expect(renderer).toMatch(/refreshAccounts\(getProxyValues\(\)\);\n\s*window\.refreshRuneliteCharacters\?\.\(\);/);
+        expect(renderer).toMatch(/if \(hasChanged\) \{\n\s*window\.refreshRuneliteCharacters\?\.\(\);/);
+    });
+
+    test('main.js gives the card the same launch queue as the client launches', () => {
+        const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+        const handlers = fs.readFileSync(path.join(__dirname, '..', 'libs', 'ipc-handlers.js'), 'utf8');
+        expect(main).toContain("launchQueue: require(path.join(__dirname, 'libs', 'launch-queue.js'))()");
+        expect(main).toContain('launchQueue: deps.launchQueue,');
+        expect(handlers).toContain("const launchQueue = deps.launchQueue || require(path.join(projectDir, 'libs', 'launch-queue.js'))();");
     });
 });

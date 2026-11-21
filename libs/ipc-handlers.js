@@ -76,9 +76,12 @@ module.exports = async function (deps) {
         'libs',
         'overwrite-credential-properties.js'
     ));
-    const launchQueue = require(path.join(projectDir, 'libs', 'launch-queue.js'))();
+    const launchQueue = deps.launchQueue || require(path.join(projectDir, 'libs', 'launch-queue.js'))();
     const writeCredentials = (account) =>
-        overwriteCredentialsHandler.writeCredentialProperties({ fs, path, homeDir: require('os').homedir() }, account);
+        overwriteCredentialsHandler.writeCredentialProperties(
+            { fs, path, homeDir: require('os').homedir(), settingsFile: path.join(microbotDir, 'launcher-settings.json'), log },
+            account
+        );
     await overwriteCredentialsHandler({ ...deps, launchQueue });
     const accountLoaderHandler = require(path.join(
         projectDir,

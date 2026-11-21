@@ -670,6 +670,17 @@ webview#website {
     display: none;
 }
 
+.loader-card-note-plain,
+.loader-card-character-message {
+    font-size: 12px;
+    color: var(--faint);
+}
+
+.loader-card-note-plain:empty,
+.loader-card-character-message:empty {
+    display: none;
+}
+
 .loader-card-actions {
     display: flex;
     flex-wrap: wrap;

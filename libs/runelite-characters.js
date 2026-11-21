@@ -6,12 +6,20 @@ const credentials = require('./overwrite-credential-properties.js');
 
 const CHARACTER_KEY = 'runeliteCharacter';
 const SESSION_TIMEOUT_MS = 20000;
+const REQUEST_TIMEOUT_MS = 15000;
 
 const MESSAGES = {
-    expired: (name) => `${name}'s Jagex login has expired. Press Log in again, then open RuneLite.`,
-    unchecked: (name) => `Couldn't check ${name}'s Jagex login. Check your connection and try again.`,
+    expired: (name) => `${name}'s Jagex login has expired. Press Log in again, then press Open RuneLite.`,
+    unchecked: (name, host) =>
+        host
+            ? `Couldn't check ${name}'s Jagex login through ${host}. Check that the proxy works, or choose None to log in inside RuneLite.`
+            : `Couldn't check ${name}'s Jagex login. Check your connection, or choose None to log in inside RuneLite.`,
     notSaved: (name) => `${name}'s login could not be saved for RuneLite. Check that the .runelite folder in your home folder is writable, then try again.`,
-    unknown: 'That character is no longer in the launcher. Pick it again or choose None.'
+    unknown: 'That character is no longer in the launcher. Add its Jagex account again, or choose None.',
+    notChosen: "Couldn't save which character to log in as. Pick it again.",
+    settings: "The launcher settings file (launcher-settings.json) can't be read, so the launcher doesn't know which character to log in as. Fix or delete that file in the .microbot folder, then try again.",
+    loginOpen: 'A Jagex login is already open in your browser.',
+    loginFailed: 'The Jagex login did not finish. Try again.'
 };
 
 function withinTime(promise, ms) {
@@ -25,21 +33,34 @@ function withinTime(promise, ms) {
 function proxyHost(proxyIp) {
     if (typeof proxyIp !== 'string' || !proxyIp.trim()) return null;
     const endpoint = parseProxyEndpoint(proxyIp);
-    return endpoint ? endpoint.host : 'a proxy';
+    return { host: endpoint ? endpoint.host : null };
+}
+
+function byName(a, b) {
+    const nameA = (a?.displayName || a?.accountId || '').toString().trim().toLowerCase();
+    const nameB = (b?.displayName || b?.accountId || '').toString().trim().toLowerCase();
+    if (nameA < nameB) return -1;
+    if (nameA > nameB) return 1;
+    return 0;
 }
 
 module.exports = function setupRuneliteCharacters(deps) {
-    const { fs, log, microbotDir, home, readSetting, writeSetting } = deps;
-    const sessionTimeoutMs = deps.sessionTimeoutMs || SESSION_TIMEOUT_MS;
+    const { fs, log, microbotDir, home, readSettings, writeSetting, settingsFile } = deps;
     const accountsFile = path.join(microbotDir, 'accounts.json');
-    const credentialDeps = { fs, path, homeDir: home };
+    const credentialDeps = { fs, path, homeDir: home, settingsFile, log };
+    const sessionTimeoutMs = deps.sessionTimeoutMs || SESSION_TIMEOUT_MS;
+    const onChecking = deps.onChecking || (() => {});
+    const focusWindow = deps.focusWindow || (() => {});
+    let loginRunning = false;
 
     const checkSession =
         deps.checkSession ||
         ((account) => {
             const { writeAccountsToFile } = require('./oauth-jagex.js');
-            return refreshSession({ writeAccountsToFile, log }, account.sessionId, account.proxyIp);
+            return refreshSession({ writeAccountsToFile, log }, account.sessionId, account.proxyIp, { timeoutMs: REQUEST_TIMEOUT_MS });
         });
+
+    const auth = () => deps.auth || require('./oauth-jagex.js');
 
     const readAccounts = () => {
         try {
@@ -52,67 +73,86 @@ module.exports = function setupRuneliteCharacters(deps) {
         }
     };
 
-    const savedChoice = () => {
-        const value = readSetting(CHARACTER_KEY);
-        return typeof value === 'string' && value ? value : null;
+    const find = (accounts, id) => accounts.find((account) => String(account.accountId) === id) || null;
+
+    const fileCharacter = (accounts) => {
+        try {
+            const id = credentials.credentialCharacterId(credentialDeps);
+            return id && find(accounts, id) ? id : null;
+        } catch (error) {
+            return null;
+        }
     };
 
     const list = () => {
         const accounts = readAccounts();
-        const saved = savedChoice();
+        const settings = readSettings() || {};
+        const saved = settings[CHARACTER_KEY];
+        const picked = saved === null || typeof saved === 'string';
+        const known = typeof saved === 'string' && find(accounts, saved);
         return {
-            characters: accounts.map((account) => ({
+            characters: [...accounts].sort(byName).map((account) => ({
                 accountId: String(account.accountId),
                 displayName: String(account.displayName),
                 proxy: proxyHost(account.proxyIp)
             })),
-            chosen: accounts.some((account) => String(account.accountId) === saved) ? saved : null
+            chosen: picked ? (known ? saved : null) : fileCharacter(accounts),
+            picked,
+            missing: typeof saved === 'string' && !known ? saved : null
         };
     };
 
     const choose = (accountId) => {
         const id = typeof accountId === 'string' && accountId ? accountId : null;
-        if (id && !readAccounts().some((account) => String(account.accountId) === id)) return { ...list(), error: MESSAGES.unknown };
+        if (id && !find(readAccounts(), id)) return { ...list(), error: MESSAGES.unknown };
         try {
-            if (!writeSetting(CHARACTER_KEY, id)) return { ...list(), error: 'Could not save the setting.' };
+            if (!writeSetting(CHARACTER_KEY, id)) return { ...list(), error: MESSAGES.notChosen };
         } catch (error) {
             log.warn(`Could not save the RuneLite character: ${error?.message || error}`);
-            return { ...list(), error: 'Could not save the setting.' };
+            return { ...list(), error: MESSAGES.notChosen };
         }
         return list();
     };
 
-    const clearLauncherLogin = (accounts) => {
+    const clearLauncherLogin = (settings) => {
         try {
-            const current = credentials.credentialCharacterId(credentialDeps);
-            if (!current || !accounts.some((account) => String(account.accountId) === current)) return;
+            if (!credentials.launcherWroteCurrent(credentialDeps, settings)) return false;
             credentials.removeCredentialProperties(credentialDeps);
-            log.info('Removed the launcher-written Jagex login from credentials.properties, so RuneLite opens on its login screen.');
+            writeSetting(credentials.WRITTEN_KEY, null);
+            log.info('Removed the Jagex login the launcher wrote to credentials.properties, so RuneLite opens on its login screen.');
+            return true;
         } catch (error) {
-            log.warn(`Could not clear credentials.properties: ${error?.message || error}`);
+            log.warn(`Could not clear credentials.properties: ${error?.code || error?.message || error}`);
+            return false;
+        }
+    };
+
+    const check = async (account) => {
+        try {
+            return await withinTime(Promise.resolve(checkSession(account)), sessionTimeoutMs);
+        } catch (error) {
+            return { ok: false };
         }
     };
 
     const prepare = async () => {
-        const accounts = readAccounts();
-        const saved = savedChoice();
-        const account = saved ? accounts.find((entry) => String(entry.accountId) === saved) : null;
-        if (!account) {
-            clearLauncherLogin(accounts);
-            return { ok: true };
-        }
+        const settings = readSettings();
+        if (!settings) return { ok: false, error: MESSAGES.settings };
+        const saved = settings[CHARACTER_KEY];
+        if (saved === undefined) return { ok: true };
+        if (saved === null) return { ok: true, touched: clearLauncherLogin(settings) };
+        const account = typeof saved === 'string' ? find(readAccounts(), saved) : null;
+        if (!account) return { ok: false, error: MESSAGES.unknown };
         const name = String(account.displayName);
-        if (!account.sessionId) return { ok: false, error: MESSAGES.expired(name), relogin: true };
-        let result;
-        try {
-            result = await withinTime(Promise.resolve(checkSession(account)), sessionTimeoutMs);
-        } catch (error) {
-            result = { ok: false };
-        }
+        const proxy = proxyHost(account.proxyIp);
+        if (!account.sessionId) return { ok: false, error: MESSAGES.expired(name), relogin: true, accountId: saved };
+        onChecking(name);
+        const result = await check(account);
         if (!result?.ok) {
             const expired = sessionExpired(result);
             log.warn(`The chosen character's Jagex login ${expired ? 'has expired' : 'could not be checked'}; RuneLite was not started.`);
-            return expired ? { ok: false, error: MESSAGES.expired(name), relogin: true } : { ok: false, error: MESSAGES.unchecked(name) };
+            if (expired) return { ok: false, error: MESSAGES.expired(name), relogin: true, accountId: saved };
+            return { ok: false, error: MESSAGES.unchecked(name, proxy ? proxy.host || 'its proxy' : null) };
         }
         const fresh = readAccounts().find((entry) => String(entry.accountId) === saved && entry.sessionId) || account;
         try {
@@ -122,10 +162,35 @@ module.exports = function setupRuneliteCharacters(deps) {
             return { ok: false, error: MESSAGES.notSaved(name) };
         }
         log.info('Wrote the chosen character to credentials.properties for RuneLite.');
-        return { ok: true };
+        return { ok: true, touched: true, name };
     };
 
-    return { list, choose, prepare };
+    const login = async (accountId) => {
+        const { startAuthFlow, authFlowRunning } = auth();
+        if (loginRunning || authFlowRunning?.()) return { ...list(), error: MESSAGES.loginOpen };
+        const before = readAccounts();
+        const target = typeof accountId === 'string' && accountId ? find(before, accountId) : null;
+        if (accountId && !target) return { ...list(), error: MESSAGES.unknown };
+        const proxyIp = target && typeof target.proxyIp === 'string' ? target.proxyIp.trim() : '';
+        loginRunning = true;
+        try {
+            await startAuthFlow({ proxy: { proxyIp }, keepProxies: true });
+        } catch (error) {
+            if (error?.code === 'CANCELLED') return { ...list(), cancelled: true };
+            log.warn(`The Jagex login from the RuneLite card failed: ${error?.message || error}`);
+            return { ...list(), error: error?.message || MESSAGES.loginFailed };
+        } finally {
+            loginRunning = false;
+            focusWindow();
+        }
+        const after = readAccounts();
+        const added = after.filter((account) => !find(before, String(account.accountId)));
+        if (!target && added.length === 1) choose(String(added[0].accountId));
+        const renewed = target ? Boolean(after.find((entry) => String(entry.accountId) === accountId && entry.sessionId && entry.sessionId !== target.sessionId)) : false;
+        return { ...list(), added: added.length, renewed };
+    };
+
+    return { list, choose, prepare, login };
 };
 
 module.exports.CHARACTER_KEY = CHARACTER_KEY;

@@ -16,11 +16,18 @@
         find: 'Find RuneLite…',
         working: 'Working...',
         failed: 'Something went wrong. Try again in a minute.',
-        none: 'None: log in inside RuneLite',
+        none: "None (I'll log in inside RuneLite)",
         addAccount: 'Add Jagex account',
         relogin: 'Log in again',
-        checking: (name) => `Checking ${name}'s Jagex login...`,
-        proxy: (name, host) => `${name} is set to play from ${host}; Microbot in RuneLite starts RuneLite without that proxy.`
+        cancelLogin: 'Cancel login',
+        reloginTitle: (name) => `Log in to the Jagex account that has ${name}.`,
+        ownIp: 'Logs in from your own IP.',
+        throughProxy: (host) => `Logs in through ${host}.`,
+        missing: 'Character no longer in the launcher',
+        missingHint: 'That character is no longer in the launcher. Add its Jagex account again, or choose None.',
+        addedMany: (count) => `Added ${count} characters. Pick one under Log in as.`,
+        proxy: (name, host) =>
+            `${name} ${host ? `uses the proxy ${host}` : 'uses a proxy'} in the Microbot client. RuneLite doesn't use proxies, so ${name} will connect from your own IP. To keep the proxy, play ${name} in the Microbot client.`
     };
 
     const MODES = ['client', 'runelite'];
@@ -89,15 +96,26 @@
 
     const OPENERS = ['open', 'find'];
 
-    const characterView = (data, { relogin = false } = {}) => {
+    const characterView = (data, { expired = [] } = {}) => {
         const characters = Array.isArray(data?.characters) ? data.characters : [];
         const chosen = characters.find((character) => character.accountId === data?.chosen) || null;
+        const missing = !chosen && typeof data?.missing === 'string' && data.missing ? data.missing : null;
+        const relogin = Boolean(chosen && expired.includes(chosen.accountId));
+        const options = [{ value: '', label: TEXT.none }, ...characters.map((character) => ({ value: character.accountId, label: character.displayName }))];
+        if (missing) options.push({ value: missing, label: TEXT.missing });
+        let warning = '';
+        if (missing) warning = TEXT.missingHint;
+        else if (chosen?.proxy) warning = TEXT.proxy(chosen.displayName, chosen.proxy.host);
         return {
-            options: [{ value: '', label: TEXT.none }, ...characters.map((character) => ({ value: character.accountId, label: character.displayName }))],
-            value: chosen ? chosen.accountId : '',
+            options,
+            value: chosen ? chosen.accountId : missing || '',
             name: chosen ? chosen.displayName : null,
-            warning: chosen?.proxy ? TEXT.proxy(chosen.displayName, chosen.proxy) : '',
-            addLabel: relogin ? TEXT.relogin : TEXT.addAccount
+            warning,
+            relogin,
+            loginFor: relogin ? chosen.accountId : null,
+            addLabel: relogin ? TEXT.relogin : TEXT.addAccount,
+            addTitle: relogin ? TEXT.reloginTitle(chosen.displayName) : '',
+            addNote: relogin && chosen.proxy ? TEXT.throughProxy(chosen.proxy.host || 'its proxy') : TEXT.ownIp
         };
     };
 
@@ -114,15 +132,18 @@
     let mode = 'client';
     let requests = 0;
     let characterData = null;
-    let relogin = false;
+    let expired = [];
     let adding = false;
     let choosing = null;
+    let characterMessage = '';
+
+    const currentView = () => characterView(characterData, { expired });
 
     const renderCharacters = () => {
         const box = $('runelite-loader-character');
         if (!box) return;
         box.hidden = !offersCharacters(cardView(latest));
-        const view = characterView(characterData, { relogin });
+        const view = currentView();
         const select = $('runelite-loader-character-select');
         if (select) {
             const key = JSON.stringify(view.options);
@@ -141,12 +162,17 @@
             select.disabled = busy || adding;
         }
         const add = $('runelite-loader-add-account');
-        if (add && !adding) {
-            add.textContent = view.addLabel;
-            add.disabled = busy;
+        if (add) {
+            add.textContent = adding ? TEXT.cancelLogin : view.addLabel;
+            add.title = adding ? '' : view.addTitle;
+            add.disabled = busy && !adding;
         }
+        const note = $('runelite-loader-add-note');
+        if (note) note.textContent = adding ? '' : view.addNote;
         const warning = $('runelite-loader-character-warning');
         if (warning) warning.textContent = view.warning;
+        const message = $('runelite-loader-character-message');
+        if (message) message.textContent = characterMessage;
     };
 
     const applyLayout = () => {
@@ -253,8 +279,8 @@
 
     const chooseCharacter = (accountId) => {
         if (!api()?.setCharacter) return;
-        relogin = false;
-        characterData = { ...(characterData || {}), chosen: accountId || null };
+        characterMessage = '';
+        characterData = { ...(characterData || {}), chosen: accountId || null, missing: null };
         renderCharacters();
         const pending = (async () => {
             try {
@@ -271,22 +297,27 @@
     };
 
     const addAccount = async () => {
-        const button = $('runelite-loader-add-account');
-        if (!button || typeof window.runJagexLogin !== 'function') return;
+        if (!api()?.login) return;
         if (adding) {
-            await window.runJagexLogin(button);
+            await window.electron?.cancelAuthFlow?.();
             return;
         }
+        const target = currentView().loginFor;
         adding = true;
-        renderCharacters();
+        characterMessage = '';
+        render({ ...latest, error: '' });
+        let result;
         try {
-            await window.runJagexLogin(button);
+            result = await api().login(target);
         } catch (error) {
-            window.electron?.logError?.(`Jagex login from the RuneLite card failed: ${error?.message || error}`);
+            result = { error: TEXT.failed };
         }
         adding = false;
-        relogin = false;
-        await refreshCharacters();
+        if (result && Array.isArray(result.characters)) characterData = result;
+        if (target && result?.renewed) expired = expired.filter((id) => id !== target);
+        if (!target && result?.added > 1) characterMessage = TEXT.addedMany(result.added);
+        if (result?.error) render({ ...latest, error: result.error });
+        else render(latest);
     };
 
     const refresh = async () => {
@@ -339,9 +370,8 @@
         if (busy || !api()?.[action]) return;
         busy = true;
         if (choosing) await choosing;
-        const base = { ...latest, error: '' };
-        const name = characterView(characterData).name;
-        render(action === 'open' && name ? { ...base, flash: TEXT.checking(name) } : base);
+        render({ ...latest, error: '' });
+        const chosen = currentView().value;
         let result;
         try {
             result = action === 'open' && recorder.on && (recorder.running || recorder.updating) ? await recorderApi().open() : await api()[action]();
@@ -349,13 +379,14 @@
             result = { ok: false, error: TEXT.failed };
         }
         busy = false;
-        if (result?.cancelled) return render(base);
-        relogin = result?.relogin === true;
-        const opener = result?.opener || base.opener;
-        const starts = result?.starts || (opener === 'find' ? undefined : base.starts);
-        if (!result?.ok) return render({ ...base, opener, starts, error: result?.error || TEXT.failed });
+        if (result?.cancelled) return render({ ...latest, flash: '' });
+        if (result?.relogin && result.accountId && !expired.includes(result.accountId)) expired = [...expired, result.accountId];
+        if (result?.ok && chosen) expired = expired.filter((id) => id !== chosen);
+        const opener = result?.opener || latest.opener;
+        const starts = result?.starts || (opener === 'find' ? undefined : latest.starts);
+        if (!result?.ok) return render({ ...latest, opener, starts, flash: '', error: result?.error || TEXT.failed });
         clearTimeout(flashTimer);
-        render({ ...base, opener, starts, error: '', flash: result.message });
+        render({ ...latest, opener, starts, error: '', flash: result.message });
         flashTimer = setTimeout(() => {
             if (latest.flash) render({ ...latest, flash: '' });
         }, FLASH_MS);
@@ -383,6 +414,9 @@
         $('session-recorder-switch')?.addEventListener('change', (event) => toggleRecorder(event.target.checked));
         $('session-recorder-recordings')?.addEventListener('click', () => openRecordings().catch(() => {}));
         recorderApi()?.onStatus?.((view) => renderRecorder(view));
+        api()?.onLaunchStatus?.((data) => {
+            if (busy && data?.text) render({ ...latest, flash: data.text });
+        });
         api()?.onProgress?.((data) => {
             if (busy && data?.text) render({ visible: true, state: 'working', progress: data.text, mode });
         });
@@ -391,5 +425,6 @@
     };
 
     window.refreshRuneliteLoader = refresh;
+    window.refreshRuneliteCharacters = refreshCharacters;
     init();
 })();
