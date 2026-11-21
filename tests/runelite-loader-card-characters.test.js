@@ -517,11 +517,11 @@ describe('character picker markup and wiring', () => {
         const renderer = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
         const calls = renderer.split('window.refreshRuneliteCharacters?.()').length - 1;
         expect(calls).toBe(5);
-        expect(renderer).toMatch(/startAuthFlow\(getProxyValues\(\)\);\n\s*window\.refreshRuneliteCharacters\?\.\(\);/);
-        expect(renderer).toMatch(/deleteAccount\(accountId\);\n\s*window\.refreshRuneliteCharacters\?\.\(\);/);
-        expect(renderer).toMatch(/removeAccounts\(\);\n\s*window\.refreshRuneliteCharacters\?\.\(\);/);
-        expect(renderer).toMatch(/refreshAccounts\(getProxyValues\(\)\);\n\s*window\.refreshRuneliteCharacters\?\.\(\);/);
-        expect(renderer).toMatch(/if \(hasChanged\) \{\n\s*window\.refreshRuneliteCharacters\?\.\(\);/);
+        expect(renderer).toMatch(/startAuthFlow\(getProxyValues\(\)\);\r?\n\s*window\.refreshRuneliteCharacters\?\.\(\);/);
+        expect(renderer).toMatch(/deleteAccount\(accountId\);\r?\n\s*window\.refreshRuneliteCharacters\?\.\(\);/);
+        expect(renderer).toMatch(/removeAccounts\(\);\r?\n\s*window\.refreshRuneliteCharacters\?\.\(\);/);
+        expect(renderer).toMatch(/refreshAccounts\(getProxyValues\(\)\);\r?\n\s*window\.refreshRuneliteCharacters\?\.\(\);/);
+        expect(renderer).toMatch(/if \(hasChanged\) \{\r?\n\s*window\.refreshRuneliteCharacters\?\.\(\);/);
     });
 
     test('main.js gives the card the same launch queue as the client launches', () => {
