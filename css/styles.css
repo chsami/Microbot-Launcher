@@ -20,6 +20,9 @@
     --surface-3: #2a2119;
     --line: #2e261c;
     --line-strong: #4a3a2a;
+    --line-mid: #3a2e22;
+    /* page shade behind dialogs and the tour */
+    --shade: #0a0806;
     --text: #d6cfc2;
     --text-strong: #f5efe4;
     --muted: #9b9384;
@@ -44,6 +47,8 @@
     --surface-3: #242833;
     --line: #262a33;
     --line-strong: #2e3340;
+    --line-mid: #2e3340;
+    --shade: #15171c;
     --text: #c9cdd6;
     --text-strong: #e3e6ec;
     --muted: #8b93a3;
@@ -60,6 +65,8 @@
     --surface-3: #3c3c3c;
     --line: #323232;
     --line-strong: #4d4d4d;
+    --line-mid: #4d4d4d;
+    --shade: #181818;
     --text: #c6c6c6;
     --text-strong: #ebebeb;
     --muted: #a5a5a5;
@@ -221,7 +228,7 @@ webview#website {
 .auth-modal {
     position: fixed;
     inset: 0;
-    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    background: color-mix(in srgb, var(--shade) 92%, transparent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1584,7 +1591,7 @@ h2 {
     gap: 4px;
     margin-bottom: 10px;
     padding: 4px;
-    border: 1px solid var(--line-strong);
+    border: 1px solid var(--line-mid);
     border-radius: 8px;
     background: var(--surface-2);
 }
@@ -2839,7 +2846,7 @@ button.hamburger {
 }
 
 .setup-guide.dimmed {
-    background: color-mix(in srgb, var(--bg) 80%, transparent);
+    background: color-mix(in srgb, var(--shade) 80%, transparent);
 }
 
 .setup-guide.guide-hidden,
@@ -3327,7 +3334,7 @@ button.hamburger {
     border: 2px solid var(--gold);
     border-radius: 10px;
     pointer-events: none;
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--gold) 22%, transparent), 0 0 0 200vmax color-mix(in srgb, var(--bg) 80%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--gold) 22%, transparent), 0 0 0 200vmax color-mix(in srgb, var(--shade) 80%, transparent);
     transition: top 0.3s ease, left 0.3s ease, width 0.3s ease, height 0.3s ease;
 }
 
