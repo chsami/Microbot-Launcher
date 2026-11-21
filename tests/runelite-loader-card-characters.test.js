@@ -235,14 +235,20 @@ describe('character picker on the card', () => {
         expect(card.elements['runelite-loader-character-select'].value).toBe('char-old');
     });
 
-    test('never picked with an expired login file offers Log in again for that character', async () => {
-        const error = "Zezima's Jagex login has expired. Press Log in again, then press Open RuneLite.";
-        const card = loadCard({ characters: { ...CHARACTERS, chosen: 'char-old', picked: false }, openResult: { ok: false, error, relogin: true, accountId: 'char-old' } });
+    test('never picked with an expired login file starts RuneLite, shows the note and offers Log in again', async () => {
+        const notice = "Zezima's saved login has expired; RuneLite will open on its login screen. Press Log in again to renew it.";
+        const card = loadCard({
+            characters: { ...CHARACTERS, chosen: 'char-old', picked: false },
+            openResult: { ok: true, message: 'RuneLite is starting. Microbot will be in the sidebar.', notice, relogin: true, accountId: 'char-old' }
+        });
         await flush();
 
         card.elements['runelite-loader-action'].click();
         await flush();
 
+        expect(card.elements['runelite-loader-hint'].textContent).toBe('RuneLite is starting. Microbot will be in the sidebar.');
+        expect(card.elements['runelite-loader-error'].textContent).toBe('');
+        expect(card.elements['runelite-loader-character-message'].textContent).toBe(notice);
         expect(card.add().textContent).toBe('Log in again');
         await card.add().click();
         await flush();

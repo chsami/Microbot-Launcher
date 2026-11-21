@@ -48,6 +48,7 @@ describe('characters on the Microbot in RuneLite card', () => {
     let settingsFile;
     let log;
     let checkSession;
+    let peekSession;
 
     const credentialsFile = () => path.join(home, '.runelite', 'credentials.properties');
     const logged = () => [...log.info.mock.calls, ...log.warn.mock.calls, ...log.error.mock.calls].map((args) => args.join(' ')).join('\n');
@@ -95,6 +96,7 @@ describe('characters on the Microbot in RuneLite card', () => {
             home,
             platform: 'linux',
             checkSession,
+            peekSession,
             getWindow: () => ({ isDestroyed: () => false, webContents, isMinimized: () => false, show: jest.fn(), focus: jest.fn() }),
             ...overrides
         });
@@ -109,6 +111,7 @@ describe('characters on the Microbot in RuneLite card', () => {
         settingsFile = path.join(microbotDir, 'launcher-settings.json');
         log = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
         checkSession = jest.fn(async () => ({ ok: true, added: 0, updated: 0 }));
+        peekSession = jest.fn(async () => ({ ok: true }));
         writeAccounts(ACCOUNTS);
     });
 
@@ -187,44 +190,80 @@ describe('characters on the Microbot in RuneLite card', () => {
     });
 
     describe('never picked: exactly as before', () => {
-        test('the file’s login is checked but credentials.properties is never written or removed', async () => {
+        test('the file’s login is checked read-only and credentials.properties is never written or removed', async () => {
             foreignFile('JX_CHARACTER_ID=char-new\nJX_SESSION_ID=file-session\n');
+            const accountsBefore = fs.readFileSync(path.join(microbotDir, 'accounts.json'), 'utf8');
             const spawn = launchable();
             const { loader, webContents } = setupLoader({ spawn });
 
             expect(await loader.openRuneLite()).toEqual({ ok: true, message: STARTING });
 
-            expect(checkSession).toHaveBeenCalledTimes(1);
-            expect(checkSession.mock.calls[0][0]).toMatchObject({ accountId: 'char-new', sessionId: 'file-session', proxyIp: '203.0.113.7:1080:user:secretpass' });
+            expect(peekSession).toHaveBeenCalledTimes(1);
+            expect(peekSession.mock.calls[0][0]).toMatchObject({ accountId: 'char-new', sessionId: 'file-session', proxyIp: '203.0.113.7:1080:user:secretpass' });
+            expect(checkSession).not.toHaveBeenCalled();
             expect(webContents.send).toHaveBeenCalledWith('runelite-loader:launch-status', { text: "Checking Lynx Titan's Jagex login..." });
             expect(fs.readFileSync(credentialsFile(), 'utf8')).toBe('JX_CHARACTER_ID=char-new\nJX_SESSION_ID=file-session\n');
+            expect(fs.readFileSync(path.join(microbotDir, 'accounts.json'), 'utf8')).toBe(accountsBefore);
             expect(readSettings()).toEqual({});
             expect(spawn).toHaveBeenCalledTimes(1);
         });
 
-        test('an expired file login offers Log in again and leaves the file alone', async () => {
+        test('an expired file login still starts RuneLite, with a note and Log in again', async () => {
             launcherWrite(ACCOUNTS[0]);
             const before = fs.readFileSync(credentialsFile(), 'utf8');
-            checkSession.mockResolvedValue({ ok: false, status: 401 });
+            peekSession.mockResolvedValue({ ok: false, status: 401 });
             const spawn = launchable();
 
-            expect(await setupLoader({ spawn }).loader.openRuneLite()).toEqual({ ok: false, error: MESSAGES.expired('zezima'), relogin: true, accountId: 'char-old' });
-            expect(spawn).not.toHaveBeenCalled();
+            expect(await setupLoader({ spawn }).loader.openRuneLite()).toEqual({
+                ok: true,
+                message: STARTING,
+                notice: "zezima's saved login has expired; RuneLite will open on its login screen. Press Log in again to renew it.",
+                relogin: true,
+                accountId: 'char-old'
+            });
+            expect(spawn).toHaveBeenCalledTimes(1);
             expect(fs.readFileSync(credentialsFile(), 'utf8')).toBe(before);
         });
 
         test('a file login that cannot be checked starts RuneLite as before', async () => {
             launcherWrite(ACCOUNTS[0]);
-            checkSession.mockResolvedValue({ ok: false, error: 'offline' });
+            peekSession.mockResolvedValue({ ok: false });
 
-            expect((await setupLoader().loader.openRuneLite()).ok).toBe(true);
+            expect(await setupLoader().loader.openRuneLite()).toEqual({ ok: true, message: STARTING });
         });
 
         test('a file for a character the launcher does not know is not checked', async () => {
             foreignFile('JX_CHARACTER_ID=someone-else\nJX_SESSION_ID=theirs\n');
 
             expect((await setupLoader().loader.openRuneLite()).ok).toBe(true);
-            expect(checkSession).not.toHaveBeenCalled();
+            expect(peekSession).not.toHaveBeenCalled();
+        });
+
+        test('the read-only check only asks Jagex, through the proxy, and closes the bridge', async () => {
+            jest.resetModules();
+            const close = jest.fn(async () => {});
+            jest.doMock('../libs/login-proxy.js', () => ({
+                ...jest.requireActual('../libs/login-proxy.js'),
+                startLoginProxy: jest.fn(async () => ({ httpOptions: { proxy: false }, close }))
+            }));
+            const fresh = require('../libs/jagex-session');
+            const expired = Object.assign(new Error('Request failed with status code 401'), { response: { status: 401 } });
+            const axios = { get: jest.fn(async () => { throw expired; }) };
+
+            const result = await fresh.peekSession({ axios, log }, 'file-session', '203.0.113.7:1080', { timeoutMs: 15000 });
+
+            expect(result).toEqual({ ok: false, status: 401 });
+            expect(fresh.sessionExpired(result)).toBe(true);
+            expect(axios.get).toHaveBeenCalledWith('https://auth.jagex.com/game-session/v1/accounts', {
+                proxy: false,
+                timeout: 15000,
+                headers: { Authorization: 'Bearer file-session' }
+            });
+            expect(close).toHaveBeenCalledTimes(1);
+            expect(logged()).not.toContain('file-session');
+            axios.get.mockResolvedValue({ data: [] });
+            expect(await fresh.peekSession({ axios, log }, 'file-session', '')).toEqual({ ok: true });
+            jest.dontMock('../libs/login-proxy.js');
         });
 
         test('members with no settings and no accounts see no change', async () => {
@@ -396,6 +435,24 @@ describe('characters on the Microbot in RuneLite card', () => {
 
             expect((await setupLoader().loader.openRuneLite()).ok).toBe(true);
             expect(fs.readFileSync(credentialsFile(), 'utf8')).toBe(runeliteFile);
+        });
+
+        test('leaves a Java-written file even with empty tokens', async () => {
+            writeSettings({ runeliteCharacter: null });
+            const javaFile = [
+                '#Do not share this file with anyone',
+                '#Sat Nov 21 17:28:19 CET 2026',
+                'JX_CHARACTER_ID=char-old',
+                'JX_SESSION_ID=theirs',
+                'JX_REFRESH_TOKEN=',
+                'JX_DISPLAY_NAME=zezima',
+                'JX_ACCESS_TOKEN=',
+                ''
+            ].join('\n');
+            foreignFile(javaFile);
+
+            expect((await setupLoader().loader.openRuneLite()).ok).toBe(true);
+            expect(fs.readFileSync(credentialsFile(), 'utf8')).toBe(javaFile);
         });
 
         test('leaves a file that changed since the launcher wrote it', async () => {

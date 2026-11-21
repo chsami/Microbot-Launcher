@@ -133,6 +133,7 @@ module.exports = function setupRuneliteLoader(deps) {
         readSettings,
         writeSetting,
         checkSession: deps.checkSession,
+        peekSession: deps.peekSession,
         sessionTimeoutMs: deps.sessionTimeoutMs,
         auth: deps.jagexAuth,
         onChecking: (name) => sendLaunchStatus(MESSAGES.checking(name)),
@@ -163,8 +164,9 @@ module.exports = function setupRuneliteLoader(deps) {
         inTurn(async () => {
             const login = await characters.prepare();
             if (!login.ok) return { result: login, hold: false };
-            const result = await start(login);
-            return { result, hold: Boolean(login.touched && result?.ok) };
+            const started = await start(login);
+            const result = started?.ok && login.notice ? { ...started, notice: login.notice, relogin: true, accountId: login.accountId } : started;
+            return { result, hold: Boolean(login.touched && started?.ok) };
         });
 
     const rememberedRuneLite = () => {

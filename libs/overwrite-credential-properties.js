@@ -14,6 +14,7 @@ const CREDENTIAL_KEYS = Object.keys(credentialEnv({}));
 
 const WRITTEN_KEY = 'credentialsWritten';
 const HEADER = '#Do not share this file with anyone';
+const JS_DATE_LINE = /^#\w{3} \w{3} \d{2} \d{4} \d{2}:\d{2}:\d{2} GMT[+-]\d{4}/;
 
 function credentialFile(path, homeDir) {
     return path.join(homeDir, '.runelite', 'credentials.properties');
@@ -82,7 +83,7 @@ function credentialCharacterId(deps) {
 function inLauncherFormat(text) {
     const lines = text.split('\n');
     if (lines.at(-1) === '') lines.pop();
-    if (lines.length !== CREDENTIAL_KEYS.length + 2 || lines[0] !== HEADER || !lines[1].startsWith('#')) return false;
+    if (lines.length !== CREDENTIAL_KEYS.length + 2 || lines[0] !== HEADER || !JS_DATE_LINE.test(lines[1])) return false;
     return CREDENTIAL_KEYS.every((key, index) => {
         const line = lines[index + 2];
         if (!line.startsWith(`${key}=`)) return false;

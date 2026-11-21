@@ -1,7 +1,7 @@
 const path = require('path');
 const { orderAccounts } = require('./accounts-loader.js');
 const { parseProxyEndpoint } = require('./proxy-choices.js');
-const { refreshSession, sessionExpired } = require('./jagex-session.js');
+const { refreshSession, peekSession, sessionExpired } = require('./jagex-session.js');
 const credentials = require('./overwrite-credential-properties.js');
 
 const CHARACTER_KEY = 'runeliteCharacter';
@@ -9,6 +9,7 @@ const SESSION_TIMEOUT_MS = 20000;
 const REQUEST_TIMEOUT_MS = 15000;
 
 const MESSAGES = {
+    savedExpired: (name) => `${name}'s saved login has expired; RuneLite will open on its login screen. Press Log in again to renew it.`,
     expired: (name) => `${name}'s Jagex login has expired. Press Log in again, then press Open RuneLite.`,
     unchecked: (name, host) =>
         host
@@ -61,6 +62,10 @@ module.exports = function setupRuneliteCharacters(deps) {
             const { writeAccountsToFile } = require('./oauth-jagex.js');
             return refreshSession({ writeAccountsToFile, log }, account.sessionId, account.proxyIp, { timeoutMs: REQUEST_TIMEOUT_MS });
         });
+
+    const checkSavedLogin =
+        deps.peekSession ||
+        ((account) => peekSession({ axios: require('axios'), log }, account.sessionId, account.proxyIp, { timeoutMs: REQUEST_TIMEOUT_MS }));
 
     const auth = () => deps.auth || require('./oauth-jagex.js');
 
@@ -158,9 +163,9 @@ module.exports = function setupRuneliteCharacters(deps) {
         }
     };
 
-    const check = async (account) => {
+    const check = async (account, how = checkSession) => {
         try {
-            return await withinTime(Promise.resolve(checkSession(account)), sessionTimeoutMs);
+            return await withinTime(Promise.resolve(how(account)), sessionTimeoutMs);
         } catch (error) {
             return { ok: false };
         }
@@ -172,10 +177,10 @@ module.exports = function setupRuneliteCharacters(deps) {
         if (!account) return { ok: true };
         const name = String(account.displayName);
         onChecking(name);
-        const result = await check({ ...account, sessionId: login.sessionId });
+        const result = await check({ ...account, sessionId: login.sessionId }, checkSavedLogin);
         if (!result?.ok && sessionExpired(result)) {
-            log.warn("The Jagex login in credentials.properties has expired; RuneLite was not started.");
-            return { ok: false, error: MESSAGES.expired(name), relogin: true, accountId: String(account.accountId) };
+            log.warn('The Jagex login in credentials.properties has expired; RuneLite starts on its login screen.');
+            return { ok: true, notice: MESSAGES.savedExpired(name), relogin: true, accountId: String(account.accountId) };
         }
         return { ok: true };
     };

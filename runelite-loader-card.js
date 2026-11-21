@@ -388,7 +388,8 @@
         busy = false;
         if (result?.cancelled) return render({ ...latest, flash: '' });
         if (result?.relogin && result.accountId && !expired.includes(result.accountId)) expired = [...expired, result.accountId];
-        if (result?.ok && chosen) expired = expired.filter((id) => id !== chosen);
+        if (result?.ok && !result.relogin && chosen) expired = expired.filter((id) => id !== chosen);
+        if (result?.ok) characterMessage = result.notice || '';
         const opener = result?.opener || latest.opener;
         const starts = result?.starts || (opener === 'find' ? undefined : latest.starts);
         if (!result?.ok) return render({ ...latest, opener, starts, flash: '', error: result?.error || TEXT.failed });
