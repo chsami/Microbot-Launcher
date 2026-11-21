@@ -329,6 +329,18 @@ describe('api-auth', () => {
             }));
         });
 
+        test('pass a binary response type and size limit through for downloads', async () => {
+            const { auth } = await signIn();
+            axios.request.mockResolvedValue({ data: Buffer.from('jar') });
+
+            await auth.request({ method: 'get', path: '/api/loader/agent', responseType: 'arraybuffer', maxContentLength: 10 });
+            await auth.request({ method: 'get', path: '/api/loader/access' });
+
+            expect(axios.request.mock.calls[0][0]).toMatchObject({ responseType: 'arraybuffer', maxContentLength: 10 });
+            expect(axios.request.mock.calls[1][0]).not.toHaveProperty('responseType');
+            expect(axios.request.mock.calls[1][0]).not.toHaveProperty('maxContentLength');
+        });
+
         test('refresh an expired access token once and retry', async () => {
             const { auth } = await signIn();
             axios.post.mockResolvedValueOnce({ data: { token: 'access-2', refreshToken: 'refresh-2' } });
