@@ -1,4 +1,6 @@
-// ~/.microbot/theme.json: the look picked in Themes. The native launcher and the client read the same file.
+// ~/.microbot/theme.json: the look picked in Themes; the client reads the same file at startup.
+// A key that is missing or not one of the names below counts as not picked: the launcher then keeps its own look
+// (Gold, Montserrat) and the client keeps the stock RuneLite look (Classic, RuneScape).
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -6,12 +8,14 @@ const path = require('path');
 const THEMES = ['gold', 'slate', 'classic'];
 const FONTS = ['montserrat', 'inter', 'runescape'];
 
-function normalize(value) {
-    const pick = (raw, allowed) => {
-        const v = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
-        return allowed.includes(v) ? v : allowed[0];
-    };
-    return { theme: pick(value?.theme, THEMES), font: pick(value?.font, FONTS) };
+// only the keys that hold a known value, lower-cased the way the client compares them
+function clean(value) {
+    const out = {};
+    for (const [key, allowed] of [['theme', THEMES], ['font', FONTS]]) {
+        const v = typeof value?.[key] === 'string' ? value[key].trim().toLowerCase() : '';
+        if (allowed.includes(v)) out[key] = v;
+    }
+    return out;
 }
 
 function settingsFile(home = os.homedir()) {
@@ -20,14 +24,15 @@ function settingsFile(home = os.homedir()) {
 
 function read(home) {
     try {
-        return normalize(JSON.parse(fs.readFileSync(settingsFile(home), 'utf8')));
+        return clean(JSON.parse(fs.readFileSync(settingsFile(home), 'utf8')));
     } catch {
-        return normalize({});
+        return {};
     }
 }
 
 function write(value, home) {
-    const next = normalize(value);
+    // merge into what is saved, so a window that has not read the file yet cannot drop the other key
+    const next = { ...read(home), ...clean(value) };
     const file = settingsFile(home);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     // write a temp file and rename it over, so a client starting now never reads half a file
@@ -56,4 +61,4 @@ function register(ipcMain, log) {
     });
 }
 
-module.exports = { THEMES, FONTS, normalize, read, write, register, settingsFile };
+module.exports = { THEMES, FONTS, clean, read, write, register, settingsFile };

@@ -129,6 +129,15 @@
 .theme-option input {
     accent-color: var(--gold);
 }
+.theme-option:has(input:focus-visible) {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+}
+.theme-unset {
+    color: var(--muted);
+    font-size: 12px;
+    margin: 0 0 12px;
+}
 .theme-option .swatches {
     display: flex;
     gap: 4px;
