@@ -1,13 +1,12 @@
 // Menu > Themes: applies the saved look on start and saves changes to ~/.microbot/theme.json.
-// The file may hold only some keys (see libs/theme-settings.js): a key not picked yet shows no choice, and the
-// launcher keeps its own look for it (Gold, Montserrat) while the client keeps the stock RuneLite one.
+// With no theme saved (see libs/theme-settings.js) nothing is checked: the launcher keeps its own look (Gold)
+// while the client keeps the stock RuneLite one.
 (() => {
     const $ = (id) => document.getElementById(id);
-    const NAMES = ['theme', 'font'];
-    const LAUNCHER = { theme: 'gold', font: 'montserrat' };
+    const NAMES = ['theme'];
+    const LAUNCHER = { theme: 'gold' };
     const apply = (picked) => {
         document.documentElement.dataset.theme = picked.theme || LAUNCHER.theme;
-        document.documentElement.dataset.font = picked.font || LAUNCHER.font;
         for (const input of document.querySelectorAll('#theme-modal input[type="radio"]')) {
             input.checked = input.value === picked[input.name];
         }

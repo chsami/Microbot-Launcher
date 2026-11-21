@@ -28,14 +28,16 @@ describe('theme-settings', () => {
     test('writes only known values, in the shape the client reads', () => {
         expect(settings.write({ theme: 'Slate', font: 'evil', extra: 1 }, home)).toEqual({ theme: 'slate' });
         expect(JSON.parse(fs.readFileSync(settings.settingsFile(home), 'utf8'))).toEqual({ theme: 'slate' });
-        expect(settings.write({ theme: 'classic', font: 'Inter' }, home)).toEqual({ theme: 'classic', font: 'inter' });
-        expect(settings.read(home)).toEqual({ theme: 'classic', font: 'inter' });
+        expect(settings.write({ theme: ' Classic ' }, home)).toEqual({ theme: 'classic' });
+        expect(settings.read(home)).toEqual({ theme: 'classic' });
     });
 
-    test('a write keeps the saved key it does not change', () => {
-        settings.write({ theme: 'slate' }, home);
-        expect(settings.write({ font: 'inter' }, home)).toEqual({ theme: 'slate', font: 'inter' });
-        expect(settings.read(home)).toEqual({ theme: 'slate', font: 'inter' });
+    test('a write without a theme keeps the saved one, and an old font key is dropped', () => {
+        fs.mkdirSync(path.join(home, '.microbot'));
+        fs.writeFileSync(settings.settingsFile(home), '{"theme":"slate","font":"inter"}');
+        expect(settings.read(home)).toEqual({ theme: 'slate' });
+        expect(settings.write({ font: 'inter' }, home)).toEqual({ theme: 'slate' });
+        expect(settings.read(home)).toEqual({ theme: 'slate' });
     });
 
     test('replaces the file without leaving temp files behind', () => {

@@ -76,39 +76,6 @@
     --gold-soft: #e6be78;
     --on-gold: #141414;
 }
-@font-face {
-    font-family: Inter;
-    src: url('../fonts/Inter-Regular.ttf') format('truetype');
-    font-weight: 400;
-    font-display: swap;
-}
-@font-face {
-    font-family: Inter;
-    src: url('../fonts/Inter-SemiBold.ttf') format('truetype');
-    font-weight: 500 900;
-    font-display: swap;
-}
-/* The RuneScape fonts are drawn small; size-adjust keeps text the same size as Montserrat. */
-@font-face {
-    font-family: RuneScape;
-    src: url('../fonts/runescape.ttf') format('truetype');
-    font-weight: 400;
-    size-adjust: 125%;
-    font-display: swap;
-}
-@font-face {
-    font-family: RuneScape;
-    src: url('../fonts/runescape_bold.ttf') format('truetype');
-    font-weight: 500 900;
-    size-adjust: 125%;
-    font-display: swap;
-}
-:root[data-font="inter"] {
-    --body: Inter, Roboto, sans-serif;
-}
-:root[data-font="runescape"] {
-    --body: RuneScape, Roboto, sans-serif;
-}
 .theme-picker-card fieldset {
     border: 0;
     margin: 0 0 14px;

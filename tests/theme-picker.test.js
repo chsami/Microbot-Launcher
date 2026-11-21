@@ -10,7 +10,7 @@ function load({ deferWrites = false, failFirstWrite = false, saved = {} } = {}) 
         textContent: '',
     });
     // two radios per group, none checked unless a read says so
-    const radios = ['theme', 'font'].flatMap((name) => [0, 1].map((i) => ({ name, value: name + i, type: 'radio', checked: false, focus() { focused.el = this; } })));
+    const radios = ['theme'].flatMap((name) => [0, 1].map((i) => ({ name, value: name + i, type: 'radio', checked: false, focus() { focused.el = this; } })));
     const focused = {};
     const els = { 'theme-modal': element('modal'), 'theme-close': element('close'), 'theme-error': element('error'), 'app-menu': element('menu'), 'menu-btn': { focus: () => (focused.menu = true) } };
     els['theme-modal'].querySelector = (sel) => {
@@ -64,31 +64,31 @@ describe('theme picker', () => {
         const p = load();
         await flush();
         p.change('theme', 'slate');
-        p.reads[0]({ theme: 'gold', font: 'montserrat' }); // the startup read lands late
+        p.reads[0]({ theme: 'gold' }); // the startup read lands late
         await flush();
         expect(p.root.dataset.theme).toBe('slate');
     });
 
-    test('quick changes keep both choices and save them in order', async () => {
+    test('quick changes save in order and the last one wins', async () => {
         const p = load();
         await flush();
-        p.reads[0]({ theme: 'gold', font: 'montserrat' });
+        p.reads[0]({ theme: 'gold' });
         await flush();
         p.change('theme', 'slate');
-        p.change('font', 'inter');
+        p.change('theme', 'classic');
         await flush();
         await flush();
-        expect(p.writes).toEqual([{ theme: 'slate' }, { font: 'inter' }]);
-        expect(p.root.dataset).toEqual({ theme: 'slate', font: 'inter' });
+        expect(p.writes).toEqual([{ theme: 'slate' }, { theme: 'classic' }]);
+        expect(p.root.dataset).toEqual({ theme: 'classic' });
     });
 
     test('a focus read waits for queued saves before reading', async () => {
         const p = load({ deferWrites: true });
         await flush();
-        p.reads[0]({ theme: 'gold', font: 'montserrat' });
+        p.reads[0]({ theme: 'gold' });
         await flush();
         p.change('theme', 'slate');
-        p.change('font', 'inter');
+        p.change('theme', 'classic');
         p.focus();
         await flush();
         expect(p.reads.length).toBe(1); // no read while saves are in flight
@@ -97,29 +97,29 @@ describe('theme picker', () => {
             await flush();
             await flush();
         }
-        expect(p.writes).toEqual([{ theme: 'slate' }, { font: 'inter' }]);
+        expect(p.writes).toEqual([{ theme: 'slate' }, { theme: 'classic' }]);
         expect(p.reads.length).toBe(2);
-        p.reads[1]({ theme: 'slate', font: 'inter' });
+        p.reads[1]({ theme: 'classic' });
         await flush();
-        expect(p.root.dataset).toEqual({ theme: 'slate', font: 'inter' });
+        expect(p.root.dataset).toEqual({ theme: 'classic' });
     });
 
-    test('with nothing picked the launcher stays Gold and a font pick saves only the font', async () => {
+    test('with nothing picked the launcher stays Gold until a theme is picked', async () => {
         const p = load();
         await flush();
         p.reads[0]({});
         await flush();
-        expect(p.root.dataset).toEqual({ theme: 'gold', font: 'montserrat' });
-        p.change('font', 'inter');
+        expect(p.root.dataset).toEqual({ theme: 'gold' });
+        p.change('theme', 'slate');
         await flush();
-        expect(p.writes).toEqual([{ font: 'inter' }]);
-        expect(p.root.dataset).toEqual({ theme: 'gold', font: 'inter' });
+        expect(p.writes).toEqual([{ theme: 'slate' }]);
+        expect(p.root.dataset).toEqual({ theme: 'slate' });
     });
 
     test('a failed save does not block the next one', async () => {
         const p = load({ failFirstWrite: true });
         await flush();
-        p.reads[0]({ theme: 'gold', font: 'montserrat' });
+        p.reads[0]({ theme: 'gold' });
         await flush();
         p.change('theme', 'slate');
         p.change('theme', 'classic');
@@ -128,16 +128,6 @@ describe('theme picker', () => {
         await flush();
         expect(p.writes).toEqual([{ theme: 'slate' }, { theme: 'classic' }]);
         expect(p.errors()).toBe('');
-    });
-
-    test('a pick made before the startup read keeps the saved font', async () => {
-        const p = load({ saved: { theme: 'gold', font: 'inter' } });
-        await flush();
-        p.change('theme', 'slate'); // the startup read has not answered yet
-        await flush();
-        await flush();
-        expect(p.writes).toEqual([{ theme: 'slate' }]);
-        expect(p.root.dataset).toEqual({ theme: 'slate', font: 'inter' });
     });
 
     test('closing returns focus to the menu button', async () => {
@@ -151,12 +141,12 @@ describe('theme picker', () => {
     test('a focus read applies a change made elsewhere', async () => {
         const p = load();
         await flush();
-        p.reads[0]({ theme: 'gold', font: 'montserrat' });
+        p.reads[0]({ theme: 'gold' });
         p.focus();
         await flush();
-        p.reads[1]({ theme: 'classic', font: 'runescape' });
+        p.reads[1]({ theme: 'classic' });
         await flush();
-        expect(p.root.dataset).toEqual({ theme: 'classic', font: 'runescape' });
+        expect(p.root.dataset).toEqual({ theme: 'classic' });
     });
 
     test('opening with nothing picked focuses the first colour, and Escape closes', async () => {

@@ -1,21 +1,16 @@
 // ~/.microbot/theme.json: the look picked in Themes; the client reads the same file at startup.
-// A key that is missing or not one of the names below counts as not picked: the launcher then keeps its own look
-// (Gold, Montserrat) and the client keeps the stock RuneLite look (Classic, RuneScape).
+// A theme that is missing or not one of the names below counts as not picked: the launcher then keeps its own look
+// (Gold) and the client keeps the stock RuneLite look (Classic). Other keys are dropped.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
 const THEMES = ['gold', 'slate', 'classic'];
-const FONTS = ['montserrat', 'inter', 'runescape'];
 
-// only the keys that hold a known value, lower-cased the way the client compares them
+// only a known theme, lower-cased the way the client compares it
 function clean(value) {
-    const out = {};
-    for (const [key, allowed] of [['theme', THEMES], ['font', FONTS]]) {
-        const v = typeof value?.[key] === 'string' ? value[key].trim().toLowerCase() : '';
-        if (allowed.includes(v)) out[key] = v;
-    }
-    return out;
+    const v = typeof value?.theme === 'string' ? value.theme.trim().toLowerCase() : '';
+    return THEMES.includes(v) ? { theme: v } : {};
 }
 
 function settingsFile(home = os.homedir()) {
@@ -31,7 +26,7 @@ function read(home) {
 }
 
 function write(value, home) {
-    // merge into what is saved, so a window that has not read the file yet cannot drop the other key
+    // merge into what is saved, so a write without a theme keeps the saved one
     const next = { ...read(home), ...clean(value) };
     const file = settingsFile(home);
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -61,4 +56,4 @@ function register(ipcMain, log) {
     });
 }
 
-module.exports = { THEMES, FONTS, clean, read, write, register, settingsFile };
+module.exports = { THEMES, clean, read, write, register, settingsFile };
