@@ -113,6 +113,21 @@ contextBridge.exposeInMainWorld('electron', {
         setAccountEnabled: (accountId, enabled) =>
             ipcRenderer.invoke('alerts:set-account-enabled', accountId, enabled)
     },
+    runeliteLoader: {
+        state: () => ipcRenderer.invoke('runelite-loader:state'),
+        install: () => ipcRenderer.invoke('runelite-loader:install'),
+        remove: () => ipcRenderer.invoke('runelite-loader:remove'),
+        setMode: (mode) => ipcRenderer.invoke('runelite-loader:set-mode', mode),
+        open: () => ipcRenderer.invoke('runelite-loader:open'),
+        find: () => ipcRenderer.invoke('runelite-loader:find'),
+        onProgress: (func) => ipcRenderer.on('runelite-loader:progress', (event, data) => func(data))
+    },
+    sessionRecorder: {
+        state: () => ipcRenderer.invoke('session-recorder:state'),
+        setOn: (on) => ipcRenderer.invoke('session-recorder:set-on', on),
+        open: () => ipcRenderer.invoke('session-recorder:open'),
+        onStatus: (func) => ipcRenderer.on('session-recorder:status', (event, data) => func(data))
+    },
     ipcRenderer: {
         send: (channel, data) => ipcRenderer.send(channel, data),
         receive: (channel, func) =>
