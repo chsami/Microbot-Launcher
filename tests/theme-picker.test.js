@@ -30,7 +30,7 @@ function load({ deferWrites = false } = {}) {
         },
     };
     const window = { electron, addEventListener: on('window') };
-    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'theme-picker.js'), 'utf8'), { window, document });
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'libs', 'theme-picker.js'), 'utf8'), { window, document });
     listeners['document:DOMContentLoaded']();
     const change = (name, value) => listeners['modal:change']({ target: { name, value } });
     return { root, reads, writes, pending, change, focus: () => listeners['window:focus']() };
