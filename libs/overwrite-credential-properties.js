@@ -13,6 +13,7 @@ function credentialEnv(character) {
 const CREDENTIAL_KEYS = Object.keys(credentialEnv({}));
 
 const WRITTEN_KEY = 'credentialsWritten';
+const HEADER = '#Do not share this file with anyone';
 
 function credentialFile(path, homeDir) {
     return path.join(homeDir, '.runelite', 'credentials.properties');
@@ -51,7 +52,7 @@ function ownerOnly(fs, filePath, log) {
 function writeCredentialProperties({ fs, path, homeDir, settingsFile, log }, character) {
     const filePath = credentialFile(path, homeDir);
     const lines = Object.entries(credentialEnv(character)).map(([key, value]) => `${key}=${value}\n`);
-    const fileContent = `#Do not share this file with anyone
+    const fileContent = `${HEADER}
 #${new Date().toString()}
 ${lines.join('')}`;
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -60,22 +61,41 @@ ${lines.join('')}`;
     rememberWrite({ fs, settingsFile, log }, contentHash(fileContent));
 }
 
-function credentialCharacterId({ fs, path, homeDir }) {
+function readCredentialLogin({ fs, path, homeDir }) {
     const filePath = credentialFile(path, homeDir);
     if (!fs.existsSync(filePath)) return null;
-    const line = fs
-        .readFileSync(filePath, 'utf8')
+    const values = {};
+    fs.readFileSync(filePath, 'utf8')
         .split(/\r?\n/)
-        .find((entry) => entry.trim().startsWith('JX_CHARACTER_ID='));
-    const id = line ? line.slice(line.indexOf('=') + 1).trim() : '';
-    return id || null;
+        .forEach((entry) => {
+            const line = entry.trim();
+            const equals = line.indexOf('=');
+            if (line.startsWith('JX_') && equals > 0) values[line.slice(0, equals)] = line.slice(equals + 1).trim();
+        });
+    return { characterId: values.JX_CHARACTER_ID || null, sessionId: values.JX_SESSION_ID || null };
+}
+
+function credentialCharacterId(deps) {
+    return readCredentialLogin(deps)?.characterId || null;
+}
+
+function inLauncherFormat(text) {
+    const lines = text.split('\n');
+    if (lines.at(-1) === '') lines.pop();
+    if (lines.length !== CREDENTIAL_KEYS.length + 2 || lines[0] !== HEADER || !lines[1].startsWith('#')) return false;
+    return CREDENTIAL_KEYS.every((key, index) => {
+        const line = lines[index + 2];
+        if (!line.startsWith(`${key}=`)) return false;
+        return key === 'JX_REFRESH_TOKEN' || key === 'JX_ACCESS_TOKEN' ? line === `${key}=` : true;
+    });
 }
 
 function launcherWroteCurrent({ fs, path, homeDir }, settings) {
     const recorded = settings?.[WRITTEN_KEY];
     const filePath = credentialFile(path, homeDir);
-    if (typeof recorded !== 'string' || !fs.existsSync(filePath)) return false;
-    return contentHash(fs.readFileSync(filePath, 'utf8')) === recorded;
+    if (!fs.existsSync(filePath)) return false;
+    const text = fs.readFileSync(filePath, 'utf8');
+    return (typeof recorded === 'string' && contentHash(text) === recorded) || inLauncherFormat(text);
 }
 
 function removeCredentialProperties({ fs, path, homeDir }) {
@@ -104,6 +124,8 @@ module.exports = async function (deps) {
 
 module.exports.writeCredentialProperties = writeCredentialProperties;
 module.exports.credentialCharacterId = credentialCharacterId;
+module.exports.readCredentialLogin = readCredentialLogin;
+module.exports.inLauncherFormat = inLauncherFormat;
 module.exports.removeCredentialProperties = removeCredentialProperties;
 module.exports.launcherWroteCurrent = launcherWroteCurrent;
 module.exports.WRITTEN_KEY = WRITTEN_KEY;

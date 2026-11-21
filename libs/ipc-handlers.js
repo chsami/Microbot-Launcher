@@ -15,7 +15,7 @@ module.exports = async function (deps) {
     const url = 'https:/microbot.cloud';
     const filestorage = 'https://files.microbot.cloud';
 
-    const { startAuthFlow, cancelAuthFlow } = require(path.join(
+    const { startAuthFlow, cancelAuthFlow, authFlowRunning } = require(path.join(
         projectDir,
         'libs',
         'oauth-jagex.js'
@@ -49,6 +49,7 @@ module.exports = async function (deps) {
             win.show();
             win.focus();
         };
+        if (authFlowRunning?.()) return { error: 'A Jagex login is already open in your browser.' };
         try {
             const result = await startAuthFlow({ proxy });
             bringLauncherToFront();

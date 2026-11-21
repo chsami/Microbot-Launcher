@@ -11,8 +11,9 @@ const CHARACTERS = {
         { accountId: 'char-old', displayName: 'Zezima', proxy: null }
     ],
     chosen: null,
-    picked: false,
-    missing: null
+    picked: true,
+    missing: null,
+    proxiesSaved: true
 };
 
 const PROXY_WARNING =
@@ -216,11 +217,86 @@ describe('character picker on the card', () => {
         expect(card.elements['runelite-loader-character'].hidden).toBe(true);
     });
 
-    test('never picked shows the character the login file holds', async () => {
+    test('never picked shows the login file’s character as last used, and picking that character is a choice', async () => {
         const card = loadCard({ characters: { ...CHARACTERS, chosen: 'char-old', picked: false } });
         await flush();
 
+        expect(card.elements['runelite-loader-character-select'].value).toBe('auto:char-old');
+        expect(card.labels()).toEqual([TEXT.none, 'Zezima (last used)', 'Lynx Titan', 'Odd', 'Zezima']);
+
+        card.elements['runelite-loader-character-select'].change('auto:char-old');
+        await flush();
+        expect(card.runeliteLoader.setCharacter).not.toHaveBeenCalled();
+
+        card.elements['runelite-loader-character-select'].change('char-old');
+        await flush();
+        expect(card.runeliteLoader.setCharacter).toHaveBeenCalledWith('char-old');
+        expect(card.labels()).toEqual([TEXT.none, 'Lynx Titan', 'Odd', 'Zezima']);
         expect(card.elements['runelite-loader-character-select'].value).toBe('char-old');
+    });
+
+    test('never picked with an expired login file offers Log in again for that character', async () => {
+        const error = "Zezima's Jagex login has expired. Press Log in again, then press Open RuneLite.";
+        const card = loadCard({ characters: { ...CHARACTERS, chosen: 'char-old', picked: false }, openResult: { ok: false, error, relogin: true, accountId: 'char-old' } });
+        await flush();
+
+        card.elements['runelite-loader-action'].click();
+        await flush();
+
+        expect(card.add().textContent).toBe('Log in again');
+        await card.add().click();
+        await flush();
+        expect(card.runeliteLoader.login).toHaveBeenCalledWith('char-old');
+    });
+
+    test('the own-IP note shows only when the launcher has saved proxies', async () => {
+        const card = loadCard({ characters: { ...CHARACTERS, characters: [CHARACTERS.characters[2]], proxiesSaved: false } });
+        await flush();
+
+        expect(card.elements['runelite-loader-add-note'].textContent).toBe('');
+    });
+
+    test('a missing character’s sentence shows once when the start fails with it', async () => {
+        const sentence = 'That character is no longer in the launcher. Add its Jagex account again, or choose None.';
+        const card = loadCard({ characters: { ...CHARACTERS, missing: 'char-gone' }, openResult: { ok: false, error: sentence } });
+        await flush();
+        expect(card.elements['runelite-loader-character-warning'].textContent).toBe(sentence);
+
+        card.elements['runelite-loader-action'].click();
+        await flush();
+
+        expect(card.elements['runelite-loader-error'].textContent).toBe(sentence);
+        expect(card.elements['runelite-loader-character-warning'].textContent).toBe('');
+    });
+
+    test('Add that finds no new characters says the logins were renewed', async () => {
+        const card = loadCard();
+        await flush();
+        card.runeliteLoader.login.mockResolvedValueOnce({ ...CHARACTERS, added: 0, renewed: false });
+
+        await card.add().click();
+        await flush();
+
+        expect(card.elements['runelite-loader-character-message'].textContent).toBe("No new characters. Your existing characters' logins were renewed.");
+    });
+
+    test('Log in again with a login that did not include the character says so', async () => {
+        const sentence = "That login didn't include Zezima. Log in to the Jagex account that has Zezima.";
+        const card = loadCard({
+            characters: { ...CHARACTERS, chosen: 'char-old' },
+            openResult: { ok: false, error: "Zezima's Jagex login has expired. Press Log in again, then press Open RuneLite.", relogin: true, accountId: 'char-old' }
+        });
+        await flush();
+        card.elements['runelite-loader-action'].click();
+        await flush();
+        card.runeliteLoader.login.mockResolvedValueOnce({ ...CHARACTERS, chosen: 'char-old', added: 0, renewed: false, error: sentence });
+
+        await card.add().click();
+        await flush();
+
+        expect(card.elements['runelite-loader-error'].textContent).toBe(sentence);
+        expect(card.elements['runelite-loader-character-message'].textContent).toBe('');
+        expect(card.add().textContent).toBe('Log in again');
     });
 
     test('picking a character saves it and shows the proxy warning, and RuneLite can still be opened', async () => {

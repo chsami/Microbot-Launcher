@@ -26,6 +26,8 @@
         missing: 'Character no longer in the launcher',
         missingHint: 'That character is no longer in the launcher. Add its Jagex account again, or choose None.',
         addedMany: (count) => `Added ${count} characters. Pick one under Log in as.`,
+        noneAdded: "No new characters. Your existing characters' logins were renewed.",
+        lastUsed: (name) => `${name} (last used)`,
         proxy: (name, host) =>
             `${name} ${host ? `uses the proxy ${host}` : 'uses a proxy'} in the Microbot client. RuneLite doesn't use proxies, so ${name} will connect from your own IP. To keep the proxy, play ${name} in the Microbot client.`
     };
@@ -95,27 +97,31 @@
     };
 
     const OPENERS = ['open', 'find'];
+    const AUTO = 'auto:';
 
     const characterView = (data, { expired = [] } = {}) => {
         const characters = Array.isArray(data?.characters) ? data.characters : [];
         const chosen = characters.find((character) => character.accountId === data?.chosen) || null;
         const missing = !chosen && typeof data?.missing === 'string' && data.missing ? data.missing : null;
         const relogin = Boolean(chosen && expired.includes(chosen.accountId));
-        const options = [{ value: '', label: TEXT.none }, ...characters.map((character) => ({ value: character.accountId, label: character.displayName }))];
+        const automatic = chosen && data?.picked === false ? `${AUTO}${chosen.accountId}` : null;
+        const options = [{ value: '', label: TEXT.none }];
+        if (automatic) options.push({ value: automatic, label: TEXT.lastUsed(chosen.displayName) });
+        options.push(...characters.map((character) => ({ value: character.accountId, label: character.displayName })));
         if (missing) options.push({ value: missing, label: TEXT.missing });
         let warning = '';
         if (missing) warning = TEXT.missingHint;
         else if (chosen?.proxy) warning = TEXT.proxy(chosen.displayName, chosen.proxy.host);
         return {
             options,
-            value: chosen ? chosen.accountId : missing || '',
+            value: automatic || (chosen ? chosen.accountId : missing || ''),
             name: chosen ? chosen.displayName : null,
             warning,
             relogin,
             loginFor: relogin ? chosen.accountId : null,
             addLabel: relogin ? TEXT.relogin : TEXT.addAccount,
             addTitle: relogin ? TEXT.reloginTitle(chosen.displayName) : '',
-            addNote: relogin && chosen.proxy ? TEXT.throughProxy(chosen.proxy.host || 'its proxy') : TEXT.ownIp
+            addNote: relogin && chosen.proxy ? TEXT.throughProxy(chosen.proxy.host || 'its proxy') : data?.proxiesSaved ? TEXT.ownIp : ''
         };
     };
 
@@ -170,7 +176,7 @@
         const note = $('runelite-loader-add-note');
         if (note) note.textContent = adding ? '' : view.addNote;
         const warning = $('runelite-loader-character-warning');
-        if (warning) warning.textContent = view.warning;
+        if (warning) warning.textContent = view.warning && view.warning === latest.error ? '' : view.warning;
         const message = $('runelite-loader-character-message');
         if (message) message.textContent = characterMessage;
     };
@@ -278,7 +284,7 @@
     };
 
     const chooseCharacter = (accountId) => {
-        if (!api()?.setCharacter) return;
+        if (!api()?.setCharacter || String(accountId).startsWith(AUTO)) return;
         characterMessage = '';
         characterData = { ...(characterData || {}), chosen: accountId || null, missing: null };
         renderCharacters();
@@ -316,6 +322,7 @@
         if (result && Array.isArray(result.characters)) characterData = result;
         if (target && result?.renewed) expired = expired.filter((id) => id !== target);
         if (!target && result?.added > 1) characterMessage = TEXT.addedMany(result.added);
+        if (!target && result?.added === 0 && !result.error && !result.cancelled) characterMessage = TEXT.noneAdded;
         if (result?.error) render({ ...latest, error: result.error });
         else render(latest);
     };

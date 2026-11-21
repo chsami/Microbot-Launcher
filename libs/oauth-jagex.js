@@ -735,19 +735,23 @@ function loginFields(proxyIp, keepProxies) {
     return keepProxies ? (isNew) => (isNew ? { proxyIp } : {}) : { proxyIp };
 }
 
+let activeAuthFlows = 0;
+
 async function startAuthFlow({ proxy, keepProxies = false } = {}) {
     const proxyUri = toProxyUri(proxy?.proxyIp);
+    activeAuthFlows += 1;
     try {
         return proxyUri
             ? await startProxiedAuthFlow(proxyUri, loginFields(proxy.proxyIp.trim(), keepProxies))
             : await startUnproxiedAuthFlow(loginFields('', keepProxies));
     } finally {
+        activeAuthFlows -= 1;
         cancelCurrentAuth = null;
     }
 }
 
 function authFlowRunning() {
-    return Boolean(cancelCurrentAuth || pendingSystemBrowserAuth);
+    return Boolean(activeAuthFlows > 0 || cancelCurrentAuth || pendingSystemBrowserAuth);
 }
 
 module.exports = { startAuthFlow, cancelAuthFlow, authFlowRunning, writeAccountsToFile, mergeAccounts };

@@ -19,6 +19,7 @@ const MESSAGES = {
     notChosen: "Couldn't save which character to log in as. Pick it again.",
     settings: "The launcher settings file (launcher-settings.json) can't be read, so the launcher doesn't know which character to log in as. Fix or delete that file in the .microbot folder, then try again.",
     loginOpen: 'A Jagex login is already open in your browser.',
+    notIncluded: (name) => `That login didn't include ${name}. Log in to the Jagex account that has ${name}.`,
     loginFailed: 'The Jagex login did not finish. Try again.'
 };
 
@@ -47,6 +48,7 @@ function byName(a, b) {
 module.exports = function setupRuneliteCharacters(deps) {
     const { fs, log, microbotDir, home, readSettings, writeSetting, settingsFile } = deps;
     const accountsFile = path.join(microbotDir, 'accounts.json');
+    const propertiesFile = path.join(microbotDir, 'resource_versions.json');
     const credentialDeps = { fs, path, homeDir: home, settingsFile, log };
     const sessionTimeoutMs = deps.sessionTimeoutMs || SESSION_TIMEOUT_MS;
     const onChecking = deps.onChecking || (() => {});
@@ -75,13 +77,41 @@ module.exports = function setupRuneliteCharacters(deps) {
 
     const find = (accounts, id) => accounts.find((account) => String(account.accountId) === id) || null;
 
-    const fileCharacter = (accounts) => {
+    const fileLogin = () => {
         try {
-            const id = credentials.credentialCharacterId(credentialDeps);
-            return id && find(accounts, id) ? id : null;
+            return credentials.readCredentialLogin(credentialDeps);
         } catch (error) {
             return null;
         }
+    };
+
+    const fileCharacter = (accounts) => {
+        const id = fileLogin()?.characterId;
+        return id && find(accounts, id) ? id : null;
+    };
+
+    const rawAccounts = () => {
+        try {
+            const value = fs.existsSync(accountsFile) ? JSON.parse(fs.readFileSync(accountsFile, 'utf8')) : [];
+            return Array.isArray(value) ? value : [];
+        } catch (error) {
+            return [];
+        }
+    };
+
+    const proxiesSaved = () => {
+        let properties = {};
+        try {
+            if (fs.existsSync(propertiesFile)) properties = JSON.parse(fs.readFileSync(propertiesFile, 'utf8')) || {};
+        } catch (error) {
+            properties = {};
+        }
+        const addresses = [
+            ...(Array.isArray(properties.proxies) ? properties.proxies.map((entry) => entry?.address) : []),
+            properties.proxyip,
+            ...rawAccounts().map((account) => account?.proxyIp)
+        ];
+        return addresses.some((address) => typeof address === 'string' && address.trim() && parseProxyEndpoint(address));
     };
 
     const list = () => {
@@ -98,7 +128,8 @@ module.exports = function setupRuneliteCharacters(deps) {
             })),
             chosen: picked ? (known ? saved : null) : fileCharacter(accounts),
             picked,
-            missing: typeof saved === 'string' && !known ? saved : null
+            missing: typeof saved === 'string' && !known ? saved : null,
+            proxiesSaved: proxiesSaved()
         };
     };
 
@@ -135,11 +166,25 @@ module.exports = function setupRuneliteCharacters(deps) {
         }
     };
 
+    const checkFileLogin = async () => {
+        const login = fileLogin();
+        const account = login?.characterId && login.sessionId ? find(readAccounts(), login.characterId) : null;
+        if (!account) return { ok: true };
+        const name = String(account.displayName);
+        onChecking(name);
+        const result = await check({ ...account, sessionId: login.sessionId });
+        if (!result?.ok && sessionExpired(result)) {
+            log.warn("The Jagex login in credentials.properties has expired; RuneLite was not started.");
+            return { ok: false, error: MESSAGES.expired(name), relogin: true, accountId: String(account.accountId) };
+        }
+        return { ok: true };
+    };
+
     const prepare = async () => {
         const settings = readSettings();
         if (!settings) return { ok: false, error: MESSAGES.settings };
         const saved = settings[CHARACTER_KEY];
-        if (saved === undefined) return { ok: true };
+        if (saved === undefined) return checkFileLogin();
         if (saved === null) return { ok: true, touched: clearLauncherLogin(settings) };
         const account = typeof saved === 'string' ? find(readAccounts(), saved) : null;
         if (!account) return { ok: false, error: MESSAGES.unknown };
@@ -187,7 +232,9 @@ module.exports = function setupRuneliteCharacters(deps) {
         const added = after.filter((account) => !find(before, String(account.accountId)));
         if (!target && added.length === 1) choose(String(added[0].accountId));
         const renewed = target ? Boolean(after.find((entry) => String(entry.accountId) === accountId && entry.sessionId && entry.sessionId !== target.sessionId)) : false;
-        return { ...list(), added: added.length, renewed };
+        if (renewed && (readSettings() || {})[CHARACTER_KEY] === undefined) choose(accountId);
+        const result = { ...list(), added: added.length, renewed };
+        return target && !renewed ? { ...result, error: MESSAGES.notIncluded(String(target.displayName)) } : result;
     };
 
     return { list, choose, prepare, login };

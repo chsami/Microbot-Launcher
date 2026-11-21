@@ -187,16 +187,44 @@ describe('characters on the Microbot in RuneLite card', () => {
     });
 
     describe('never picked: exactly as before', () => {
-        test('credentials.properties is not read, written or removed, and Jagex is not called', async () => {
-            launcherWrite(ACCOUNTS[1]);
+        test('the file’s login is checked but credentials.properties is never written or removed', async () => {
+            foreignFile('JX_CHARACTER_ID=char-new\nJX_SESSION_ID=file-session\n');
+            const spawn = launchable();
+            const { loader, webContents } = setupLoader({ spawn });
+
+            expect(await loader.openRuneLite()).toEqual({ ok: true, message: STARTING });
+
+            expect(checkSession).toHaveBeenCalledTimes(1);
+            expect(checkSession.mock.calls[0][0]).toMatchObject({ accountId: 'char-new', sessionId: 'file-session', proxyIp: '203.0.113.7:1080:user:secretpass' });
+            expect(webContents.send).toHaveBeenCalledWith('runelite-loader:launch-status', { text: "Checking Lynx Titan's Jagex login..." });
+            expect(fs.readFileSync(credentialsFile(), 'utf8')).toBe('JX_CHARACTER_ID=char-new\nJX_SESSION_ID=file-session\n');
+            expect(readSettings()).toEqual({});
+            expect(spawn).toHaveBeenCalledTimes(1);
+        });
+
+        test('an expired file login offers Log in again and leaves the file alone', async () => {
+            launcherWrite(ACCOUNTS[0]);
             const before = fs.readFileSync(credentialsFile(), 'utf8');
+            checkSession.mockResolvedValue({ ok: false, status: 401 });
             const spawn = launchable();
 
-            expect(await setupLoader({ spawn }).loader.openRuneLite()).toEqual({ ok: true, message: STARTING });
-
+            expect(await setupLoader({ spawn }).loader.openRuneLite()).toEqual({ ok: false, error: MESSAGES.expired('zezima'), relogin: true, accountId: 'char-old' });
+            expect(spawn).not.toHaveBeenCalled();
             expect(fs.readFileSync(credentialsFile(), 'utf8')).toBe(before);
+        });
+
+        test('a file login that cannot be checked starts RuneLite as before', async () => {
+            launcherWrite(ACCOUNTS[0]);
+            checkSession.mockResolvedValue({ ok: false, error: 'offline' });
+
+            expect((await setupLoader().loader.openRuneLite()).ok).toBe(true);
+        });
+
+        test('a file for a character the launcher does not know is not checked', async () => {
+            foreignFile('JX_CHARACTER_ID=someone-else\nJX_SESSION_ID=theirs\n');
+
+            expect((await setupLoader().loader.openRuneLite()).ok).toBe(true);
             expect(checkSession).not.toHaveBeenCalled();
-            expect(spawn).toHaveBeenCalledTimes(1);
         });
 
         test('members with no settings and no accounts see no change', async () => {
@@ -341,6 +369,33 @@ describe('characters on the Microbot in RuneLite card', () => {
 
             expect((await setupLoader().loader.openRuneLite()).ok).toBe(true);
             expect(fs.readFileSync(credentialsFile(), 'utf8')).toBe('JX_CHARACTER_ID=char-old\nJX_SESSION_ID=theirs\n');
+        });
+
+        test('clears a file the launcher wrote before this update, recognised by its own format', async () => {
+            launcherWrite(ACCOUNTS[0]);
+            writeSettings({ runeliteCharacter: null });
+
+            expect(readSettings()[WRITTEN_KEY]).toBeUndefined();
+            expect((await setupLoader().loader.openRuneLite()).ok).toBe(true);
+            expect(fs.existsSync(credentialsFile())).toBe(false);
+        });
+
+        test('leaves a file RuneLite wrote itself, with its tokens filled in', async () => {
+            writeSettings({ runeliteCharacter: null });
+            const runeliteFile = [
+                '#Do not share this file with anyone',
+                '#Fri Nov 21 10:00:00 CET 2026',
+                'JX_CHARACTER_ID=char-old',
+                'JX_SESSION_ID=theirs',
+                'JX_REFRESH_TOKEN=refresh-value',
+                'JX_DISPLAY_NAME=zezima',
+                'JX_ACCESS_TOKEN=access-value',
+                ''
+            ].join('\n');
+            foreignFile(runeliteFile);
+
+            expect((await setupLoader().loader.openRuneLite()).ok).toBe(true);
+            expect(fs.readFileSync(credentialsFile(), 'utf8')).toBe(runeliteFile);
         });
 
         test('leaves a file that changed since the launcher wrote it', async () => {
@@ -525,10 +580,31 @@ describe('characters on the Microbot in RuneLite card', () => {
             expect(JSON.stringify(result)).not.toContain('fresh-session');
         });
 
-        test('Log in again into a Jagex account without that character is not a renewal', async () => {
+        test('Log in again into a Jagex account without that character is not a renewal and says so', async () => {
             const jagexAuth = authWith([{ accountId: 'char-other', displayName: 'Other' }]);
 
-            expect(await setupLoader({ jagexAuth }).ipcMain.invoke('runelite-loader:login', 'char-old')).toMatchObject({ renewed: false });
+            expect(await setupLoader({ jagexAuth }).ipcMain.invoke('runelite-loader:login', 'char-old')).toMatchObject({
+                renewed: false,
+                error: "That login didn't include zezima. Log in to the Jagex account that has zezima."
+            });
+        });
+
+        test('Log in again for the never-picked file character makes it the choice once renewed', async () => {
+            launcherWrite(ACCOUNTS[0]);
+            const jagexAuth = authWith([{ accountId: 'char-old', displayName: 'zezima' }]);
+
+            const result = await setupLoader({ jagexAuth }).ipcMain.invoke('runelite-loader:login', 'char-old');
+
+            expect(result).toMatchObject({ renewed: true, chosen: 'char-old', picked: true });
+            expect(readSettings().runeliteCharacter).toBe('char-old');
+        });
+
+        test('the list says whether the launcher has saved proxies', async () => {
+            expect((await setupLoader().ipcMain.invoke('runelite-loader:characters')).proxiesSaved).toBe(true);
+            writeAccounts([ACCOUNTS[0]]);
+            expect((await setupLoader().ipcMain.invoke('runelite-loader:characters')).proxiesSaved).toBe(false);
+            fs.writeFileSync(path.join(microbotDir, 'resource_versions.json'), JSON.stringify({ proxies: [{ name: 'home', address: '198.51.100.2:1080' }] }));
+            expect((await setupLoader().ipcMain.invoke('runelite-loader:characters')).proxiesSaved).toBe(true);
         });
 
         test('a login already open says so and starts nothing', async () => {
