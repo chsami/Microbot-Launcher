@@ -67,6 +67,7 @@ describe('runelite-loader', () => {
             finder: { find: () => null, fromPath: () => null },
             env: { PATH: '/usr/bin', HOME: dir },
             home: dir,
+            platform: 'linux',
             getWindow: () => ({ isDestroyed: () => false, webContents }),
             ...overrides
         });
@@ -828,7 +829,7 @@ describe('runelite-loader', () => {
             const dialog = { showOpenDialog: jest.fn(async () => ({ canceled: false, filePaths: [chosen] })) };
             const { ipcMain } = setup({ spawn: launchSpawn, dialog, finder: undefined, platform: 'linux' });
 
-            expect(await ipcMain.invoke('runelite-loader:find')).toEqual({ ok: true, message: 'RuneLite is starting. Microbot will be in the sidebar.', opener: 'open', starts: '~/RuneLite.AppImage' });
+            expect(await ipcMain.invoke('runelite-loader:find')).toEqual({ ok: true, message: 'RuneLite is starting. Microbot will be in the sidebar.', opener: 'open', starts: ['~', 'RuneLite.AppImage'].join(path.sep) });
 
             expect(JSON.parse(fs.readFileSync(settingsFile, 'utf8'))).toEqual({ launcherMode: 'runelite', runelitePath: chosen });
             expect(launchSpawn.mock.calls[0][0]).toBe(chosen);
@@ -882,13 +883,14 @@ describe('runelite-loader', () => {
             fs.writeFileSync(agentJar, JAR);
             cli.status.stdout = JSON.stringify({ installed: true, signedIn: true, willLoad: true, agentVersion: '1.0.0', agentSha256: JAR_SHA, ...fields });
         };
-        const appImageSpec = (home) => ({ command: `${home}/Downloads/RuneLite.AppImage`, args: [], source: 'appimage', label: `${home}/Downloads/RuneLite.AppImage` });
+        const appImageSpec = (home) => ({ command: path.join(home, 'Downloads', 'RuneLite.AppImage'), args: [], source: 'appimage', label: path.join(home, 'Downloads', 'RuneLite.AppImage') });
+        const startsLabel = ['~', 'Downloads', 'RuneLite.AppImage'].join(path.sep);
 
         test('enabled false shows the switched-off state, with Open RuneLite still there', async () => {
             installed({ enabled: false, lastStart: { code: 'switched-off', at: '2026-11-08T07:00:00Z', message: null } });
             const { loader } = setup({ finder: { find: () => appImageSpec(dir), fromPath: () => null } });
 
-            expect(await loader.state()).toEqual({ visible: true, state: 'switched-off', opener: 'open', starts: '~/Downloads/RuneLite.AppImage', version: '1.0.0', mode: 'client' });
+            expect(await loader.state()).toEqual({ visible: true, state: 'switched-off', opener: 'open', starts: startsLabel, version: '1.0.0', mode: 'client' });
         });
 
         test('a missing enabled reads as on', async () => {
@@ -924,7 +926,7 @@ describe('runelite-loader', () => {
             installed({});
             const { loader } = setup({ finder: { find: () => appImageSpec(dir), fromPath: () => null } });
 
-            expect(await loader.state()).toMatchObject({ state: 'added', opener: 'open', starts: '~/Downloads/RuneLite.AppImage' });
+            expect(await loader.state()).toMatchObject({ state: 'added', opener: 'open', starts: startsLabel });
         });
 
         test('a start error logs only the OS error code, no path', async () => {
