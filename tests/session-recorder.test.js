@@ -133,7 +133,7 @@ describe('session-recorder', () => {
 
         say(children[0], 'RuneLite log line\n' + STATUS_PREFIX + '{"state":"ready","message":"On. Press Open RuneLite to start a recorded RuneLite.","recording":0,"unrecorded":1}\n');
 
-        expect(sent.at(-1)).toEqual({ visible: true, on: true, running: true, message: 'On. Press Open RuneLite to start a recorded RuneLite.' });
+        expect(sent.at(-1)).toEqual({ visible: true, on: true, running: true, updating: false, message: 'On. Press Open RuneLite to start a recorded RuneLite.' });
         expect(await ipc.invoke('session-recorder:open')).toEqual({ ok: true, message: 'RuneLite is starting through the Session Recorder.' });
         expect(children[0].written).toEqual(['open\n']);
     });
@@ -205,9 +205,10 @@ describe('session-recorder', () => {
         await flush();
 
         expect(children[0].written).toEqual(['stop\n']);
-        expect(sent.at(-1)).toMatchObject({ running: false, message: 'Updating the Session Recorder...' });
+        expect(sent.at(-1)).toMatchObject({ running: false, updating: true, message: 'Updating the Session Recorder...' });
         expect((await ipc.invoke('session-recorder:open')).ok).toBe(false);
 
+        info = httpError(503);
         say(children[0], STATUS_PREFIX + '{"state":"stopped","message":"The Session Recorder is off.","recording":0,"unrecorded":0}\n');
         children[0].emit('close', 0);
         await flush();
@@ -231,6 +232,7 @@ describe('session-recorder', () => {
         expect(children[0].written).toEqual([]);
 
         say(children[0], ready(0));
+        jest.advanceTimersByTime(25 * 60 * 1000);
         await ipc.invoke('session-recorder:open');
         jest.advanceTimersByTime(5 * 60 * 1000);
         await flush();

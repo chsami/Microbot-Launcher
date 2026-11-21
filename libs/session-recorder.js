@@ -36,7 +36,7 @@ module.exports = function setupSessionRecorder(deps) {
     let error = '';
     let starting = null;
     let version = null;
-    let updating = false;
+    let updating = null;
     let openedAt = 0;
 
     const isOn = () => runelite.readSetting(SETTING_KEY) === true;
@@ -56,6 +56,7 @@ module.exports = function setupSessionRecorder(deps) {
             visible: true,
             on: isOn(),
             running: Boolean(child) && status?.state === 'ready' && !updating,
+            updating: Boolean(updating),
             message: (updating && MESSAGES.updating) || error || status?.error || status?.message || (isOn() ? MESSAGES.starting : '')
         };
     };
@@ -127,8 +128,8 @@ module.exports = function setupSessionRecorder(deps) {
         push();
     };
 
-    const startNow = async () => {
-        const info = await fetchInfo();
+    const startNow = async (known) => {
+        const info = known || await fetchInfo();
         if (!info) return;
         error = '';
         status = null;
@@ -163,13 +164,13 @@ module.exports = function setupSessionRecorder(deps) {
                 if (child !== proc) return;
                 child = null;
                 const restart = updating;
-                updating = false;
+                updating = null;
                 if (status?.state !== 'stopped') {
                     log.warn(`The Session Recorder exited with code ${code}.`);
                     if (isOn()) error = MESSAGES.stopped;
                 }
                 push();
-                if (restart && status?.state === 'stopped' && isOn()) start();
+                if (restart && status?.state === 'stopped' && isOn()) start(restart);
             });
             log.info(`Started the Session Recorder ${info.version}${agent ? ' with Microbot' : ''}.`);
         } catch (e) {
@@ -179,9 +180,9 @@ module.exports = function setupSessionRecorder(deps) {
         push();
     };
 
-    const start = () => {
+    const start = (known) => {
         if (child || starting) return starting;
-        starting = startNow().finally(() => {
+        starting = startNow(known).finally(() => {
             starting = null;
         });
         return starting;
@@ -202,7 +203,7 @@ module.exports = function setupSessionRecorder(deps) {
         if (!info || info.version === version) return;
         await download(info);
         if (!idle() || !isOn()) return;
-        updating = true;
+        updating = info;
         log.info(`Updating the Session Recorder from ${version} to ${info.version}.`);
         child.stdin.write('stop\n');
         push();

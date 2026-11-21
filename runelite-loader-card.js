@@ -228,7 +228,7 @@
         render({ ...latest, error: '' });
         let result;
         try {
-            result = action === 'open' && recorder.on && recorder.running ? await recorderApi().open() : await api()[action]();
+            result = action === 'open' && recorder.on && (recorder.running || recorder.updating) ? await recorderApi().open() : await api()[action]();
         } catch (error) {
             result = { ok: false, error: TEXT.failed };
         }
