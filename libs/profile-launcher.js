@@ -16,7 +16,7 @@ const CHANNELS = ['stable', 'nightly'];
 const problem = (kind, title, message) => ({ problem: { kind, title, message } });
 const refuse = (message) => problem('unknown-option', 'Unknown Option', message);
 const accountNeeded = () =>
-    problem('jagex-account-needed', 'Jagex Account Needed', 'Clients can only start with a Jagex account. Log in with Jagex in the launcher first.');
+    problem('jagex-account-needed', 'Jagex Account Needed', 'Clients can only start with a Jagex account. Pick one in the Jagex account list. If the list is empty, log in with Jagex in the launcher on this PC first.');
 const tooManyLaunches = () =>
     problem('too-many-launches', 'Too Many Launches', 'Other clients are still starting. Try again in a minute.');
 

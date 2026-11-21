@@ -106,9 +106,8 @@ function buildStartOptions({
         versions: [...new Set(versions.map(stableVersion).filter(Boolean))].slice(0, MAX_VERSIONS),
         latestVersion: stableVersion(latestVersion),
         ramChoices: ramChoicesFor(properties),
-        // Without a Jagex account there is nothing Play could start.
-        defaults: account && {
-            accountId: ids.account(account.accountId),
+        defaults: {
+            accountId: account ? ids.account(account.accountId) : null,
             profileId: profileIdOf(account?.profile),
             channel,
             version: channel === 'stable' ? stableVersion(properties.version_pref) : null,

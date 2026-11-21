@@ -75,10 +75,10 @@ describe('start options sent to the dashboard', () => {
         expect(build({ properties: { selected_account: '333' } }).defaults).toMatchObject({ accountId: 'a_333', profileId: 'p_alt', proxyId: null });
     });
 
-    test('without Jagex accounts there is no default start', () => {
+    test('without Jagex accounts it defaults to no account on the default profile', () => {
         const { defaults, accounts, profiles } = build({ accounts: [] });
         expect(accounts).toEqual([]);
-        expect(defaults).toBeNull();
+        expect(defaults).toMatchObject({ accountId: null, profileId: 'p_default' });
         expect(profiles.map((profile) => profile.id)).toEqual(['p_default', 'p_alt', 'p_pvm']);
     });
 
