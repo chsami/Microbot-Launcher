@@ -14,14 +14,17 @@
     let saving = Promise.resolve();
 
     // theme.json is shared with the native launcher and clients, so pick up changes made elsewhere
+    // waits for queued saves first, so it reads what this window last saved rather than a half-saved state
     const sync = () => {
         const asked = ++version;
-        return window.electron?.theme?.read().then((saved) => {
-            if (asked === version) {
-                desired = saved;
-                apply(saved);
-            }
-        });
+        return saving
+            .then(() => (asked === version ? window.electron?.theme?.read() : null))
+            .then((saved) => {
+                if (saved && asked === version) {
+                    desired = saved;
+                    apply(saved);
+                }
+            });
     };
     sync();
     window.addEventListener('focus', sync);
