@@ -229,9 +229,17 @@ module.exports = function setupSessionRecorder(deps) {
         return view(true);
     };
 
-    const open = () => {
+    const cannotOpen = () => {
         if (updating) return { ok: false, error: MESSAGES.updatingOpen };
         if (!child || status?.state !== 'ready' || !child.stdin?.writable) return { ok: false, error: MESSAGES.notRunning };
+        return null;
+    };
+
+    const open = async () => {
+        if (cannotOpen()) return cannotOpen();
+        const login = runelite.prepareCharacter ? await runelite.prepareCharacter() : { ok: true };
+        if (!login.ok) return login;
+        if (cannotOpen()) return cannotOpen();
         openedAt = Date.now();
         child.stdin.write('open\n');
         return { ok: true, message: MESSAGES.opening };

@@ -1,6 +1,7 @@
 const path = require('path');
 const crypto = require('crypto');
 const { makeFinder, launch, describeSpec } = require('./runelite-launch.js');
+const setupRuneliteCharacters = require('./runelite-characters.js');
 
 const ACCESS_PATH = '/api/loader/access';
 const AGENT_PATH = '/api/loader/agent';
@@ -97,6 +98,17 @@ module.exports = function setupRuneliteLoader(deps) {
     };
 
     const writeMode = (mode) => writeSetting(MODE_KEY, mode);
+
+    const characters = setupRuneliteCharacters({
+        fs,
+        log,
+        microbotDir,
+        home,
+        readSetting: (key) => readSettings()?.[key],
+        writeSetting,
+        checkSession: deps.checkSession,
+        sessionTimeoutMs: deps.sessionTimeoutMs
+    });
 
     const rememberedRuneLite = () => {
         const value = readSettings()?.[RUNELITE_PATH_KEY];
@@ -559,6 +571,8 @@ module.exports = function setupRuneliteLoader(deps) {
         once(async () => {
             const spec = findRuneLite();
             if (!spec) return { ok: false, opener: 'find', error: MESSAGES.notFound };
+            const login = await characters.prepare();
+            if (!login.ok) return login;
             return startRuneLite(spec);
         });
 
@@ -583,7 +597,9 @@ module.exports = function setupRuneliteLoader(deps) {
             } catch (error) {
                 log.warn(`Could not remember where RuneLite is: ${error?.message || error}`);
             }
-            return { ...(await startRuneLite(spec)), opener: 'open', starts: describeSpec(spec, home) };
+            const login = await characters.prepare();
+            const started = login.ok ? await startRuneLite(spec) : login;
+            return { ...started, opener: 'open', starts: describeSpec(spec, home) };
         });
 
     const install = () => run('install', installNow);
@@ -611,6 +627,8 @@ module.exports = function setupRuneliteLoader(deps) {
         return { mode: readMode() };
     });
     ipcMain.handle('runelite-loader:remove', () => remove());
+    ipcMain.handle('runelite-loader:characters', () => characters.list());
+    ipcMain.handle('runelite-loader:set-character', (_event, accountId) => characters.choose(accountId));
 
     const javaForTools = () => findJava({ install: true });
 
@@ -629,6 +647,7 @@ module.exports = function setupRuneliteLoader(deps) {
         findAndOpen,
         javaForTools,
         installedAgentJar,
+        prepareCharacter: characters.prepare,
         readSetting: (key) => readSettings()?.[key],
         writeSetting
     };

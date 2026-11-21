@@ -20,11 +20,6 @@ module.exports = async function (deps) {
         'libs',
         'oauth-jagex.js'
     ));
-    const { toProxyUri, startLoginProxy } = require(path.join(
-        projectDir,
-        'libs',
-        'login-proxy.js'
-    ));
     const {
         listClientJars,
         markClientDownloaded,
@@ -118,22 +113,9 @@ module.exports = async function (deps) {
     const jarExecutor = await jarExecutorHandler({ ...deps, ipcMain: versionCheckedIpcMain, launchQueue, writeCredentials });
     const packageVersion = packageJson.version;
 
-    async function refreshSession(writeAccountsToFile, sessionId, proxyIp) {
-        const proxyUri = toProxyUri(proxyIp);
-        if (!proxyUri) return writeAccountsToFile(sessionId);
-        let loginProxy;
-        try {
-            loginProxy = await startLoginProxy(proxyUri);
-        } catch (error) {
-            log.error(`Could not start the proxy for a Jagex session: ${error.message}`);
-            return { ok: false, error: error.message };
-        }
-        try {
-            return await writeAccountsToFile(sessionId, loginProxy.httpOptions);
-        } finally {
-            await loginProxy.close();
-        }
-    }
+    const jagexSession = require(path.join(projectDir, 'libs', 'jagex-session.js'));
+    const refreshSession = (writeAccountsToFile, sessionId, proxyIp) =>
+        jagexSession.refreshSession({ writeAccountsToFile, log }, sessionId, proxyIp);
 
     ipcMain.handle('refresh-accounts', async (event, proxy) => {
         try {
