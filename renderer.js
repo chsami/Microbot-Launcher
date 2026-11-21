@@ -1075,11 +1075,13 @@ function populateAccountSelector(characters = [], selectedAccount = null) {
     // Clear any existing options (optional)
     characterSelect.innerHTML = '';
 
-    // Create a default "none" option
-    const defaultOption = document.createElement('option');
-    defaultOption.value = 'none';
-    defaultOption.textContent = 'None';
-    characterSelect.appendChild(defaultOption);
+    // Placeholder only while no Jagex account is added; clients can't start without one.
+    if (characters.length === 0) {
+        const defaultOption = document.createElement('option');
+        defaultOption.value = 'none';
+        defaultOption.textContent = 'None';
+        characterSelect.appendChild(defaultOption);
+    }
 
     // Iterate over the characters array and create option elements
     characters.forEach((character) => {
@@ -1149,8 +1151,8 @@ function renderAccountsList() {
     const updateToggleLabel = (value) => {
         if (value === 'none') {
             toggleLabel.textContent = 'None';
-            toggleButton.setAttribute('aria-label', 'No Jagex account selected');
-            toggleButton.title = 'No Jagex account selected';
+            toggleButton.setAttribute('aria-label', 'No Jagex account selected. Pick one to play.');
+            toggleButton.title = 'No Jagex account selected. Pick one to play.';
             return;
         }
 
@@ -1210,30 +1212,6 @@ function renderAccountsList() {
         toggleButton.focus();
     };
 
-    const createNoneOption = () => {
-        const optionRow = document.createElement('div');
-        optionRow.className = 'account-option';
-        optionRow.setAttribute('role', 'option');
-        if (currentSelectedValue === 'none') {
-            optionRow.classList.add('selected');
-            optionRow.setAttribute('aria-selected', 'true');
-        } else {
-            optionRow.setAttribute('aria-selected', 'false');
-        }
-
-        const nameButton = document.createElement('button');
-        nameButton.type = 'button';
-        nameButton.className = 'account-option-name';
-        nameButton.textContent = 'None';
-        nameButton.title = 'Use no Jagex account';
-        nameButton.addEventListener('click', () => {
-            setSelectedAccount('none');
-        });
-
-        optionRow.appendChild(nameButton);
-        return optionRow;
-    };
-
     const createAccountOption = (account) => {
         const optionRow = document.createElement('div');
         optionRow.className = 'account-option';
@@ -1280,15 +1258,6 @@ function renderAccountsList() {
         optionsList.innerHTML = '';
         const normalizedFilter = filterText.trim().toLowerCase();
         let visibleCount = 0;
-
-        const shouldShowNone =
-            normalizedFilter.length === 0 ||
-            'none'.includes(normalizedFilter);
-
-        if (shouldShowNone) {
-            optionsList.appendChild(createNoneOption());
-            visibleCount += 1;
-        }
 
         accounts.forEach((account) => {
             const displayName = getAccountLabel(account).toLowerCase();

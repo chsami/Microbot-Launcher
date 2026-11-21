@@ -16,7 +16,7 @@ const CHANNELS = ['stable', 'nightly'];
 const problem = (kind, title, message) => ({ problem: { kind, title, message } });
 const refuse = (message) => problem('unknown-option', 'Unknown Option', message);
 const accountNeeded = () =>
-    problem('unknown-client', 'Jagex Account Needed', 'Clients can only start with a Jagex account. Log in with Jagex in the launcher first.');
+    problem('jagex-account-needed', 'Jagex Account Needed', 'Clients can only start with a Jagex account. Log in with Jagex in the launcher first.');
 const tooManyLaunches = () =>
     problem('too-many-launches', 'Too Many Launches', 'Other clients are still starting. Try again in a minute.');
 
@@ -184,7 +184,7 @@ module.exports = function setupProfileLauncher(deps) {
                 ? currentProfiles(accounts).find((name) => proxyChoices.profileIdFor(name) === options.profileId)
                 : undefined;
         if (!profile) return refuse('That profile is no longer in the launcher on this PC.');
-        if (options.accountId == null) return refuse('Choose a Jagex account. Clients can no longer start without one.');
+        if (options.accountId == null) return accountNeeded();
         const account =
             typeof options.accountId === 'string'
                 ? accounts.find((entry) => proxyChoices.accountIdFor(entry.accountId) === options.accountId)

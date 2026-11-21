@@ -175,7 +175,7 @@ describe('launching a profile without the launcher window', () => {
 
     test('a profile no Jagex account uses is refused', async () => {
         const { deps, launchProfile } = setup();
-        await expect(launchProfile('ironman')).resolves.toMatchObject({ problem: { kind: 'unknown-client', title: 'Jagex Account Needed' } });
+        await expect(launchProfile('ironman')).resolves.toMatchObject({ problem: { kind: 'jagex-account-needed', title: 'Jagex Account Needed' } });
         expect(deps.downloadClient).not.toHaveBeenCalled();
         expect(deps.launch).not.toHaveBeenCalled();
     });
@@ -333,7 +333,7 @@ describe('launching a profile without the launcher window', () => {
     test('a broken accounts file counts as no Jagex accounts, so nothing starts', async () => {
         const { deps, launchProfile } = setup();
         fs.writeFileSync(path.join(deps.microbotDir, 'accounts.json'), '{oops');
-        await expect(launchProfile('main')).resolves.toMatchObject({ problem: { kind: 'unknown-client' } });
+        await expect(launchProfile('main')).resolves.toMatchObject({ problem: { kind: 'jagex-account-needed' } });
         expect(deps.launch).not.toHaveBeenCalled();
         expect(deps.log.warn).toHaveBeenCalled();
     });
@@ -458,7 +458,6 @@ describe('starting with options chosen on the dashboard', () => {
     });
 
     test.each([
-        ['no account', { accountId: null }, /Jagex account/],
         ['an account that is gone', { accountId: 'a_gone' }, /Jagex account/],
         ['an account id that is not text', { accountId: 7 }, /Jagex account/],
         ['a profile that is gone', { profileId: 'p_gone' }, /profile/],
@@ -482,6 +481,14 @@ describe('starting with options chosen on the dashboard', () => {
         expect(deps.launch).not.toHaveBeenCalled();
         expect(deps.writeCredentials).not.toHaveBeenCalled();
         expect(deps.downloadClient).not.toHaveBeenCalled();
+    });
+
+    test('refuses a start without a Jagex account as Jagex Account Needed', async () => {
+        const { deps, launchOptions, choose } = await prepare();
+        await expect(launchOptions(choose({ accountId: null }))).resolves.toMatchObject({
+            problem: { kind: 'jagex-account-needed', title: 'Jagex Account Needed' }
+        });
+        expect(deps.launch).not.toHaveBeenCalled();
     });
 
     test('refuses options that are not an object', async () => {

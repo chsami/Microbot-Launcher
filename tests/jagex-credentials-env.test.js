@@ -211,11 +211,11 @@ describe('Jagex character in the client environment', () => {
         inherit({ JX_CHARACTER_ID: '9999', JX_SESSION_ID: 'session-parent', JX_DISPLAY_NAME: 'Parent' });
 
         const account = { accountId: '1003', displayName: 'NoSession', profile: 'Main' };
-        expect(await harness.handlers['open-client']({}, VERSION, null, account, '')).toEqual({ error: 'Log in with a Jagex account first.' });
+        expect(await harness.handlers['open-client']({}, VERSION, null, account, '')).toEqual({ error: 'This Jagex account has no saved login. Click Add accounts and log in with Jagex again.' });
 
         const count = harness.launches.length;
         expect(await harness.executor.launch({ version: VERSION, account, ramPreference: '' })).toEqual({
-            problem: { kind: 'jagex-account-needed', title: 'Jagex Account Needed', message: 'Log in with a Jagex account first.' }
+            problem: { kind: 'jagex-account-needed', title: 'Jagex Account Needed', message: 'This Jagex account has no saved login. Click Add accounts and log in with Jagex again.' }
         });
         expect(harness.launches).toHaveLength(count);
     });

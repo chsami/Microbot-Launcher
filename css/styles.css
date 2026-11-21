@@ -935,6 +935,10 @@ h2 {
     color: var(--red-text);
 }
 
+.old-login-help:hover {
+    color: var(--text-strong);
+}
+
 
 .accounts-dropdown-container {
     display: none;

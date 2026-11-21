@@ -74,7 +74,7 @@ module.exports = async function (deps) {
         return { commandArgs };
     }
 
-    const NO_LOGIN = 'Log in with a Jagex account first.';
+    const NO_LOGIN = 'This Jagex account has no saved login. Click Add accounts and log in with Jagex again.';
 
     async function prepareLaunch({ version, proxy, account, ramPreference, hwidSpoof }) {
         const built = buildCommandArgs({ version, proxy, ramPreference, hwidSpoof, profile: account && account.profile });

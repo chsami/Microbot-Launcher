@@ -214,6 +214,36 @@ describe('writeAccountsToFile', () => {
         expect(fs.readFileSync(accountsFile, 'utf8')).toBe(before);
     });
 
+    test('the first Jagex account takes the profile of the old username login, once', async () => {
+        const dir = path.join(tempHome, '.microbot');
+        fs.rmSync(path.join(dir, 'accounts.json'));
+        fs.writeFileSync(path.join(dir, 'non-jagex-preferred-profile.json'), JSON.stringify({ profile: 'Ironman' }));
+        axiosGet.mockResolvedValue({
+            data: [
+                { accountId: 'fake-char-1', displayName: 'FakeOne' },
+                { accountId: 'fake-char-2', displayName: 'FakeTwo' }
+            ]
+        });
+
+        await writeAccountsToFile('fake-session-new');
+
+        const stored = JSON.parse(fs.readFileSync(path.join(dir, 'accounts.json'), 'utf8'));
+        expect(stored.map((a) => a.profile)).toEqual(['Ironman', undefined]);
+        expect(fs.existsSync(path.join(dir, 'non-jagex-preferred-profile.json'))).toBe(false);
+    });
+
+    test('accounts added later leave the old login profile alone', async () => {
+        const oldFile = path.join(tempHome, '.microbot', 'non-jagex-preferred-profile.json');
+        fs.writeFileSync(oldFile, JSON.stringify({ profile: 'Ironman' }));
+        axiosGet.mockResolvedValue({ data: [{ accountId: 'fake-char-9', displayName: 'FakeNine' }] });
+
+        await writeAccountsToFile('fake-session-new');
+
+        const stored = JSON.parse(fs.readFileSync(path.join(tempHome, '.microbot', 'accounts.json'), 'utf8'));
+        expect(stored.find((a) => a.accountId === 'fake-char-9').profile).toBeUndefined();
+        expect(fs.existsSync(oldFile)).toBe(true);
+    });
+
     test('does not overwrite an unreadable accounts file', async () => {
         const accountsFile = path.join(tempHome, '.microbot', 'accounts.json');
         fs.writeFileSync(accountsFile, '{ not json');

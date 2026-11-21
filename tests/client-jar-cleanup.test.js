@@ -302,10 +302,10 @@ describe('client jar cleanup and listing with an isolated home', () => {
             touch('microbot-2.6.22.jar');
 
             expect(await handlers['open-client']({ sender: { send: jest.fn() } }, '2.6.22', {}, { accountId: '1', profile: 'Main' }, '1g')).toEqual({
-                error: 'Log in with a Jagex account first.'
+                error: 'This Jagex account has no saved login. Click Add accounts and log in with Jagex again.'
             });
             expect(await handlers['open-client']({ sender: { send: jest.fn() } }, '2.6.22', {}, null, '1g')).toEqual({
-                error: 'Log in with a Jagex account first.'
+                error: 'This Jagex account has no saved login. Click Add accounts and log in with Jagex again.'
             });
         });
 

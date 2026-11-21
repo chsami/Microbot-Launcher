@@ -327,7 +327,7 @@
         if (title) title.textContent = email ? `Signed in as ${email}` : 'Bot alerts';
         if (text) {
             text.textContent = email
-                ? 'Bot alerts are switched per Jagex account, under the account list. Cloud backup for profiles is coming soon.'
+                ? 'Turn bot alerts on or off for each Jagex account with "Show this account on the dashboard", under the Jagex Account list. Cloud backup for profiles is coming soon.'
                 : 'Sign in to hear on Discord or by email when a bot stops. Profile backup is coming soon.';
         }
         $('profiles-sign-in')?.classList.toggle('auth-hidden', Boolean(email));

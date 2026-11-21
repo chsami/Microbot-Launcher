@@ -12,6 +12,17 @@ const { microbotDirName } = require('./dir-module.js');
 const userHome = process.env.HOME || process.env.USERPROFILE;
 const ACCOUNTS_DIR = path.join(userHome, microbotDirName);
 const ACCOUNTS_FILE_PATH = path.join(ACCOUNTS_DIR, 'accounts.json');
+// Written by the removed "Play Normal Account" button; names the profile that login used.
+const OLD_PROFILE_PATH = path.join(ACCOUNTS_DIR, 'non-jagex-preferred-profile.json');
+
+async function readOldProfile() {
+    try {
+        const profile = JSON.parse(await fs.readFile(OLD_PROFILE_PATH, 'utf-8'))?.profile;
+        return typeof profile === 'string' && profile.trim() ? profile.trim() : null;
+    } catch (e) {
+        return null;
+    }
+}
 
 /**
  * Auth complete HTML to better show the user that the auth process is complete
@@ -293,6 +304,9 @@ async function writeAccountsToFile(sessionId, httpOptions = {}, accountFields = 
             new Date().toISOString(),
             accountFields
         );
+        // The first Jagex account keeps the plugin settings of the old username login's profile.
+        const oldProfile = existingAccounts.length === 0 && added > 0 ? await readOldProfile() : null;
+        if (oldProfile && !accounts[0].profile) accounts[0].profile = oldProfile;
 
         if (added > 0 || updated > 0) {
             const tempPath = `${ACCOUNTS_FILE_PATH}.${process.pid}.tmp`;
@@ -306,6 +320,7 @@ async function writeAccountsToFile(sessionId, httpOptions = {}, accountFields = 
             log.info(
                 `Accounts file updated: ${added} new, ${updated} updated account(s) in ${ACCOUNTS_FILE_PATH}`
             );
+            if (oldProfile) await fs.unlink(OLD_PROFILE_PATH).catch(() => {});
         } else {
             log.info('No account changes.');
         }
