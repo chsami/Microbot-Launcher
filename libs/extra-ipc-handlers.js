@@ -1,5 +1,6 @@
 const HELP_LINKS = {
     discord: 'https://discord.gg/zaGrfqFEWE',
+    jagexUpgrade: 'https://secure.runescape.com/m=news/jagex-accounts-now-required---heres-what-to-do',
     launcherDownload: 'https://www.themicrobot.com?source=launcher'
 };
 

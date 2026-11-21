@@ -128,7 +128,6 @@ describe('Microbot client / Microbot in RuneLite switch', () => {
 
     const LEGACY_CONTROLS = [
         'play',
-        'play-no-jagex-account',
         'add-accounts',
         'logout',
         'channel-stable',

@@ -15,6 +15,8 @@ const CHANNELS = ['stable', 'nightly'];
 
 const problem = (kind, title, message) => ({ problem: { kind, title, message } });
 const refuse = (message) => problem('unknown-option', 'Unknown Option', message);
+const accountNeeded = () =>
+    problem('jagex-account-needed', 'Jagex Account Needed', 'Clients can only start with a Jagex account. Pick one in the Jagex account list. If the list is empty, log in with Jagex in the launcher on this PC first.');
 const tooManyLaunches = () =>
     problem('too-many-launches', 'Too Many Launches', 'Other clients are still starting. Try again in a minute.');
 
@@ -62,11 +64,6 @@ module.exports = function setupProfileLauncher(deps) {
         return Array.isArray(value) ? value.filter((account) => typeof account?.accountId === 'string') : [];
     };
 
-    const readNonJagexProfile = () => {
-        const value = readJson('non-jagex-preferred-profile.json', null)?.profile;
-        return typeof value === 'string' ? value : null;
-    };
-
     const listOf = (what, read) => {
         try {
             const value = read?.();
@@ -78,7 +75,7 @@ module.exports = function setupProfileLauncher(deps) {
     };
 
     const currentProfiles = (accounts) =>
-        profileNames({ profiles: listOf('profiles', listProfiles), accounts, nonJagexProfile: readNonJagexProfile() });
+        profileNames({ profiles: listOf('profiles', listProfiles), accounts });
 
     const profileName = (value) => (typeof value === 'string' && value.trim()) || DEFAULT_PROFILE;
 
@@ -169,7 +166,6 @@ module.exports = function setupProfileLauncher(deps) {
             accounts,
             profiles: listOf('profiles', listProfiles),
             properties: readProperties(),
-            nonJagexProfile: readNonJagexProfile(),
             versions: listOf('client versions', listVersions),
             latestVersion: await cachedLatest(),
             linked,
@@ -188,14 +184,12 @@ module.exports = function setupProfileLauncher(deps) {
                 ? currentProfiles(accounts).find((name) => proxyChoices.profileIdFor(name) === options.profileId)
                 : undefined;
         if (!profile) return refuse('That profile is no longer in the launcher on this PC.');
-        let account = null;
-        if (options.accountId != null) {
-            account =
-                typeof options.accountId === 'string'
-                    ? accounts.find((entry) => proxyChoices.accountIdFor(entry.accountId) === options.accountId)
-                    : undefined;
-            if (!account) return refuse('That Jagex account is no longer logged in to the launcher on this PC.');
-        }
+        if (options.accountId == null) return accountNeeded();
+        const account =
+            typeof options.accountId === 'string'
+                ? accounts.find((entry) => proxyChoices.accountIdFor(entry.accountId) === options.accountId)
+                : undefined;
+        if (!account) return refuse('That Jagex account is no longer logged in to the launcher on this PC.');
         if (!CHANNELS.includes(options.channel)) return refuse('The client channel must be Stable or Nightly.');
         let version = null;
         if (options.version != null) {
@@ -249,12 +243,9 @@ module.exports = function setupProfileLauncher(deps) {
                 log.warn(`Could not record client use: ${error?.message || error}`);
             }
         }
-        log.info(`Starting profile "${profile}" ${account ? 'with a Jagex account' : 'without a Jagex account'}.`);
-        if (account) {
-            if (account.accountId && account.sessionId) writeCredentials(account);
-            return launch({ ...settings, account: profileName(account.profile) === profile ? account : { ...account, profile } });
-        }
-        return launch({ ...settings, noJagexProfile: profile });
+        log.info(`Starting profile "${profile}" with a Jagex account.`);
+        if (account.accountId && account.sessionId) writeCredentials(account);
+        return launch({ ...settings, account: profileName(account.profile) === profile ? account : { ...account, profile } });
     };
 
     const launchChosen = async (options, attempt, stillWanted) => {
@@ -282,10 +273,11 @@ module.exports = function setupProfileLauncher(deps) {
         return account ? { account } : accountGone();
     };
 
-    const launchNow = async (profile, proxyId, attempt, stillWanted, accountId = null, withoutAccount = false) => {
+    const launchNow = async (profile, proxyId, attempt, stillWanted, accountId = null) => {
         if (!stillWanted()) return problem('disabled', 'Start Cancelled', 'Starting from the dashboard was turned off.');
-        const target = withoutAccount ? { account: null } : accountId ? findAccountById(accountId) : findAccount(profile);
+        const target = accountId ? findAccountById(accountId) : findAccount(profile);
         if (target.problem) return target;
+        if (!target.account) return accountNeeded();
         const properties = readProperties();
         let proxyIp = '';
         if (proxyId) {
@@ -307,12 +299,12 @@ module.exports = function setupProfileLauncher(deps) {
         });
     };
 
-    const launchProfile = (rawProfile, { proxyId = null, stillWanted = () => true, withoutAccount = false } = {}) => {
+    const launchProfile = (rawProfile, { proxyId = null, stillWanted = () => true } = {}) => {
         const profile = profileName(rawProfile);
         if (profile.length > MAX_PROFILE_LENGTH || /[\u0000-\u001f]/.test(profile)) {
             return Promise.resolve(problem('invalid-profile', 'Invalid Profile', 'That profile name is not valid.'));
         }
-        return enqueue(profile, (attempt) => launchNow(profile, proxyId, attempt, stillWanted, null, withoutAccount === true));
+        return enqueue(profile, (attempt) => launchNow(profile, proxyId, attempt, stillWanted));
     };
 
     const launchAccount = (accountId, { proxyId = null, stillWanted = () => true, onAccepted = () => {} } = {}) => {
@@ -332,7 +324,7 @@ module.exports = function setupProfileLauncher(deps) {
         if (chosen.problem) return Promise.resolve(chosen);
         if (waiting >= MAX_WAITING) return Promise.resolve(tooManyLaunches());
         const { profile, account } = chosen.choice;
-        onAccepted({ profile, account: account ? account.displayName || 'Jagex account' : null });
+        onAccepted({ profile, account: account.displayName || 'Jagex account' });
         return enqueue(profile, (attempt) => launchChosen(options, attempt, stillWanted));
     };
 

@@ -13,6 +13,14 @@ describe('setup guide startup', () => {
     });
 });
 
+describe('setup guide steps', () => {
+    test('the old-login help button opens a step that exists', () => {
+        const html = require('fs').readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8');
+        expect(require('fs').readFileSync(require('path').join(__dirname, '..', 'renderer.js'), 'utf8')).toContain("openSetupGuide?.('Old login')");
+        expect(html).toMatch(/class="[^"]*\bguide-step\b[^"]*"[^>]*data-title="Old login"|data-title="Old login"[^>]*class="[^"]*\bguide-step\b/);
+    });
+});
+
 describe('setup guide targets', () => {
     test('reads space separated element ids in order', () => {
         expect(parseTargets('add-accounts play')).toEqual(['add-accounts', 'play']);

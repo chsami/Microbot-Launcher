@@ -389,6 +389,7 @@
         if (action === 'jagex-login') await jagexLogin();
         if (action === 'microbot-signup') showAuth('signup');
         if (action === 'microbot-signin') showAuth('signin');
+        if (action === 'jagex-upgrade') reportError(await window.electron.openHelpLink?.('jagexUpgrade'));
         if (action === 'discord') reportError(await window.electron.openHelpLink?.('discord'));
         if (action === 'logs') reportError(await window.electron.openLocation('launcher-logs'));
     };
@@ -467,7 +468,7 @@
         });
     };
 
-    window.openSetupGuide = () => open(0);
+    window.openSetupGuide = (title) => open(Math.max(0, steps.findIndex((step) => step.dataset.title === title)));
     window.maybeShowSetupGuide = async () => {
         const properties = await window.electron.readProperties();
         if (shouldAutoShow(properties) && !state.open && !state.paused) open(0);
