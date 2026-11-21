@@ -15,15 +15,10 @@ module.exports = async function (deps) {
     const url = 'https:/microbot.cloud';
     const filestorage = 'https://files.microbot.cloud';
 
-    const { startAuthFlow, cancelAuthFlow } = require(path.join(
+    const { startAuthFlow, cancelAuthFlow, authFlowRunning } = require(path.join(
         projectDir,
         'libs',
         'oauth-jagex.js'
-    ));
-    const { toProxyUri, startLoginProxy } = require(path.join(
-        projectDir,
-        'libs',
-        'login-proxy.js'
     ));
     const {
         listClientJars,
@@ -54,6 +49,7 @@ module.exports = async function (deps) {
             win.show();
             win.focus();
         };
+        if (authFlowRunning?.()) return { error: 'A Jagex login is already open in your browser.' };
         try {
             const result = await startAuthFlow({ proxy });
             bringLauncherToFront();
@@ -81,9 +77,12 @@ module.exports = async function (deps) {
         'libs',
         'overwrite-credential-properties.js'
     ));
-    const launchQueue = require(path.join(projectDir, 'libs', 'launch-queue.js'))();
+    const launchQueue = deps.launchQueue || require(path.join(projectDir, 'libs', 'launch-queue.js'))();
     const writeCredentials = (account) =>
-        overwriteCredentialsHandler.writeCredentialProperties({ fs, path, homeDir: require('os').homedir() }, account);
+        overwriteCredentialsHandler.writeCredentialProperties(
+            { fs, path, homeDir: require('os').homedir(), settingsFile: path.join(microbotDir, 'launcher-settings.json'), log },
+            account
+        );
     await overwriteCredentialsHandler({ ...deps, launchQueue });
     const accountLoaderHandler = require(path.join(
         projectDir,
@@ -118,22 +117,9 @@ module.exports = async function (deps) {
     const jarExecutor = await jarExecutorHandler({ ...deps, ipcMain: versionCheckedIpcMain, launchQueue, writeCredentials });
     const packageVersion = packageJson.version;
 
-    async function refreshSession(writeAccountsToFile, sessionId, proxyIp) {
-        const proxyUri = toProxyUri(proxyIp);
-        if (!proxyUri) return writeAccountsToFile(sessionId);
-        let loginProxy;
-        try {
-            loginProxy = await startLoginProxy(proxyUri);
-        } catch (error) {
-            log.error(`Could not start the proxy for a Jagex session: ${error.message}`);
-            return { ok: false, error: error.message };
-        }
-        try {
-            return await writeAccountsToFile(sessionId, loginProxy.httpOptions);
-        } finally {
-            await loginProxy.close();
-        }
-    }
+    const jagexSession = require(path.join(projectDir, 'libs', 'jagex-session.js'));
+    const refreshSession = (writeAccountsToFile, sessionId, proxyIp) =>
+        jagexSession.refreshSession({ writeAccountsToFile, log }, sessionId, proxyIp);
 
     ipcMain.handle('refresh-accounts', async (event, proxy) => {
         try {

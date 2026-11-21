@@ -621,6 +621,66 @@ webview#website {
     display: none;
 }
 
+.loader-card-character {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.loader-card-character[hidden] {
+    display: none;
+}
+
+.loader-card-character-label {
+    font-size: 12px;
+    color: var(--faint);
+}
+
+.loader-card-character-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.loader-card-select {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 6px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 12px;
+}
+
+.loader-card-character-row .loader-card-link {
+    margin-left: 0;
+    flex: none;
+}
+
+.loader-card-warning {
+    font-size: 12px;
+    color: var(--gold-soft);
+}
+
+.loader-card-warning:empty {
+    display: none;
+}
+
+.loader-card-note-plain,
+.loader-card-character-message {
+    font-size: 12px;
+    color: var(--faint);
+}
+
+.loader-card-note-plain:empty,
+.loader-card-character-message:empty {
+    display: none;
+}
+
 .loader-card-actions {
     display: flex;
     flex-wrap: wrap;

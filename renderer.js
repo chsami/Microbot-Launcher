@@ -750,6 +750,7 @@ async function runJagexLogin(button) {
     button.title = 'Finish logging in to Jagex in your browser, or click to cancel.';
     try {
         const authResult = await window.electron.startAuthFlow(getProxyValues());
+        window.refreshRuneliteCharacters?.();
         if (authResult?.error) {
             window.electron.errorAlert(authResult.error);
         }
@@ -810,6 +811,7 @@ async function handleJagexAccountLogic(properties) {
     setInterval(async () => {
         const hasChanged = await window.electron.checkFileChange();
         if (hasChanged) {
+            window.refreshRuneliteCharacters?.();
             const oldNumberOfAccounts = accounts.length;
             const latestAccounts = await safeReadAccounts();
             if (!latestAccounts) {
@@ -1420,6 +1422,7 @@ async function handleAccountDelete(accountId) {
     }
 
     const result = await window.electron.deleteAccount(accountId);
+    window.refreshRuneliteCharacters?.();
     if (result?.error) {
         window.electron.errorAlert(
             `Failed to delete account: ${result.error}`
@@ -1447,6 +1450,7 @@ async function removeAccountsHandler() {
 
     // Remove accounts via the Electron API
     await window.electron.removeAccounts();
+    window.refreshRuneliteCharacters?.();
 
     // Update the global accounts array
     accounts = [];
@@ -1545,6 +1549,7 @@ function setupRefreshAccountsButton() {
         refreshBtn.disabled = true;
         try {
             const result = await window.electron.refreshAccounts(getProxyValues());
+            window.refreshRuneliteCharacters?.();
             if (result?.error) {
                 window.electron.errorAlert(result.error);
                 return;

@@ -229,12 +229,22 @@ module.exports = function setupSessionRecorder(deps) {
         return view(true);
     };
 
-    const open = () => {
+    const cannotOpen = () => {
         if (updating) return { ok: false, error: MESSAGES.updatingOpen };
         if (!child || status?.state !== 'ready' || !child.stdin?.writable) return { ok: false, error: MESSAGES.notRunning };
+        return null;
+    };
+
+    const send = () => {
+        if (cannotOpen()) return cannotOpen();
         openedAt = Date.now();
         child.stdin.write('open\n');
         return { ok: true, message: MESSAGES.opening };
+    };
+
+    const open = async () => {
+        if (cannotOpen()) return cannotOpen();
+        return runelite.startInTurn ? runelite.startInTurn(async () => send()) : send();
     };
 
     ipcMain.handle('session-recorder:state', () => state());
