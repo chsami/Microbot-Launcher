@@ -13,8 +13,8 @@
     // the last themes.list() reply; null until one lands
     let entries = null;
     const apply = (picked) => {
-        // while the theme editor is open its live preview owns the page's colours; it repaints the pick when it closes
-        const previewing = $('theme-editor') && !$('theme-editor').classList.contains('auth-hidden');
+        // while the theme editor or import dialog is open its live preview owns the page's colours; it repaints the pick when it closes
+        const previewing = ['theme-editor', 'theme-importer'].some((id) => $(id) && !$(id).classList.contains('auth-hidden'));
         if (!previewing) {
             window.ThemeApply.paint(picked, document.documentElement, themes()?.image).then((problem) => problem && showError(problem));
         }
@@ -105,6 +105,15 @@
         await refresh();
     };
 
+    const exportTheme = async (id) => {
+        try {
+            const result = await themes().exportFile(id);
+            if (result?.error) showError('Could not save the theme file: ' + result.error);
+        } catch (error) {
+            showError('Could not save the theme file: ' + (error?.message || error));
+        }
+    };
+
     const SVG = 'http://www.w3.org/2000/svg';
     // a 24px stroke icon; d is one path of constant markup, never theme data
     const icon = (d, size = 16) => {
@@ -157,6 +166,8 @@
 
     const ICONS = {
         Edit: 'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z',
+        'Copy code': 'M8 8h12v12H8zM4 16V4h12',
+        'Save as file': 'M12 3v12M7 10l5 5 5-5M5 21h14',
         Delete: 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6',
     };
     // the custom list's controls by 'custom:<id>' (its radio) or '<action>:<id>', so a refresh can keep keyboard focus
@@ -165,19 +176,36 @@
         const { id, theme } = entry;
         const box = card('custom:' + id, theme.name, 'Based on ' + BASE_NAMES[theme.base], window.CustomTheme.resolve(theme).launcher);
         const actions = el('div', 'theme-card-actions');
+        const copied = el('span', 'theme-card-copied');
+        const label = (button, text) => {
+            button.setAttribute('title', text);
+            button.setAttribute('aria-label', text === 'Copied' ? text : text + ' ' + theme.name);
+        };
         for (const [text, onClick] of [
             ['Edit', () => window.ThemeEditor?.open(id, theme)],
+            // ThemeImport.copy says "Copied" by setting textContent for a while, then puts the old text back
+            ['Copy code', (button) => window.ThemeImport?.copy(theme, {
+                get textContent() { return copied.textContent; },
+                set textContent(value) {
+                    copied.textContent = value;
+                    label(button, value || 'Copy code');
+                },
+            })],
+            ['Save as file', () => exportTheme(id)],
             ['Delete', () => removeTheme(entry)],
         ]) {
             const button = el('button', 'theme-icon-button');
             button.type = 'button';
-            button.setAttribute('title', text);
-            button.setAttribute('aria-label', text + ' ' + theme.name);
+            label(button, text);
             button.append(icon(ICONS[text]));
-            button.addEventListener('click', onClick);
+            button.addEventListener('click', () => {
+                clearNote();
+                onClick(button);
+            });
             controls.set(text + ':' + id, button);
             actions.append(button);
         }
+        actions.append(copied);
         box.append(actions);
         return box;
     };
@@ -242,7 +270,12 @@
     window.addEventListener('focus', sync);
 
     const modal = () => $('theme-modal');
+    const clearNote = () => {
+        const note = $('theme-share-note');
+        if (note) note.textContent = '';
+    };
     const close = () => {
+        clearNote();
         modal()?.classList.add('auth-hidden');
         $('menu-btn')?.focus(); // back to the control that opened the menu, for keyboard users
     };
@@ -262,10 +295,12 @@
         });
         $('theme-close')?.addEventListener('click', close);
         $('theme-dismiss')?.addEventListener('click', close);
+        $('theme-import')?.addEventListener('click', () => window.ThemeImport?.open());
         $('theme-folder')?.addEventListener('click', async () => {
             const result = await themes()?.openFolder();
             if (result?.error) showError('Could not open the themes folder: ' + result.error);
         });
+        $('theme-guide')?.addEventListener('click', () => themes()?.openGuide());
         modal()?.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 close();

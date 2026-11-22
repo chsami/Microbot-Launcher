@@ -138,8 +138,8 @@
     accent-color: auto;
     color-scheme: normal;
 }
-/* While an unreadable custom theme is painted (only an editor preview can be), the Themes window and editor
-   keep the colours of its base built-in theme (same as that theme's own block), so a bad custom theme can
+/* While an unreadable custom theme is painted (only an editor or import preview can be), the Themes window, editor and
+   import dialogs keep the colours of its base built-in theme (same as that theme's own block), so a bad custom theme can
    never make the way back unreadable. Built-in and readable custom themes show their own. */
 :root[data-custom="on"][data-unreadable="on"]:not([data-theme]) .theme-safe,
 :root[data-custom="on"][data-unreadable="on"][data-theme="gold"] .theme-safe {
@@ -533,6 +533,11 @@
     outline: 2px solid var(--gold);
     outline-offset: 1px;
 }
+.theme-card-copied {
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: 4px;
+}
 .theme-card-broken {
     background: transparent;
     border-style: dashed;
@@ -561,10 +566,29 @@
     outline: 2px solid var(--gold);
     outline-offset: 2px;
 }
+.theme-link {
+    background: none;
+    border: 0;
+    color: var(--gold);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.theme-link:hover {
+    color: var(--gold-hover);
+}
+.theme-link:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+}
 
-/* The theme editor: no backdrop, so the launcher behind shows the live preview. It starts below the
+/* The theme editor and importer: no backdrop, so the launcher behind shows the live preview. They start below the
    title bar so the window buttons stay usable, and the card scrolls inside. */
-#theme-editor {
+#theme-editor,
+#theme-importer {
     align-items: flex-start;
     background: transparent;
     padding: 0;
@@ -594,6 +618,28 @@
     cursor: not-allowed;
     opacity: 0.6;
 }
+.theme-import-actions {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+}
+.theme-import-actions .theme-unset {
+    margin: 0;
+}
+/* name, notes and error take no room until they have something to say */
+/* -16px cancels the card's gap above this zero-height block while nothing is previewed */
+.theme-import-result {
+    margin-top: -16px;
+}
+.theme-import-result > p {
+    margin: 0;
+}
+.theme-import-result > .auth-error:empty {
+    min-height: 0;
+}
+.theme-import-result > :not(:empty) {
+    margin-top: 6px;
+}
 .theme-editor-card fieldset {
     border: 0;
     margin: 0;
@@ -604,9 +650,15 @@
     font-weight: 700;
     margin-bottom: 8px;
 }
+.theme-import-field {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 8px;
+}
 .theme-editor-name input,
 .theme-editor-hex,
-.theme-editor-field select {
+.theme-editor-field select,
+.theme-import-field textarea {
     background: var(--surface-2);
     border: 1px solid var(--line);
     border-radius: 6px;

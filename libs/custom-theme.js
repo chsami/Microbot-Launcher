@@ -1,5 +1,5 @@
 // Custom themes, format 1: cleaning a theme file, working out every colour from the four basics,
-// contrast warnings. Pure; loaded by the main process (require) and the renderer (window.CustomTheme).
+// contrast warnings and share codes. Pure; loaded by the main process (require) and the renderer (window.CustomTheme).
 (function () {
     const CLIENT_KEYS = ['accent', 'darker', 'dark', 'medium', 'light', 'text', 'control', 'border', 'darkerHover', 'darkHover', 'scrollTrack'];
     const LAUNCHER_VARS = ['bg', 'surface', 'surface-2', 'surface-3', 'line', 'line-strong', 'line-mid', 'shade', 'text', 'text-strong',
@@ -11,6 +11,10 @@
     const IMAGE = /^[\w .-]{1,80}\.(png|jpe?g|webp)$/i;
     const RESERVED = ['gold', 'slate', 'classic', 'custom', 'con', 'prn', 'aux', 'nul',
         ...[1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap((n) => ['com' + n, 'lpt' + n])];
+    const PREFIX = 'mbtheme1.';
+    const MAX_CODE = 8192;
+    const MAX_JSON = 64 * 1024;
+    const MAX_INPUT = 70000; // raw text, before trimming, so a paste of megabytes of spaces is never scanned
 
     // client values from ClientTheme.Palette, in CLIENT_KEYS order; launcher values from css/styles.css
     const palette = (hex) => Object.fromEntries(CLIENT_KEYS.map((k, i) => [k, '#' + hex[i].toString(16).padStart(6, '0')]));
@@ -217,6 +221,48 @@
             && (resolved.base !== 'gold' || contrast(l['text-strong'], l.red) >= 3);
     }
 
+    function encode(theme) {
+        const { background, ...shared } = theme; // images never travel in codes
+        const bytes = new TextEncoder().encode(JSON.stringify(shared));
+        let binary = '';
+        for (const b of bytes) binary += String.fromCharCode(b);
+        return PREFIX + btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    function decode(text) {
+        const bad = { error: 'That is not a theme code.' };
+        const tooLong = { error: 'This theme code is too long.' };
+        if (typeof text !== 'string') return bad;
+        if (text.length > MAX_INPUT) return tooLong;
+        // a Markdown fence, with or without a language tag on its own line
+        const trimmed = text.trim().replace(/^`+(?:[\w-]*\r?\n)?|`+$/g, '').trim();
+        let json;
+        if (trimmed.startsWith('{')) {
+            if (trimmed.length > MAX_JSON) return tooLong;
+            json = trimmed;
+        } else {
+            const code = trimmed.replace(/\s+/g, '');
+            if (code.length > MAX_CODE) return tooLong;
+            const body = code.slice(PREFIX.length);
+            if (!code.startsWith(PREFIX) || !/^[A-Za-z0-9_-]+$/.test(body)) return bad;
+            try {
+                const binary = atob(body.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (body.length % 4)) % 4));
+                json = new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(binary, (ch) => ch.charCodeAt(0)));
+            } catch {
+                return bad;
+            }
+        }
+        let raw;
+        try {
+            raw = JSON.parse(json);
+        } catch {
+            return bad;
+        }
+        if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return bad;
+        if (!trimmed.startsWith('{')) raw = { ...raw, background: null };
+        return clean(raw);
+    }
+
     function slug(name) {
         const s = String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
         if (!s) return 'theme';
@@ -240,7 +286,7 @@
 
     const api = {
         CLIENT_KEYS, LAUNCHER_VARS, BASIC_KEYS, BUILT_IN, BASES,
-        clean, cleanStyle, cleanBackground, resolve, contrast, warnings, readable, slug, uniqueName, selection,
+        MAX_INPUT, clean, cleanStyle, cleanBackground, resolve, contrast, warnings, readable, encode, decode, slug, uniqueName, selection,
     };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     if (typeof window !== 'undefined') window.CustomTheme = api;

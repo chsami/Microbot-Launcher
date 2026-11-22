@@ -76,7 +76,7 @@ describe('theme-library', () => {
         expect(fs.readdirSync(dir).sort()).toEqual(['midnight-2.json', 'midnight.json']);
     });
 
-    test('a new theme named Gold becomes id gold-theme', () => {
+    test('importing Gold becomes id gold-theme', () => {
         const saved = library.save(theme('Gold'), undefined, home);
         expect(saved.id).toBe('gold-theme');
         expect(saved.theme.name).toBe('Gold (2)');
@@ -145,20 +145,25 @@ describe('theme-library', () => {
     describe('handlers', () => {
         let handlers;
         let shell;
+        let dialog;
         beforeEach(() => {
             handlers = {};
             shell = { openPath: jest.fn(async () => ''), openExternal: jest.fn() };
-            library.register({ removeHandler: jest.fn(), handle: (name, fn) => (handlers[name] = fn) }, shell, null);
+            dialog = { showSaveDialog: jest.fn() };
+            library.register({ removeHandler: jest.fn(), handle: (name, fn) => (handlers[name] = fn) }, shell, null, dialog);
         });
 
         test('handlers reject bad ids', async () => {
             expect(Object.keys(handlers).sort()).toEqual([
-                'themes:delete', 'themes:image', 'themes:images', 'themes:list', 'themes:open-folder', 'themes:save',
+                'themes:delete', 'themes:export', 'themes:image', 'themes:images',
+                'themes:list', 'themes:open-folder', 'themes:open-guide', 'themes:save',
             ]);
             fs.writeFileSync(path.join(home, '.microbot', 'theme.json'), '{}');
             const result = await handlers['themes:delete'](fileEvent, '../theme');
             expect(result.error).toBeTruthy();
             expect(fs.existsSync(path.join(home, '.microbot', 'theme.json'))).toBe(true);
+            expect((await handlers['themes:export'](fileEvent, '../theme')).error).toBeTruthy();
+            expect(dialog.showSaveDialog).not.toHaveBeenCalled();
         });
 
         test('handlers refuse senders that are not the launcher page', async () => {
@@ -180,6 +185,256 @@ describe('theme-library', () => {
 
     });
 
+    test('register does not load Electron until the guide opens', () => {
+        jest.isolateModules(() => {
+            jest.doMock('electron', () => {
+                throw new Error('no Electron binary');
+            });
+            const isolated = require('../libs/theme-library');
+            expect(() => isolated.register({ removeHandler: jest.fn(), handle: jest.fn() }, {}, null, {})).not.toThrow();
+        });
+        jest.dontMock('electron');
+    });
+
+    describe('theme guide window', () => {
+        const GUIDE = path.join(__dirname, '..', 'libs', 'theme-guide.html');
+        let windows;
+        let handler;
+        let shell;
+        let loadError;
+        let log;
+        beforeEach(() => {
+            windows = [];
+            loadError = null;
+            log = { error: jest.fn() };
+            shell = { openPath: jest.fn(), openExternal: jest.fn() };
+            class FakeWindow {
+                constructor(options) {
+                    this.options = options;
+                    this.listeners = {};
+                    this.destroyed = false;
+                    this.focus = jest.fn();
+                    this.loadFile = jest.fn(async () => {
+                        if (loadError) throw loadError;
+                    });
+                    this.destroy = jest.fn(() => (this.destroyed = true));
+                    this.setTitleBarOverlay = jest.fn();
+                    this.setBackgroundColor = jest.fn();
+                    let keys = 0;
+                    this.webContents = {
+                        insertCSS: jest.fn(async () => 'key' + ++keys),
+                        removeInsertedCSS: jest.fn(async () => {}),
+                        on: (event, fn) => (this.listeners[event] = fn),
+                        setWindowOpenHandler: (fn) => (this.openHandler = fn),
+                    };
+                    this.once = (event, fn) => (this.listeners[event] = fn);
+                    this.on = this.once;
+                    windows.push(this);
+                }
+                isDestroyed() {
+                    return this.destroyed;
+                }
+            }
+            FakeWindow.fromWebContents = jest.fn(() => 'parent');
+            jest.spyOn(os, 'homedir').mockReturnValue(home);
+            const handlers = {};
+            library.register({ removeHandler: jest.fn(), handle: (name, fn) => (handlers[name] = fn) }, shell, log, {}, path.join(__dirname, '..', 'index.html'), FakeWindow);
+            handler = handlers['themes:open-guide'];
+        });
+
+        test('opens one sandboxed window that loads the bundled guide, a second call focuses it', async () => {
+            expect(await handler(fileEvent)).toEqual({ ok: true });
+            expect(windows).toHaveLength(1);
+            const { options } = windows[0];
+            expect(options).toMatchObject({ width: 820, height: 720, title: 'How to make a theme', autoHideMenuBar: true, parent: 'parent' });
+            expect(options.webPreferences).toEqual({ sandbox: true, contextIsolation: true, nodeIntegration: false });
+            expect(windows[0].loadFile).toHaveBeenCalledWith(GUIDE);
+            await handler(fileEvent);
+            expect(windows).toHaveLength(1);
+            expect(windows[0].focus).toHaveBeenCalled();
+            windows[0].listeners.closed();
+            await handler(fileEvent);
+            expect(windows).toHaveLength(2);
+        });
+
+        test("themes the guide's warnings with the launcher red", async () => {
+            await handler(fileEvent);
+            windows[0].listeners['did-finish-load']();
+            expect(windows[0].webContents.insertCSS.mock.calls[0][0]).toContain('--red: #c2231f;');
+        });
+
+        test('a guide that fails to load is destroyed, forgotten and reported', async () => {
+            loadError = new Error('ENOENT');
+            expect(await handler(fileEvent)).toEqual({ error: 'Could not open the guide.' });
+            expect(windows[0].destroy).toHaveBeenCalled();
+            expect(log.error).toHaveBeenCalled();
+            loadError = null;
+            expect(await handler(fileEvent)).toEqual({ ok: true });
+            expect(windows).toHaveLength(2);
+        });
+
+        // Every declaration in the block must be a launcher colour or the title offset; returns the offenders.
+        const badDeclarations = (css) => {
+            const body = css.match(/^html:root \{([^{}]*)\}$/);
+            if (!body) return [css];
+            return body[1].split(';').map((x) => x.trim()).filter(Boolean)
+                .filter((x) => !/^(--title-left: (16|80)px|--(?!title-left:)[a-z0-9-]+: #[0-9a-f]{6})$/i.test(x));
+        };
+
+        test('inserts only #rrggbb launcher colours once loaded', async () => {
+            await handler(fileEvent);
+            windows[0].listeners['did-finish-load']();
+            const css = windows[0].webContents.insertCSS.mock.calls[0][0];
+            expect(css).toContain('--red:');
+            expect(badDeclarations(css)).toEqual([]);
+        });
+
+        test('the guide CSS checker rejects extra or unterminated declarations', () => {
+            expect(badDeclarations('html:root { --bg: #0c0a08; color: red; }')).toEqual(['color: red']);
+            expect(badDeclarations('html:root { --bg: #0c0a08; --x: #fff }')).toEqual(['--x: #fff']);
+            expect(badDeclarations('html:root { --bg: #0c0a08; }')).toEqual([]);
+            expect(badDeclarations('html:root { --title-left: #ffffff; }')).toEqual(['--title-left: #ffffff']);
+        });
+
+        test('keeps the newest colours when overlapping focus restyles resolve out of order', async () => {
+            await handler(fileEvent);
+            const win = windows[0];
+            await win.listeners['did-finish-load']();
+            const pending = [];
+            win.webContents.insertCSS = jest.fn((css) => new Promise((resolve) => pending.push({ css, resolve })));
+            const theme = require('../libs/theme-settings');
+            theme.write({ theme: 'slate' }, home);
+            const first = win.listeners.focus();
+            theme.write({ theme: 'gold' }, home);
+            const second = win.listeners.focus();
+            await Promise.resolve();
+            expect(pending).toHaveLength(2);
+            pending[1].resolve('newer');
+            await second;
+            pending[0].resolve('older');
+            await first;
+            expect(pending[1].css).toContain('--bg: #0c0a08;');
+            const removed = win.webContents.removeInsertedCSS.mock.calls.map((c) => c[0]).sort();
+            expect(removed).toEqual(['key1', 'older']);
+        });
+
+        test('a failing removeInsertedCSS does not break a restyle', async () => {
+            await handler(fileEvent);
+            const win = windows[0];
+            await win.listeners['did-finish-load']();
+            win.webContents.removeInsertedCSS.mockRejectedValue(new Error('gone'));
+            await expect(win.listeners.focus()).resolves.toBeUndefined();
+        });
+
+        test('the guide title clears the macOS window controls only on darwin', async () => {
+            const real = Object.getOwnPropertyDescriptor(process, 'platform');
+            try {
+                for (const [platform, left] of [['darwin', '80px'], ['win32', '16px']]) {
+                    Object.defineProperty(process, 'platform', { value: platform });
+                    await handler(fileEvent);
+                    const win = windows[windows.length - 1];
+                    await win.listeners['did-finish-load']();
+                    expect(win.webContents.insertCSS.mock.calls[0][0]).toContain('--title-left: ' + left + ';');
+                    win.listeners.closed();
+                }
+            } finally {
+                Object.defineProperty(process, 'platform', real);
+            }
+            expect(fs.readFileSync(GUIDE, 'utf8')).toMatch(/\.titlebar \{[^}]*padding: 0 140px 0 var\(--title-left, 16px\)/);
+        });
+
+        test('hides the default title bar and colours its overlay and background from the launcher theme', async () => {
+            await handler(fileEvent);
+            const { options } = windows[0];
+            // no theme.json in the fake home: the launcher is Gold
+            expect(options.backgroundColor).toBe('#0c0a08');
+            if (process.platform === 'darwin') {
+                expect(options.titleBarStyle).toBe('hiddenInset');
+                expect(options.titleBarOverlay).toBeUndefined();
+            } else {
+                expect(options.titleBarStyle).toBe('hidden');
+                expect(options.titleBarOverlay).toEqual({ color: '#0c0a08', symbolColor: '#d6cfc2', height: 36 });
+            }
+        });
+
+        test('on focus the guide picks up a theme changed in the launcher', async () => {
+            await handler(fileEvent);
+            const win = windows[0];
+            await win.listeners['did-finish-load']();
+            require('../libs/theme-settings').write({ theme: 'slate' }, home);
+            await win.listeners.focus();
+            expect(win.webContents.insertCSS).toHaveBeenCalledTimes(2);
+            expect(win.webContents.insertCSS.mock.calls[1][0]).toContain('--bg: #15171c;');
+            expect(win.webContents.removeInsertedCSS).toHaveBeenCalledWith('key1');
+            expect(win.setBackgroundColor).toHaveBeenCalledWith('#15171c');
+            if (process.platform !== 'darwin') expect(win.setTitleBarOverlay).toHaveBeenCalledWith({ color: '#15171c', symbolColor: '#c9cdd6' });
+        });
+
+        test('the guide has a draggable title strip and a themed scrollbar', () => {
+            const html = fs.readFileSync(GUIDE, 'utf8');
+            const css = html.match(/<style>([\s\S]*?)<\/style>/)[1];
+            expect(html).toMatch(/<div class="titlebar"[^>]*>How to make a theme<\/div>/);
+            const strip = css.match(/\.titlebar \{([^}]*)\}/)[1];
+            expect(strip).toContain('-webkit-app-region: drag');
+            expect(strip).toContain('height: 36px');
+            // the page scrolls in its own box below the strip, so the scrollbar never sits under the caption buttons
+            expect(css).toMatch(/html, body \{[^}]*height: 100vh;[^}]*overflow: hidden;/);
+            const page = [...css.matchAll(/\.page \{([^}]*)\}/g)].map((m) => m[1]).join(' ');
+            expect(page).toContain('height: calc(100vh - 36px)');
+            expect(page).toContain('overflow-y: auto');
+            expect(html).toMatch(/<body>\s*<div class="titlebar"[^>]*>[^<]*<\/div>\s*<div class="page">[\s\S]*<\/div>\s*<\/body>/);
+            const bars = [...css.matchAll(/::-webkit-scrollbar[^{]*\{([^}]*)\}/g)].map((m) => m[1]);
+            expect(bars.length).toBeGreaterThan(2);
+            for (const rule of bars) {
+                for (const [, value] of rule.matchAll(/(?:background|border|background-color)\s*:\s*([^;]+)/g)) {
+                    expect(value).toMatch(/var\(--|transparent|padding-box/);
+                }
+            }
+        });
+
+        test('blocks navigation and only opens web links externally', async () => {
+            await handler(fileEvent);
+            const prevent = jest.fn();
+            windows[0].listeners['will-navigate']({ preventDefault: prevent });
+            expect(prevent).toHaveBeenCalled();
+            expect(windows[0].openHandler({ url: 'https://example.com/a' })).toEqual({ action: 'deny' });
+            expect(shell.openExternal).toHaveBeenCalledWith('https://example.com/a');
+            windows[0].openHandler({ url: 'file:///C:/Windows/system32/calc.exe' });
+            windows[0].openHandler({ url: 'javascript:alert(1)' });
+            expect(shell.openExternal).toHaveBeenCalledTimes(1);
+        });
+
+        test('the guide file is self-contained and covers every section of the markdown guide', () => {
+            const html = fs.readFileSync(GUIDE, 'utf8');
+            expect(html).toContain(`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:">`);
+            expect(html).not.toMatch(/<script/i);
+            expect(html).not.toMatch(/(src|href)="https?:/i);
+            expect(html).not.toContain('TODO');
+            const md = fs.readFileSync(path.join(__dirname, '..', 'docs', 'custom-themes-guide.md'), 'utf8');
+            const headings = md.split(/\r?\n/).filter((l) => /^#{1,3} /.test(l)).map((l) => l.replace(/^#+ /, ''));
+            expect(headings.length).toBeGreaterThan(8);
+            for (const heading of headings) expect(html).toContain(heading);
+        });
+
+        test('the guide quick start links to the make, share and troubleshooting sections', () => {
+            const html = fs.readFileSync(GUIDE, 'utf8');
+            const quick = html.match(/<nav class="quick"[\s\S]*?<\/nav>/);
+            expect(quick).not.toBeNull();
+            const targets = [...quick[0].matchAll(/href="#([^"]+)"/g)].map((m) => m[1]);
+            expect(targets).toEqual(['make-a-theme', 'share', 'wrong']);
+            for (const id of targets) expect(html).toContain(`id="${id}"`);
+        });
+
+        test('the guide styles take colours from variables, hex only in the :where(:root) defaults, which injected html:root colours outrank', () => {
+            const html = fs.readFileSync(GUIDE, 'utf8');
+            const css = html.match(/<style>([\s\S]*?)<\/style>/)[1];
+            expect(css).toMatch(/^\s*:where\(:root\)\s*\{/m);
+            const rest = css.replace(/:where\(:root\)\s*\{[^}]*\}/, '');
+            expect(rest).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+            for (const [, style] of html.matchAll(/style="([^"]*)"/g)) expect(style).not.toMatch(/#[0-9a-f]{3,8}\b|rgb|hsl/i);
+        });
+    });
+
     test('images lists regular image files of 5 MB or less', () => {
         fs.writeFileSync(path.join(dir, 'small.png'), PNG);
         fs.writeFileSync(path.join(dir, 'big.png'), Buffer.alloc(5 * 1024 * 1024 + 1));
@@ -194,5 +449,16 @@ describe('theme-library', () => {
         expect(names).toHaveLength(100);
         expect(names[0]).toBe('img000.png');
         expect(names[99]).toBe('img099.png');
+    });
+
+    test('exportFile writes the cleaned theme where the player picks', async () => {
+        const { id } = library.save(theme('Midnight'), undefined, home);
+        const target = path.join(home, 'out.json');
+        const dialog = { showSaveDialog: jest.fn(async () => ({ canceled: false, filePath: target })) };
+        expect(await library.exportFile(id, dialog, home)).toEqual({ ok: true });
+        expect(dialog.showSaveDialog.mock.calls[0][0].defaultPath).toBe('midnight.json');
+        expect(JSON.parse(fs.readFileSync(target, 'utf8')).name).toBe('Midnight');
+        dialog.showSaveDialog.mockResolvedValueOnce({ canceled: true });
+        expect(await library.exportFile(id, dialog, home)).toEqual({ canceled: true });
     });
 });

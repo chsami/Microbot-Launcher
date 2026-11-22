@@ -356,14 +356,17 @@
                 <section class="theme-section" aria-labelledby="theme-custom-title">
                     <div class="theme-section-head">
                         <h2 id="theme-custom-title" class="theme-section-title">Your themes</h2>
+                        <button id="theme-import" class="theme-button" type="button">Import theme</button>
                         <button id="theme-folder" class="theme-button" type="button">Open themes folder</button>
                     </div>
-                    <p id="theme-empty" class="theme-unset" hidden>No themes yet.</p>
+                    <p id="theme-empty" class="theme-unset" hidden>No themes yet. Make one or import one from a friend.</p>
                     <div id="theme-custom-list" class="theme-grid"></div>
                 </section>
             </div>
             <footer class="theme-editor-foot">
                 <div class="theme-editor-foot-text">
+                    <button id="theme-guide" class="theme-link" type="button">How to make a theme</button>
+                    <p id="theme-share-note" class="theme-editor-status" role="status"></p>
                     <p id="theme-error" class="auth-error" role="alert" aria-live="polite"></p>
                 </div>
                 <button id="theme-close" class="theme-button theme-button-primary" type="button">Done</button>
@@ -502,6 +505,36 @@
                 <button id="theme-editor-cancel" class="theme-button" type="button">Cancel</button>
                 <button id="theme-editor-save" class="theme-button theme-button-primary" type="button">Save</button>
             </footer>
+        </div>
+    </div>
+    <div id="theme-importer" class="auth-modal auth-hidden theme-safe" role="dialog" aria-modal="true"
+        aria-labelledby="theme-import-title">
+        <div class="auth-card theme-editor-card">
+            <h1 id="theme-import-title" class="auth-title">Import theme</h1>
+            <label class="theme-import-field">Paste a theme code or theme file
+                <textarea id="theme-import-text" rows="5" maxlength="70000" spellcheck="false"></textarea></label>
+            <div class="theme-import-actions">
+                <button id="theme-import-preview" class="theme-button" type="button">Preview</button>
+                <p id="theme-import-status" class="theme-unset" role="status"></p>
+            </div>
+            <div class="theme-import-result">
+                <p id="theme-import-name" class="theme-name"></p>
+                <span id="theme-import-chips" class="theme-editor-chips" aria-hidden="true"></span>
+                <div id="theme-import-check" class="theme-editor-check" role="status" data-state="ok" hidden>
+                    <svg class="theme-editor-check-warn" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path><path d="M12 9v4M12 17h.01"></path></svg>
+                    <svg class="theme-editor-check-ok" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+                    <div>
+                        <p id="theme-import-check-title" class="theme-editor-check-title">Text is easy to read</p>
+                        <ul id="theme-import-warnings" class="theme-editor-warnings"></ul>
+                    </div>
+                </div>
+                <p id="theme-import-note" class="theme-unset" role="status"></p>
+                <p id="theme-import-error" class="auth-error" role="alert" aria-live="polite"></p>
+            </div>
+            <div class="theme-footer">
+                <button id="theme-import-save" class="theme-button theme-button-primary" type="button" disabled>Save as new theme</button>
+                <button id="theme-import-cancel" class="theme-button" type="button">Cancel</button>
+            </div>
         </div>
     </div>
     <div id="proxy-manager-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
@@ -917,6 +950,7 @@
     <script src="libs/theme-apply.js"></script>
     <script src="libs/theme-picker.js"></script>
     <script src="libs/theme-editor.js"></script>
+    <script src="libs/theme-import.js"></script>
     <script src="halloween.js"></script>
 
 

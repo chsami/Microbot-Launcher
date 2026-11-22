@@ -200,6 +200,29 @@ test('Gold headings on cards and the Play label on red are checked', () => {
     expect(T.warnings(slate)).toEqual([]);
 });
 
+test('encode/decode round-trip, drop background, reject junk', () => {
+    const t = theme({
+        name: 'Midnight 🌙', base: 'slate', colors: { accent: '#7aa2f7' }, client: { border: '#111111' },
+        launcher: { red: '#ff0000' }, style: { corners: 6, roundScrollbars: true }, background: { image: 'm.png', strength: 20 },
+    });
+    const code = T.encode(t);
+    expect(code).toMatch(/^mbtheme1\.[A-Za-z0-9_-]+$/);
+    expect(T.decode(code).theme).toEqual({ ...t, background: null });
+    const fence = '```';
+    expect(T.decode(fence + '\n' + code.slice(0, 20) + '\n' + code.slice(20) + '\n' + fence).theme).toEqual({ ...t, background: null });
+    expect(T.decode(fence + 'text\n' + code + '\n' + fence).theme).toEqual({ ...t, background: null });
+    expect(T.decode(fence + code + fence).theme).toEqual({ ...t, background: null });
+    expect(T.decode(JSON.stringify(t)).theme).toEqual(t);
+    expect(T.decode('mbtheme1.' + 'a'.repeat(8184)).error).toBe('This theme code is too long.');
+    for (const junk of ['mbtheme2.xx', 'mbtheme1.%%%', 'mbtheme1.' + btoa('[1]').replace(/=/g, ''), 'mbtheme1.', '', '{nope', null]) {
+        expect(T.decode(junk).error).toEqual(expect.any(String));
+    }
+    expect(T.decode('{"name":"' + 'x'.repeat(70000) + '"}').error).toBe('This theme code is too long.');
+    const spaces = ' '.repeat(512 * 1024);
+    expect(T.decode(spaces + code + spaces).error).toBe('This theme code is too long.'); // refused before any trimming
+    expect(T.decode(' '.repeat(1000) + code).theme).toEqual({ ...t, background: null });
+});
+
 test('slug', () => {
     expect(T.slug('Midnight Blue!')).toBe('midnight-blue');
     expect(T.slug('Gold')).toBe('gold-theme');

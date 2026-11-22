@@ -12,7 +12,9 @@ contextBridge.exposeInMainWorld('electron', {
         remove: (id) => ipcRenderer.invoke('themes:delete', id),
         images: () => ipcRenderer.invoke('themes:images'),
         image: (name) => ipcRenderer.invoke('themes:image', name),
-        openFolder: () => ipcRenderer.invoke('themes:open-folder')
+        exportFile: (id) => ipcRenderer.invoke('themes:export', id),
+        openFolder: () => ipcRenderer.invoke('themes:open-folder'),
+        openGuide: () => ipcRenderer.invoke('themes:open-guide')
     },
     minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
     maximizeWindow: () => ipcRenderer.invoke('maximize-window'),

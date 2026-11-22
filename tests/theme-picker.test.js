@@ -1,6 +1,6 @@
 
 // theme-picker.js runs in the renderer; give it just enough of a DOM to drive it
-function load({ deferWrites = false, failFirstWrite = false, saved = {}, themes = [], editorOpen = false } = {}) {
+function load({ deferWrites = false, failFirstWrite = false, saved = {}, themes = [], editorOpen = false, importOpen = false } = {}) {
     const listeners = {};
     const on = (key) => (type, fn) => { listeners[key + ':' + type] = fn; };
     const classes = {};
@@ -40,6 +40,7 @@ function load({ deferWrites = false, failFirstWrite = false, saved = {}, themes 
     els['theme-title'] = { id: 'theme-title', focus() { focused.el = this; } };
     els['theme-missing'] = { hidden: true };
     if (editorOpen) els['theme-editor'] = { classList: { contains: () => false } };
+    if (importOpen) els['theme-importer'] = { classList: { contains: () => false } };
     const vars = {};
     const root = { dataset: {}, style: { setProperty: (k, v) => (vars[k] = v), removeProperty: (k) => delete vars[k] } };
     const reads = [];
@@ -69,16 +70,20 @@ function load({ deferWrites = false, failFirstWrite = false, saved = {}, themes 
     };
     const removed = [];
     const opened = [];
+    const copies = [];
     const ThemeEditor = { open: (...args) => opened.push(args) };
+    const ThemeImport = { copy: (...args) => copies.push(args) };
+    const exported = [];
     electron.themes = {
         list: () => Promise.resolve(themes.filter((e) => !removed.includes(e.id))),
         image: () => Promise.resolve({ error: 'That image is not in the themes folder.' }),
         remove: (id) => (removed.push(id), Promise.resolve({ ok: true })),
+        exportFile: (id) => (exported.push(id), Promise.resolve({ error: 'The disk is full.' })),
     };
     const confirms = [];
     electron.showConfirmationDialog = (...args) => (confirms.push(args), Promise.resolve(true));
     const dispatched = [];
-    const window = { electron, ThemeEditor, addEventListener: on('window'), dispatchEvent: (e) => dispatched.push(e.type) };
+    const window = { electron, ThemeEditor, ThemeImport, addEventListener: on('window'), dispatchEvent: (e) => dispatched.push(e.type) };
     // load through Jest's module system so coverage counts the picker
     global.window = window;
     global.document = document;
@@ -92,7 +97,7 @@ function load({ deferWrites = false, failFirstWrite = false, saved = {}, themes 
     const rows = () => els['theme-custom-list'].children;
     // the custom theme cards, after the New theme card
     const cards = () => rows().slice(1);
-    return { dispatched, root, vars, rows, cards, builtIns: () => els['theme-builtin-list'].children, empty: els['theme-empty'], opened, removed, confirms, missing: els['theme-missing'], reads, writes, pending, change, focus: () => listeners['window:focus'](), errors: () => els['theme-error'].textContent, classes, focused, open: () => listeners['themes:click'](), key: (key) => listeners['modal:keydown']({ key }), keydown: (e) => listeners['modal:keydown'](e), modal: els['theme-modal'], document, window };
+    return { dispatched, root, vars, rows, cards, builtIns: () => els['theme-builtin-list'].children, empty: els['theme-empty'], opened, copies, removed, exported, confirms, missing: els['theme-missing'], reads, writes, pending, change, focus: () => listeners['window:focus'](), errors: () => els['theme-error'].textContent, classes, focused, open: () => listeners['themes:click'](), key: (key) => listeners['modal:keydown']({ key }), keydown: (e) => listeners['modal:keydown'](e), modal: els['theme-modal'], document, window };
 }
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -213,6 +218,26 @@ describe('theme picker', () => {
         expect(p.root.dataset).toEqual({});
     });
 
+    test('a read leaves the open import preview alone', async () => {
+        const p = load({ importOpen: true });
+        await flush();
+        p.reads[0]({ theme: 'classic' });
+        await flush();
+        expect(p.root.dataset).toEqual({});
+    });
+
+    test('Save as file exports the theme and shows a failure', async () => {
+        const p = load({ themes: [midnight] });
+        await flush();
+        p.reads[0]({ theme: 'gold' });
+        await flush();
+        await flush();
+        action(p.cards()[0], 'Save as file').listeners.click();
+        await flush();
+        expect(p.exported).toEqual(['midnight']);
+        expect(p.errors()).toBe('Could not save the theme file: The disk is full.');
+    });
+
     test('a focus read applies a change made elsewhere', async () => {
         const p = load();
         await flush();
@@ -248,7 +273,7 @@ describe('theme picker', () => {
         expect(nodes(card).some((n) => n.textContent === 'Based on Slate')).toBe(true);
         expect(nodes(card).find((n) => n.tag === 'input')).toMatchObject({ type: 'radio', name: 'theme', value: 'custom:evil' });
         expect(nodes(card).filter((n) => n.tag === 'button').map((n) => [n.attributes['aria-label'], n.attributes.title])).toEqual([
-            ['Edit ' + evil, 'Edit'], ['Delete ' + evil, 'Delete'],
+            ['Edit ' + evil, 'Edit'], ['Copy code ' + evil, 'Copy code'], ['Save as file ' + evil, 'Save as file'], ['Delete ' + evil, 'Delete'],
         ]);
     });
 
@@ -322,14 +347,26 @@ describe('theme picker', () => {
         expect(q.empty.hidden).toBe(true);
     });
 
-    test('Edit opens the editor for that theme', async () => {
+    test('Edit and Copy code call the editor and the copier for that theme', async () => {
         const p = load({ themes: [midnight] });
         await flush();
         p.reads[0]({ theme: 'gold' });
         await flush();
         await flush();
-        action(p.cards()[0], 'Edit').listeners.click();
+        const [card] = p.cards();
+        action(card, 'Edit').listeners.click();
         expect(p.opened).toEqual([['midnight', midnight.theme]]);
+        const copy = action(card, 'Copy code');
+        copy.listeners.click();
+        expect(p.copies[0][0]).toBe(midnight.theme);
+        // the copier shows "Copied" through textContent for a while, then puts the old text back
+        const feedback = p.copies[0][1];
+        const shown = () => nodes(card).find((n) => n.classList.contains('theme-card-copied')).textContent;
+        expect(feedback.textContent).toBe('');
+        feedback.textContent = 'Copied';
+        expect([shown(), copy.attributes.title, copy.attributes['aria-label']]).toEqual(['Copied', 'Copied', 'Copied']);
+        feedback.textContent = '';
+        expect([shown(), copy.attributes.title, copy.attributes['aria-label']]).toEqual(['', 'Copy code', 'Copy code Midnight']);
     });
 
     test('picking a custom theme saves its selection', async () => {

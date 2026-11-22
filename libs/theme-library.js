@@ -4,9 +4,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const url = require('url');
-const { clean, cleanBackground, slug, uniqueName } = require('./custom-theme');
-const { writeAtomic } = require('./theme-settings');
+const { BASES, clean, cleanBackground, slug, uniqueName } = require('./custom-theme');
+const { writeAtomic, launcherColors } = require('./theme-settings');
 
+const GUIDE_PAGE = path.join(__dirname, 'theme-guide.html');
+const HEX = /^#[0-9a-f]{6}$/i;
+// launcherColors() key -> CSS variable of theme-guide.html (muted keeps its own default: launcherColors has no such colour)
+const GUIDE_VARS = { bg: '--bg', surface: '--surface', text: '--text', textStrong: '--text-strong', accent: '--gold', line: '--line', red: '--red' };
 const ID = /^[a-z0-9-]{1,40}$/;
 const MAX_THEME = 64 * 1024;
 const MAX_IMAGE = 5 * 1024 * 1024;
@@ -198,8 +202,97 @@ function readImage(name, home) {
     return { bytes: new Uint8Array(bytes), type };
 }
 
+async function exportFile(id, dialog, home) {
+    if (typeof id !== 'string' || !ID.test(id)) return BAD_ID;
+    const read = readTheme(path.join(themesDir(home), id + '.json'));
+    if (read.error) return read;
+    const result = await dialog.showSaveDialog({ defaultPath: id + '.json', filters: [{ name: 'Theme', extensions: ['json'] }] });
+    if (result.canceled || !result.filePath) return { canceled: true };
+    fs.writeFileSync(result.filePath, JSON.stringify(read.theme, null, 2));
+    return { ok: true };
+}
+
+// Gold when no theme is picked: unlike the login and captcha pages, the guide has no original colours of its own
+function guideColors() {
+    const g = BASES.gold.launcher;
+    return launcherColors() || { bg: g.bg, surface: g.surface, text: g.text, textStrong: g['text-strong'], accent: g.gold, line: g.line, red: g.red };
+}
+
+function guideCss() {
+    const colors = guideColors();
+    const rules = Object.entries(GUIDE_VARS).filter(([key]) => HEX.test(colors[key])).map(([key, name]) => `${name}: ${colors[key]};`);
+    // the macOS traffic lights sit over the left of the title strip
+    rules.push(`--title-left: ${process.platform === 'darwin' ? 80 : 16}px;`);
+    return `html:root { ${rules.join(' ')} }`;
+}
+
+// title bar overlay colours of the guide, Gold where a colour is not #rrggbb
+function titleBarColors() {
+    const colors = guideColors();
+    const gold = BASES.gold.launcher;
+    return { color: HEX.test(colors.bg) ? colors.bg : gold.bg, symbolColor: HEX.test(colors.text) ? colors.text : gold.text };
+}
+
 // page: the file main.js loads into the launcher window
-function register(ipcMain, shell, log, page = path.join(__dirname, '..', 'index.html')) {
+function register(ipcMain, shell, log, dialog, page = path.join(__dirname, '..', 'index.html'), BrowserWindow) {
+    let guide = null;
+    const openGuide = async (event) => {
+        if (guide && !guide.isDestroyed()) {
+            guide.focus();
+            return { ok: true };
+        }
+        BrowserWindow ??= require('electron').BrowserWindow; // only now: tests and worktrees may lack the Electron binary
+        const bar = titleBarColors();
+        const mac = process.platform === 'darwin';
+        const win = new BrowserWindow({
+            width: 820,
+            height: 720,
+            title: 'How to make a theme',
+            autoHideMenuBar: true,
+            ...(mac ? { titleBarStyle: 'hiddenInset' } : { titleBarStyle: 'hidden', titleBarOverlay: { ...bar, height: 36 } }),
+            backgroundColor: bar.color, // no white flash before the page paints
+            parent: BrowserWindow.fromWebContents(event.sender) || undefined,
+            webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+        });
+        guide = win;
+        win.once('closed', () => {
+            if (guide === win) guide = null;
+        });
+        let cssKey = null;
+        let generation = 0;
+        const drop = (key) => win.webContents.removeInsertedCSS(key).catch(() => {});
+        const restyle = async () => {
+            // insert first, then drop the old block, so the page never shows without theme colours
+            const mine = ++generation;
+            const key = await win.webContents.insertCSS(guideCss());
+            if (mine !== generation) return drop(key); // a newer restyle started meanwhile: it owns the colours
+            const old = cssKey;
+            cssKey = key;
+            if (old) await drop(old);
+        };
+        win.webContents.on('did-finish-load', restyle);
+        // the launcher theme may have changed while the guide sat behind it
+        win.on('focus', async () => {
+            const next = titleBarColors();
+            win.setBackgroundColor(next.color);
+            if (!mac && typeof win.setTitleBarOverlay === 'function') win.setTitleBarOverlay(next);
+            if (cssKey) await restyle();
+        });
+        win.webContents.on('will-navigate', (e) => e.preventDefault());
+        win.webContents.setWindowOpenHandler(({ url: target }) => {
+            if (/^https?:\/\//i.test(target)) shell.openExternal(target);
+            return { action: 'deny' };
+        });
+        try {
+            await win.loadFile(GUIDE_PAGE);
+        } catch (error) {
+            log?.error('Could not open the theme guide:', error.message);
+            if (guide === win) guide = null;
+            if (!win.isDestroyed()) win.destroy();
+            return { error: 'Could not open the guide.' };
+        }
+        return { ok: true };
+    };
     const pageUrl = url.pathToFileURL(page).href;
     const fromPage = (event) => {
         try {
@@ -217,10 +310,14 @@ function register(ipcMain, shell, log, page = path.join(__dirname, '..', 'index.
         'themes:delete': (id) => remove(id),
         'themes:images': () => images(),
         'themes:image': (name) => readImage(name),
+        'themes:export': (id) => exportFile(id, dialog),
         'themes:open-folder': async () => {
             fs.mkdirSync(themesDir(), { recursive: true });
             const problem = await shell.openPath(themesDir());
             return problem ? { error: problem } : { ok: true };
+        },
+        'themes:open-guide': function () {
+            return openGuide(this); // this = the IPC event
         },
     };
     for (const [name, fn] of Object.entries(channels)) {
@@ -229,7 +326,7 @@ function register(ipcMain, shell, log, page = path.join(__dirname, '..', 'index.
             // only the launcher's own page, never a webview or a remote page
             if (!fromPage(event)) return { error: 'Not allowed.' };
             try {
-                return await fn(...args);
+                return await fn.call(event, ...args);
             } catch (error) {
                 log?.error(`${name} failed:`, error.message);
                 return { error: error.message };
@@ -238,4 +335,4 @@ function register(ipcMain, shell, log, page = path.join(__dirname, '..', 'index.
     }
 }
 
-module.exports = { themesDir, list, save, remove, images, readImage, register };
+module.exports = { themesDir, list, save, remove, images, readImage, exportFile, register };

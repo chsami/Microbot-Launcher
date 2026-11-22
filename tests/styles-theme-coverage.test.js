@@ -65,8 +65,11 @@ test('theme dialog primary buttons use the primary colours', () => {
     expect(rule('.theme-button-primary')).toMatch(/background: var\(--primary\);\s*border-color: var\(--primary\);\s*color: var\(--on-primary\);/);
 });
 
-test('theme dialog cards fit below the title bar', () => {
+test('theme dialog cards fit below the title bar and the importer has no empty gap', () => {
     expect(rule('.theme-editor-card')).toContain('box-sizing: border-box;');
+    // cancels the card's 16px gap while nothing is previewed
+    expect(rule('.theme-import-result')).toContain('margin-top: -16px;');
+    expect(rule('.auth-card')).toContain('gap: 16px;');
 });
 
 test('native radios, checkboxes and sliders take the accent in Slate, Classic and custom themes only, Gold stays native', () => {

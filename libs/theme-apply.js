@@ -78,7 +78,7 @@
         root.dataset.theme = base;
         root.dataset.custom = 'on';
         const launcher = custom.launcher || {};
-        // the Themes window and editor keep the base's colours only while the painted theme is hard to read (a preview)
+        // the Themes, editor and import dialogs keep the base's colours only while the painted theme is hard to read (a preview)
         if (readable({ base, client: { ...BASES[base].client, ...hexOnly(custom.colors) }, launcher: { ...BASES[base].launcher, ...hexOnly(launcher) } })) delete root.dataset.unreadable;
         else root.dataset.unreadable = 'on';
         for (const v of LAUNCHER_VARS) {

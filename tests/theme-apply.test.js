@@ -34,7 +34,7 @@ describe('theme apply', () => {
             const body = css.match(new RegExp('^' + selector.replace(/[.:[\]"]/g, '\\$&') + ' \\{([^}]*)\\}', 'm'))[1];
             return Object.fromEntries([...body.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
         };
-        // only while an unreadable custom theme is painted (an editor preview): built-in users and readable
+        // only while an unreadable custom theme is painted (an editor or import preview): built-in users and readable
         // custom themes colour the Themes window. The dialogs take the base built-in's look: all 19 colours plus the
         // variables the built-in derives.
         expect(css).not.toMatch(/^\.theme-safe/m);
