@@ -42,6 +42,19 @@ function write(value, home) {
     return next;
 }
 
+// The launcher's main colours for windows outside the renderer (Jagex login page, captcha), from styles.css.
+const LAUNCHER_COLORS = {
+    gold: { bg: '#0c0a08', surface: '#15110d', text: '#d6cfc2', textStrong: '#f5efe4', accent: '#ffb13b', onAccent: '#1a1714', line: '#2e261c' },
+    slate: { bg: '#15171c', surface: '#15171c', text: '#c9cdd6', textStrong: '#e3e6ec', accent: '#f5a524', onAccent: '#15171c', line: '#262a33' },
+    classic: { bg: '#181818', surface: '#1e1e1e', text: '#c6c6c6', textStrong: '#ebebeb', accent: '#dc8a00', onAccent: '#141414', line: '#323232' },
+};
+
+// null when no theme is picked: those windows then keep their own original colours
+function launcherColors(home) {
+    const { theme } = read(home);
+    return theme ? { ...LAUNCHER_COLORS[theme] } : null;
+}
+
 function register(ipcMain, log) {
     ipcMain.removeHandler('theme:read');
     ipcMain.removeHandler('theme:write');
@@ -56,4 +69,4 @@ function register(ipcMain, log) {
     });
 }
 
-module.exports = { THEMES, clean, read, write, register, settingsFile };
+module.exports = { THEMES, clean, read, write, register, settingsFile, launcherColors };

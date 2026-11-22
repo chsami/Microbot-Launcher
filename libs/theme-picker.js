@@ -6,12 +6,15 @@
     const NAMES = ['theme'];
     const LAUNCHER = { theme: 'gold' };
     const apply = (picked) => {
+        const before = document.documentElement.dataset.theme;
         document.documentElement.dataset.theme = picked.theme || LAUNCHER.theme;
         for (const input of document.querySelectorAll('#theme-modal input[type="radio"]')) {
             input.checked = input.value === picked[input.name];
         }
         const unset = $('theme-unset');
         if (unset) unset.hidden = NAMES.every((name) => picked[name]);
+        // the embedded dashboard restyles its scrollbar; sync() runs on every focus, so only on a real change
+        if (document.documentElement.dataset.theme !== before) window.dispatchEvent(new Event('theme-changed'));
     };
     // what the user last chose; every read and edit bumps `version` so an older read reply cannot undo a newer choice
     let desired = {};
