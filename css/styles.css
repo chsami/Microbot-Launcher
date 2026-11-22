@@ -20,6 +20,9 @@
     --surface-3: #2a2119;
     --line: #2e261c;
     --line-strong: #4a3a2a;
+    --line-mid: #3a2e22;
+    /* page shade behind dialogs and the tour */
+    --shade: #0a0806;
     --text: #d6cfc2;
     --text-strong: #f5efe4;
     --muted: #9b9384;
@@ -35,6 +38,92 @@
     --logo: Cinzel, Georgia, serif;
     --body: Montserrat, Roboto, sans-serif;
 }
+
+/* Themes (menu > Themes). Gold is :root above; the client and native launcher share these palettes. */
+:root[data-theme="slate"] {
+    --bg: #15171c;
+    --surface: #15171c;
+    --surface-2: #1c1f26;
+    --surface-3: #242833;
+    --line: #262a33;
+    --line-strong: #2e3340;
+    --line-mid: #2e3340;
+    --shade: #15171c;
+    --text: #c9cdd6;
+    --text-strong: #e3e6ec;
+    --muted: #8b93a3;
+    --faint: #626a7a;
+    --gold: #f5a524;
+    --gold-hover: #f7b445;
+    --gold-soft: #e9c98f;
+    --on-gold: #15171c;
+}
+:root[data-theme="classic"] {
+    --bg: #181818;
+    --surface: #1e1e1e;
+    --surface-2: #282828;
+    --surface-3: #3c3c3c;
+    --line: #323232;
+    --line-strong: #4d4d4d;
+    --line-mid: #4d4d4d;
+    --shade: #181818;
+    --text: #c6c6c6;
+    --text-strong: #ebebeb;
+    --muted: #a5a5a5;
+    --faint: #737373;
+    --gold: #dc8a00;
+    --gold-hover: #f0a01e;
+    --gold-soft: #e6be78;
+    --on-gold: #141414;
+}
+.theme-picker-card fieldset {
+    border: 0;
+    margin: 0 0 14px;
+    padding: 0;
+}
+.theme-picker-card legend {
+    color: var(--text-strong);
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+.theme-option {
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 6px;
+    padding: 8px 10px;
+}
+.theme-option:hover,
+.theme-option:has(input:checked) {
+    border-color: var(--gold);
+}
+.theme-option input {
+    accent-color: var(--gold);
+}
+.theme-option:has(input:focus-visible) {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+}
+.theme-unset {
+    color: var(--muted);
+    font-size: 12px;
+    margin: 0 0 12px;
+}
+.theme-option .swatches {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+}
+.theme-option .swatches span {
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    height: 16px;
+    width: 16px;
+}
+
 
 body {
     margin: 0;
@@ -106,7 +195,7 @@ webview#website {
 .auth-modal {
     position: fixed;
     inset: 0;
-    background: rgba(10, 8, 6, 0.92);
+    background: color-mix(in srgb, var(--shade) 92%, transparent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -371,7 +460,7 @@ webview#website {
 .account-info-button:hover,
 .account-info-button:focus-visible {
     color: var(--gold);
-    background: rgba(255, 177, 59, 0.1);
+    background: color-mix(in srgb, var(--gold) 10%, transparent);
 }
 
 .auth-link.auth-link-center {
@@ -471,7 +560,7 @@ webview#website {
 }
 
 .account-action.primary:hover {
-    background: rgba(255, 177, 59, 0.12);
+    background: color-mix(in srgb, var(--gold) 12%, transparent);
 }
 
 .mode-switch {
@@ -511,7 +600,7 @@ webview#website {
 }
 
 .mode-option[aria-pressed="true"] {
-    background: rgba(255, 177, 59, .18);
+    background: color-mix(in srgb, var(--gold) 18%, transparent);
     color: var(--gold);
 }
 
@@ -823,7 +912,7 @@ h2 {
     padding: 14px 20px;
     background: var(--bg);
     border-bottom: 1px solid var(--line);
-    box-shadow: inset 0 -1px 0 rgba(255, 177, 59, .05);
+    box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--gold) 5%, transparent);
 }
 
 .game-logo-mark {
@@ -874,8 +963,8 @@ h2 {
     box-sizing: border-box;
     margin: -20px -20px 20px;
     padding: 10px 20px;
-    background: linear-gradient(90deg, rgba(255, 177, 59, .22) var(--progress, 0%), rgba(255, 177, 59, .1) var(--progress, 0%));
-    border-bottom: 1px solid rgba(255, 177, 59, .45);
+    background: linear-gradient(90deg, color-mix(in srgb, var(--gold) 22%, transparent) var(--progress, 0%), color-mix(in srgb, var(--gold) 10%, transparent) var(--progress, 0%));
+    border-bottom: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
     color: var(--gold);
     font-size: 12px;
     font-weight: 600;
@@ -1180,11 +1269,11 @@ h2 {
 }
 
 .account-option:hover {
-    background-color: rgba(255, 177, 59, 0.08);
+    background-color: color-mix(in srgb, var(--gold) 8%, transparent);
 }
 
 .account-option.selected {
-    background-color: rgba(255, 177, 59, 0.12);
+    background-color: color-mix(in srgb, var(--gold) 12%, transparent);
 }
 
 .account-option.selected .account-option-name {
@@ -1509,7 +1598,7 @@ h2 {
 }
 
 .hwid-spoof-input:checked + .hwid-spoof-switch {
-    background: rgba(255, 177, 59, .35);
+    background: color-mix(in srgb, var(--gold) 35%, transparent);
 }
 
 .hwid-spoof-input:checked + .hwid-spoof-switch::after {
@@ -1529,9 +1618,9 @@ h2 {
     gap: 4px;
     margin-bottom: 10px;
     padding: 4px;
-    border: 1px solid #3a2e22;
+    border: 1px solid var(--line-mid);
     border-radius: 8px;
-    background: #1b1612;
+    background: var(--surface-2);
 }
 
 .channel-option {
@@ -1553,7 +1642,7 @@ h2 {
 }
 
 .channel-option[aria-pressed="true"] {
-    background: rgba(255, 177, 59, .18);
+    background: color-mix(in srgb, var(--gold) 18%, transparent);
     color: var(--gold);
 }
 
@@ -1580,7 +1669,7 @@ h2 {
     padding: 8px 14px;
     border: 1px solid rgba(140, 120, 255, .35);
     border-radius: 8px;
-    background: #1b1612;
+    background: var(--surface-2);
 }
 
 .nightly-info[hidden] {
@@ -2241,7 +2330,7 @@ button.hamburger {
     padding: 14px;
     border-radius: 10px;
     border: 1px solid var(--line);
-    background: rgba(255, 177, 59, .05);
+    background: color-mix(in srgb, var(--gold) 5%, transparent);
 }
 
 .profiles-cloud-icon {
@@ -2288,7 +2377,7 @@ button.hamburger {
 }
 
 .profiles-cloud-button:hover {
-    background: rgba(255, 177, 59, .12);
+    background: color-mix(in srgb, var(--gold) 12%, transparent);
 }
 
 .profiles-note {
@@ -2412,7 +2501,7 @@ button.hamburger {
 
 .profile-row.is-active {
     border-color: var(--gold);
-    background: rgba(255, 177, 59, .06);
+    background: color-mix(in srgb, var(--gold) 6%, transparent);
 }
 
 .profile-row.is-confirming {
@@ -2520,7 +2609,7 @@ button.hamburger {
 }
 
 .profile-use-button:hover:not(:disabled) {
-    background: rgba(255, 177, 59, .12);
+    background: color-mix(in srgb, var(--gold) 12%, transparent);
 }
 
 .profile-use-button:disabled {
@@ -2620,7 +2709,7 @@ button.hamburger {
 }
 
 .profile-alerts-toggle.is-on .profile-alerts-switch {
-    background: rgba(255, 177, 59, .35);
+    background: color-mix(in srgb, var(--gold) 35%, transparent);
 }
 
 .profile-alerts-toggle.is-on .profile-alerts-switch::after {
@@ -2784,7 +2873,7 @@ button.hamburger {
 }
 
 .setup-guide.dimmed {
-    background: rgba(10, 8, 6, 0.8);
+    background: color-mix(in srgb, var(--shade) 80%, transparent);
 }
 
 .setup-guide.guide-hidden,
@@ -2922,7 +3011,7 @@ button.hamburger {
 .guide-stepper li.current .guide-stepper-dot {
     border-color: var(--gold);
     color: var(--gold);
-    box-shadow: 0 0 0 5px rgba(255, 177, 59, 0.14);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--gold) 14%, transparent);
 }
 
 .guide-body {
@@ -2993,7 +3082,7 @@ button.hamburger {
     align-self: flex-start;
     padding: 3px 8px;
     border-radius: 999px;
-    background: rgba(255, 177, 59, 0.14);
+    background: color-mix(in srgb, var(--gold) 14%, transparent);
     color: var(--gold);
     font-size: 11px;
     font-weight: 700;
@@ -3009,7 +3098,7 @@ button.hamburger {
     padding: 10px 14px;
     border-left: 3px solid var(--gold);
     border-radius: 0 6px 6px 0;
-    background: rgba(255, 177, 59, 0.06);
+    background: color-mix(in srgb, var(--gold) 6%, transparent);
     font-size: 13px;
     line-height: 1.5;
 }
@@ -3115,8 +3204,8 @@ button.hamburger {
 }
 
 .guide-list > li.guide-active {
-    background: rgba(255, 177, 59, 0.06);
-    border-color: rgba(255, 177, 59, 0.28);
+    background: color-mix(in srgb, var(--gold) 6%, transparent);
+    border-color: color-mix(in srgb, var(--gold) 28%, transparent);
 }
 
 .guide-notes {
@@ -3192,7 +3281,7 @@ button.hamburger {
 
 .guide-action:hover,
 .guide-action:focus-visible {
-    background: rgba(255, 177, 59, 0.12);
+    background: color-mix(in srgb, var(--gold) 12%, transparent);
     outline: none;
 }
 
@@ -3272,7 +3361,7 @@ button.hamburger {
     border: 2px solid var(--gold);
     border-radius: 10px;
     pointer-events: none;
-    box-shadow: 0 0 0 4px rgba(255, 177, 59, 0.22), 0 0 0 200vmax rgba(10, 8, 6, 0.8);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--gold) 22%, transparent), 0 0 0 200vmax color-mix(in srgb, var(--shade) 80%, transparent);
     transition: top 0.3s ease, left 0.3s ease, width 0.3s ease, height 0.3s ease;
 }
 
@@ -3286,7 +3375,7 @@ button.hamburger {
 }
 
 .guide-ring.pointing {
-    box-shadow: 0 0 0 3px rgba(255, 177, 59, 0.35), 0 0 14px rgba(255, 177, 59, 0.35);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 35%, transparent), 0 0 14px color-mix(in srgb, var(--gold) 35%, transparent);
     animation: guideGlow 1.4s ease-in-out infinite;
 }
 
@@ -3377,11 +3466,11 @@ button.hamburger {
 @keyframes guideGlow {
     0%,
     100% {
-        box-shadow: 0 0 0 3px rgba(255, 177, 59, 0.35), 0 0 14px rgba(255, 177, 59, 0.35);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 35%, transparent), 0 0 14px color-mix(in srgb, var(--gold) 35%, transparent);
     }
 
     50% {
-        box-shadow: 0 0 0 7px rgba(255, 177, 59, 0.12), 0 0 28px rgba(255, 177, 59, 0.6);
+        box-shadow: 0 0 0 7px color-mix(in srgb, var(--gold) 12%, transparent), 0 0 28px color-mix(in srgb, var(--gold) 60%, transparent);
     }
 }
 
