@@ -920,7 +920,7 @@ async function initializeLauncher() {
     document.getElementById('titlebar-version').textContent =
         'v' + microbotLauncherVersion;
 
-    if (properties['client'] === '0.0.0') {
+    if (properties['client'] === '0.0.0' && clientVersion) {
         document.getElementById('loader-container').style.display = 'block';
         const result = await window.electron.downloadClient(clientVersion);
         if (result?.error) {
@@ -1785,6 +1785,14 @@ function updateNowBtn() {
             const clientVersion = rememberLatestClientVersion(
                 await window.electron.fetchClientVersion()
             );
+            if (!clientVersion) {
+                document.getElementById('loader-container').style.display =
+                    'none';
+                window.electron.errorAlert(
+                    'Could not check the latest client version. Check your internet connection and try again.'
+                );
+                return;
+            }
             const result = await window.electron.downloadClient(clientVersion);
             if (result?.error) {
                 window.electron.errorAlert(result.error);
@@ -2423,6 +2431,12 @@ async function checkForClientUpdate(properties) {
     const clientVersion = rememberLatestClientVersion(
         await window.electron.fetchClientVersion()
     );
+    if (!clientVersion) {
+        window.electron.logError(
+            'Could not check the latest client version; skipping the update check.'
+        );
+        return;
+    }
     window.electron.logError(
         `Current client version: ${clientVersion}, properties client version: ${properties['client']}`
     );
@@ -2572,11 +2586,15 @@ async function orderClientJarsByVersion() {
     return Array.isArray(clientJars) ? clientJars : [];
 }
 
+/**
+ * Remembers a fetched latest client version and returns the newest known one.
+ * A failed fetch ({ error }) returns the last good version, or null if there was none.
+ */
 function rememberLatestClientVersion(version) {
     if (typeof version === 'string' && version) {
         latestClientVersion = version;
     }
-    return version;
+    return latestClientVersion;
 }
 
 /**
@@ -2651,6 +2669,12 @@ async function checkForOutdatedLaunch() {
         )
     );
 
+    if (!latestVersion) {
+        window.electron.logError(
+            `Could not check the latest client version; launching ${selectedVersion} without the outdated-version check.`
+        );
+        return;
+    }
     window.electron.logError(
         `Selected version: ${selectedVersion}, Latest version: ${latestVersion}`
     );

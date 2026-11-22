@@ -96,7 +96,7 @@ describe('renderer client version select', () => {
         });
         const source = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
         vm.runInContext(
-            `${source}\nglobalThis.__renderer = { formatNightlyBuildTime, resolveLaunchVersion, checkForOutdatedLaunch, populateAndSelectClientVersion, selectClientVersion, shouldPromptForClientDownload, orderClientJarsByVersion, rememberLatestClientVersion, refreshClientJars };`,
+            `${source}\nglobalThis.__renderer = { formatNightlyBuildTime, resolveLaunchVersion, checkForOutdatedLaunch, populateAndSelectClientVersion, selectClientVersion, shouldPromptForClientDownload, orderClientJarsByVersion, rememberLatestClientVersion, refreshClientJars, checkForClientUpdate };`,
             context
         );
         context.__renderer.rememberLatestClientVersion('2.6.28');
@@ -208,5 +208,29 @@ describe('renderer client version select', () => {
 
         vm.runInContext('channelSwitching = false', context);
         expect(await context.__renderer.resolveLaunchVersion()).toBe('2.6.28');
+    });
+    test('a failed version fetch keeps the last known latest version', () => {
+        expect(context.__renderer.rememberLatestClientVersion({ error: 'Invalid URL' })).toBe('2.6.28');
+    });
+
+    test('a failed version fetch skips the outdated-version prompt', async () => {
+        context.window.electron.fetchClientVersion = async () => ({ error: 'offline' });
+        vm.runInContext('latestClientVersion = null;', context);
+        await context.__renderer.populateAndSelectClientVersion('2.6.2');
+
+        await context.__renderer.checkForOutdatedLaunch();
+
+        expect(dialog).not.toHaveBeenCalled();
+    });
+
+    test('a failed version fetch does not show the update banner', async () => {
+        context.window.electron.fetchClientVersion = async () => ({ error: 'offline' });
+        vm.runInContext('latestClientVersion = null;', context);
+        const banner = { style: 'display:none' };
+        context.document.querySelector = (selector) => (selector === '#update-available' ? banner : null);
+
+        await context.__renderer.checkForClientUpdate({ client: '2.6.2' });
+
+        expect(banner.style).toBe('display:none');
     });
 });
