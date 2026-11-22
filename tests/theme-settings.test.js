@@ -2,6 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const settings = require('../libs/theme-settings');
+const { selection } = require('../libs/custom-theme');
 
 describe('theme-settings', () => {
     let home;
@@ -40,6 +41,18 @@ describe('theme-settings', () => {
         expect(settings.read(home)).toEqual({ theme: 'slate' });
     });
 
+    test('a custom pick too hard to read is refused on write and ignored on read', () => {
+        settings.write({ theme: 'slate' }, home);
+        const bad = selection('grey', { name: 'Grey', base: 'slate' });
+        bad.custom.colors.text = bad.custom.colors.dark;
+        expect(settings.write(bad, home)).toEqual({ error: 'That theme is incomplete or too hard to read.' });
+        expect(settings.read(home)).toEqual({ theme: 'slate' });
+        fs.writeFileSync(settings.settingsFile(home), JSON.stringify(bad));
+        expect(settings.read(home)).toEqual({});
+        const good = selection('blue', { name: 'Blue', base: 'slate', colors: { accent: '#3399ff' } });
+        expect(settings.write(good, home)).toEqual(good);
+    });
+
     test('replaces the file without leaving temp files behind', () => {
         settings.write({ theme: 'gold' }, home);
         settings.write({ theme: 'classic' }, home);
@@ -50,9 +63,9 @@ describe('theme-settings', () => {
     test('launcher colours follow the picked theme, none when nothing or garbage is picked', () => {
         expect(settings.launcherColors(home)).toBeNull();
         settings.write({ theme: 'slate' }, home);
-        expect(settings.launcherColors(home)).toEqual({ bg: '#15171c', surface: '#15171c', text: '#c9cdd6', textStrong: '#e3e6ec', accent: '#f5a524', onAccent: '#15171c', line: '#262a33' });
+        expect(settings.launcherColors(home)).toEqual({ bg: '#15171c', surface: '#15171c', text: '#c9cdd6', textStrong: '#e3e6ec', accent: '#f5a524', onAccent: '#15171c', line: '#262a33', red: '#c2231f' });
         settings.write({ theme: 'classic' }, home);
-        expect(settings.launcherColors(home)).toEqual({ bg: '#181818', surface: '#1e1e1e', text: '#c6c6c6', textStrong: '#ebebeb', accent: '#dc8a00', onAccent: '#141414', line: '#323232' });
+        expect(settings.launcherColors(home)).toEqual({ bg: '#181818', surface: '#1e1e1e', text: '#c6c6c6', textStrong: '#ebebeb', accent: '#dc8a00', onAccent: '#141414', line: '#323232', red: '#c2231f' });
         fs.writeFileSync(settings.settingsFile(home), '{"theme":"</style><script>"}');
         expect(settings.launcherColors(home)).toBeNull();
     });
@@ -81,6 +94,35 @@ describe('theme-settings', () => {
                 expect([theme, key, found?.[1]]).toEqual([theme, key, colors[key]]);
             }
         }
+    });
+
+    test('keeps a full custom selection', () => {
+        const pick = selection('midnight', { name: 'Midnight', base: 'slate', colors: { accent: '#123456' },
+            style: { corners: 6 }, background: { image: 'bg.png', strength: 20 } });
+        settings.write(pick, home);
+        expect(settings.read(home)).toEqual(pick);
+    });
+
+    test('drops a custom selection with a bad id or missing colours', () => {
+        const pick = selection('midnight', { name: 'Midnight', base: 'slate' });
+        expect(settings.clean({ ...pick, id: '../x' })).toEqual({});
+        const { accent, ...fewer } = pick.custom.colors;
+        expect(settings.clean({ ...pick, custom: { ...pick.custom, colors: fewer } })).toEqual({});
+        expect(settings.clean({ ...pick, custom: { ...pick.custom, colors: { ...pick.custom.colors, accent: 'red' } } })).toEqual({});
+        expect(settings.clean({ ...pick, custom: { ...pick.custom, base: 'pink' } })).toEqual({});
+    });
+
+    test('custom then gold leaves exactly {theme:"gold"}', () => {
+        settings.write(selection('midnight', { name: 'Midnight', base: 'slate' }), home);
+        settings.write({ theme: 'gold' }, home);
+        expect(JSON.parse(fs.readFileSync(settings.settingsFile(home), 'utf8'))).toEqual({ theme: 'gold' });
+    });
+
+    test('launcher colours of a custom pick are its own launcher colours', () => {
+        const pick = selection('midnight', { name: 'Midnight', base: 'slate', colors: { accent: '#123456' } });
+        settings.write(pick, home);
+        const l = pick.custom.launcher;
+        expect(settings.launcherColors(home)).toEqual({ bg: l.bg, surface: l.surface, text: l.text, textStrong: l['text-strong'], accent: '#123456', onAccent: l['on-gold'], line: l.line, red: l.red });
     });
 
     test('registers read and write handlers', async () => {

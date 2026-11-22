@@ -221,6 +221,7 @@ async function createWindow() {
     }
 
     require(path.join(__dirname, 'libs', 'theme-settings.js')).register(ipcMain, log);
+    require(path.join(__dirname, 'libs', 'theme-library.js')).register(ipcMain, shell, log);
 
     try {
         const extraHandlers = require(path.join(

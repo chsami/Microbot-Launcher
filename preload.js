@@ -6,6 +6,14 @@ contextBridge.exposeInMainWorld('electron', {
         read: () => ipcRenderer.invoke('theme:read'),
         write: (value) => ipcRenderer.invoke('theme:write', value)
     },
+    themes: {
+        list: () => ipcRenderer.invoke('themes:list'),
+        save: (theme, id) => ipcRenderer.invoke('themes:save', theme, id),
+        remove: (id) => ipcRenderer.invoke('themes:delete', id),
+        images: () => ipcRenderer.invoke('themes:images'),
+        image: (name) => ipcRenderer.invoke('themes:image', name),
+        openFolder: () => ipcRenderer.invoke('themes:open-folder')
+    },
     minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
     maximizeWindow: () => ipcRenderer.invoke('maximize-window'),
     startAuthFlow: (proxy) => ipcRenderer.invoke('start-auth-flow', proxy),

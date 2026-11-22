@@ -334,20 +334,174 @@
             <button id="custom-clients-close" class="auth-cancel" type="button">Done</button>
         </div>
     </div>
-    <div id="theme-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
-        aria-labelledby="theme-title">
+    <div id="theme-modal" class="auth-modal auth-hidden theme-safe" role="dialog" aria-modal="true"
+        aria-labelledby="theme-title" aria-describedby="theme-help">
         <div class="auth-card theme-picker-card">
-            <h1 id="theme-title" class="auth-title">Themes</h1>
-            <p class="auth-subtitle">Changes the launcher now, and clients the next time they start.</p>
-            <p id="theme-unset" class="theme-unset" hidden>Not picked yet: until you choose, the launcher stays Gold and the client keeps the stock RuneLite look.</p>
-            <fieldset>
-                <legend>Colours</legend>
-                <label class="theme-option"><input type="radio" name="theme" value="gold"> Gold <span class="swatches" aria-hidden="true"><span style="background:#0c0a08"></span><span style="background:#1b1612"></span><span style="background:#ffb13b"></span></span></label>
-                <label class="theme-option"><input type="radio" name="theme" value="slate"> Slate <span class="swatches" aria-hidden="true"><span style="background:#15171c"></span><span style="background:#1c1f26"></span><span style="background:#f5a524"></span></span></label>
-                <label class="theme-option"><input type="radio" name="theme" value="classic"> Classic RuneLite <span class="swatches" aria-hidden="true"><span style="background:#181818"></span><span style="background:#282828"></span><span style="background:#dc8a00"></span></span></label>
-            </fieldset>
-            <p id="theme-error" class="auth-error" role="alert" aria-live="polite"></p>
-            <button id="theme-close" class="auth-cancel" type="button">Done</button>
+            <header class="theme-editor-head">
+                <h1 id="theme-title" class="theme-editor-title" tabindex="-1">Themes</h1>
+                <p id="theme-help" class="theme-editor-hint">Changes the launcher now, and clients the next time they start.</p>
+                <button id="theme-dismiss" class="auth-close" type="button" aria-label="Close">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+                </button>
+            </header>
+            <div class="theme-picker-body">
+                <p id="theme-unset" class="theme-unset" hidden>Not picked yet: until you choose, the launcher stays Gold and the client keeps the stock RuneLite look.</p>
+                <p id="theme-missing" class="theme-unset" hidden>Your theme file is gone; pick another theme.</p>
+                <section class="theme-section" aria-labelledby="theme-builtin-title">
+                    <div class="theme-section-head">
+                        <h2 id="theme-builtin-title" class="theme-section-title">Built-in</h2>
+                    </div>
+                    <div id="theme-builtin-list" class="theme-grid"></div>
+                </section>
+                <section class="theme-section" aria-labelledby="theme-custom-title">
+                    <div class="theme-section-head">
+                        <h2 id="theme-custom-title" class="theme-section-title">Your themes</h2>
+                        <button id="theme-folder" class="theme-button" type="button">Open themes folder</button>
+                    </div>
+                    <p id="theme-empty" class="theme-unset" hidden>No themes yet.</p>
+                    <div id="theme-custom-list" class="theme-grid"></div>
+                </section>
+            </div>
+            <footer class="theme-editor-foot">
+                <div class="theme-editor-foot-text">
+                    <p id="theme-error" class="auth-error" role="alert" aria-live="polite"></p>
+                </div>
+                <button id="theme-close" class="theme-button theme-button-primary" type="button">Done</button>
+            </footer>
+        </div>
+    </div>
+    <div id="theme-editor" class="auth-modal auth-hidden theme-safe" role="dialog" aria-modal="true"
+        aria-labelledby="theme-editor-title" aria-describedby="theme-editor-help">
+        <div class="auth-card theme-editor-card">
+            <header class="theme-editor-head">
+                <h1 id="theme-editor-title" class="theme-editor-title">New theme</h1>
+                <p id="theme-editor-help" class="theme-editor-hint">Changes show live. The client uses your theme the next time it starts.</p>
+                <button id="theme-editor-close" class="auth-close" type="button" aria-label="Close">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+                </button>
+            </header>
+            <div class="theme-editor-body">
+                <div class="theme-editor-controls">
+                    <div class="theme-editor-name">
+                        <label for="theme-editor-name">Name</label>
+                        <input id="theme-editor-name" type="text" maxlength="40" placeholder="My theme" aria-describedby="theme-editor-name-help">
+                        <p id="theme-editor-name-help" class="theme-editor-hint">Up to 40 characters. Shown in the theme list.</p>
+                    </div>
+                    <fieldset class="theme-editor-bases">
+                        <legend>Start from</legend>
+                        <label class="theme-editor-base-card">
+                            <input id="theme-editor-base-gold" class="theme-editor-radio" type="radio" name="theme-editor-base" value="gold">
+                            <span id="theme-editor-base-gold-chips" class="theme-editor-chips" aria-hidden="true"></span>
+                            <span class="theme-editor-base-name">Gold</span>
+                            <svg class="theme-editor-tick" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+                        </label>
+                        <label class="theme-editor-base-card">
+                            <input id="theme-editor-base-slate" class="theme-editor-radio" type="radio" name="theme-editor-base" value="slate">
+                            <span id="theme-editor-base-slate-chips" class="theme-editor-chips" aria-hidden="true"></span>
+                            <span class="theme-editor-base-name">Slate</span>
+                            <svg class="theme-editor-tick" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+                        </label>
+                        <label class="theme-editor-base-card">
+                            <input id="theme-editor-base-classic" class="theme-editor-radio" type="radio" name="theme-editor-base" value="classic">
+                            <span id="theme-editor-base-classic-chips" class="theme-editor-chips" aria-hidden="true"></span>
+                            <span class="theme-editor-base-name">Classic RuneLite</span>
+                            <svg class="theme-editor-tick" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+                        </label>
+                    </fieldset>
+                    <fieldset>
+                        <legend>Colours</legend>
+                        <div id="theme-editor-basics"></div>
+                    </fieldset>
+                    <details class="theme-editor-advanced">
+                        <summary>
+                            <span class="theme-editor-summary-text">
+                                <span class="theme-editor-summary-title">Advanced</span>
+                                <span class="theme-editor-hint">Every colour, corners, scrollbars and background</span>
+                            </span>
+                            <svg class="theme-editor-chevron" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+                        </summary>
+                        <fieldset>
+                            <legend>Client colours</legend>
+                            <div id="theme-editor-client-colours" class="theme-editor-grid"></div>
+                        </fieldset>
+                        <fieldset>
+                            <legend>Launcher colours</legend>
+                            <div id="theme-editor-launcher-colours" class="theme-editor-grid"></div>
+                        </fieldset>
+                        <fieldset>
+                            <legend>Client shape</legend>
+                            <div class="theme-editor-field">
+                                <label for="theme-editor-corners">Corner rounding</label>
+                                <input id="theme-editor-corners" type="range" min="0" max="12" step="1" value="0">
+                                <output id="theme-editor-corners-value" for="theme-editor-corners">Off</output>
+                            </div>
+                            <div class="theme-editor-field">
+                                <label class="theme-editor-switch" for="theme-editor-round">Round scrollbars
+                                    <input id="theme-editor-round" class="hwid-spoof-input" type="checkbox" role="switch" data-key="style.roundScrollbars">
+                                    <span class="hwid-spoof-switch" aria-hidden="true"></span>
+                                </label>
+                                <button id="theme-editor-round-reset" class="theme-editor-reset" type="button" data-reset="style.roundScrollbars"
+                                    aria-label="Reset round scrollbars" title="Reset round scrollbars"></button>
+                            </div>
+                            <div class="theme-editor-field">
+                                <label for="theme-editor-width">Scrollbar width</label>
+                                <input id="theme-editor-width" type="range" min="4" max="17" step="1" value="10" data-key="style.scrollbarWidth">
+                                <output id="theme-editor-width-value" for="theme-editor-width">Default</output>
+                                <button id="theme-editor-width-reset" class="theme-editor-reset" type="button" data-reset="style.scrollbarWidth"
+                                    aria-label="Reset scrollbar width" title="Reset scrollbar width"></button>
+                            </div>
+                        </fieldset>
+                        <fieldset>
+                            <legend>Launcher background</legend>
+                            <div class="theme-editor-field">
+                                <label for="theme-editor-image">Image</label>
+                                <select id="theme-editor-image" aria-describedby="theme-editor-image-help"><option value="">None</option></select>
+                            </div>
+                            <p id="theme-editor-image-help" class="theme-editor-hint">Put .png, .jpg, .jpeg or .webp files in your themes folder.</p>
+                            <button id="theme-editor-folder" class="theme-editor-link" type="button">Open themes folder</button>
+                            <div class="theme-editor-field">
+                                <label for="theme-editor-strength">Strength</label>
+                                <input id="theme-editor-strength" type="range" min="0" max="60" step="1" value="30">
+                                <output id="theme-editor-strength-value" for="theme-editor-strength">30 %</output>
+                            </div>
+                        </fieldset>
+                    </details>
+                </div>
+                <div class="theme-editor-preview">
+                    <div id="theme-editor-client" class="theme-mock" aria-hidden="true">
+                        <div class="theme-mock-title">Microbot</div>
+                        <div class="theme-mock-card">
+                            <p>Plugin settings</p>
+                            <p class="theme-mock-muted">Muted text</p>
+                            <span class="theme-mock-button">Button</span>
+                            <div class="theme-mock-scroll"><div></div></div>
+                        </div>
+                    </div>
+                    <div id="theme-editor-launcher-mock" class="theme-mock-launcher" aria-hidden="true">
+                        <div class="theme-mock-launcher-card">
+                            <p class="theme-mock-launcher-title">Launcher</p>
+                            <p class="theme-mock-launcher-muted">Muted text</p>
+                            <span class="theme-mock-launcher-play">Play</span>
+                        </div>
+                    </div>
+                    <div id="theme-editor-check" class="theme-editor-check" role="status" data-state="ok">
+                        <svg class="theme-editor-check-warn" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path><path d="M12 9v4M12 17h.01"></path></svg>
+                        <svg class="theme-editor-check-ok" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+                        <div>
+                            <p id="theme-editor-check-title" class="theme-editor-check-title">Text is easy to read</p>
+                            <ul id="theme-editor-warnings" class="theme-editor-warnings"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <footer class="theme-editor-foot">
+                <div class="theme-editor-foot-text">
+                    <p id="theme-editor-status" class="theme-editor-status">No colours changed</p>
+                    <p id="theme-editor-error" class="auth-error" role="alert" aria-live="polite"></p>
+                </div>
+                <button id="theme-editor-cancel" class="theme-button" type="button">Cancel</button>
+                <button id="theme-editor-save" class="theme-button theme-button-primary" type="button">Save</button>
+            </footer>
         </div>
     </div>
     <div id="proxy-manager-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
@@ -759,7 +913,10 @@
     <script src="profiles-screen.js"></script>
     <script src="setup-guide.js"></script>
     <script src="runelite-loader-card.js"></script>
+    <script src="libs/custom-theme.js"></script>
+    <script src="libs/theme-apply.js"></script>
     <script src="libs/theme-picker.js"></script>
+    <script src="libs/theme-editor.js"></script>
     <script src="halloween.js"></script>
 
 
