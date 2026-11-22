@@ -31,7 +31,7 @@ function setup({ accounts = [JAGEX_MAIN, JAGEX_ALT], properties = {}, jars = ['2
         microbotDir,
         isSafeClientVersion,
         launch: jest.fn(async (options) => {
-            events.push(['launch', options.account?.accountId || options.noJagexProfile]);
+            events.push(['launch', options.account?.accountId]);
             return launchOutcome ? launchOutcome(options) : { started: true };
         }),
         writeCredentials: jest.fn((account) => events.push(['credentials', account.accountId])),
@@ -173,20 +173,11 @@ describe('launching a profile without the launcher window', () => {
         expect(deps.launch.mock.calls[0][0].hwidSpoof).toBe(true);
     });
 
-    test('a profile no Jagex account uses starts without one', async () => {
+    test('a profile no Jagex account uses is refused', async () => {
         const { deps, launchProfile } = setup();
-        await launchProfile('ironman');
-        expect(deps.writeCredentials).not.toHaveBeenCalled();
-        expect(deps.launch).toHaveBeenCalledWith(expect.objectContaining({ noJagexProfile: 'ironman' }));
-        expect(deps.launch.mock.calls[0][0].account).toBeUndefined();
-    });
-
-    test('a start without an account never logs in the Jagex account that uses the profile', async () => {
-        const { deps, launchProfile } = setup({ accounts: [JAGEX_MAIN, { ...JAGEX_ALT, profile: 'main' }] });
-        await expect(launchProfile('main', { withoutAccount: true })).resolves.toEqual({ started: true });
-        expect(deps.writeCredentials).not.toHaveBeenCalled();
-        expect(deps.launch).toHaveBeenCalledWith(expect.objectContaining({ noJagexProfile: 'main' }));
-        expect(deps.launch.mock.calls[0][0].account).toBeUndefined();
+        await expect(launchProfile('ironman')).resolves.toMatchObject({ problem: { kind: 'jagex-account-needed', title: 'Jagex Account Needed' } });
+        expect(deps.downloadClient).not.toHaveBeenCalled();
+        expect(deps.launch).not.toHaveBeenCalled();
     });
 
     test('accounts without a profile count as the default profile', async () => {
@@ -339,11 +330,11 @@ describe('launching a profile without the launcher window', () => {
         expect(deps.launch).not.toHaveBeenCalled();
     });
 
-    test('a broken accounts file counts as no Jagex accounts', async () => {
+    test('a broken accounts file counts as no Jagex accounts, so nothing starts', async () => {
         const { deps, launchProfile } = setup();
         fs.writeFileSync(path.join(deps.microbotDir, 'accounts.json'), '{oops');
-        await launchProfile('main');
-        expect(deps.launch).toHaveBeenCalledWith(expect.objectContaining({ noJagexProfile: 'main' }));
+        await expect(launchProfile('main')).resolves.toMatchObject({ problem: { kind: 'jagex-account-needed' } });
+        expect(deps.launch).not.toHaveBeenCalled();
         expect(deps.log.warn).toHaveBeenCalled();
     });
 });
@@ -437,7 +428,6 @@ describe('starting with options chosen on the dashboard', () => {
         expect(deps.launch.mock.calls[0][0].proxy).toEqual({ proxyIp: 'socks5://amy:secret@10.0.0.7:1080' });
         expect(deps.writeCredentials).toHaveBeenCalledWith(JAGEX_MAIN);
         expect(['accounts.json', 'resource_versions.json'].map((name) => readFile(deps.microbotDir, name))).toEqual(before);
-        expect(fs.existsSync(path.join(deps.microbotDir, 'non-jagex-preferred-profile.json'))).toBe(false);
     });
 
     test('two accounts on one profile can each be started', async () => {
@@ -467,21 +457,6 @@ describe('starting with options chosen on the dashboard', () => {
         expect(deps.recordClientUse).not.toHaveBeenCalled();
     });
 
-    test('starts without a Jagex account on the chosen profile when no account is chosen', async () => {
-        const { deps, launchOptions, choose, profileId } = await prepare();
-        const accepted = jest.fn();
-        await launchOptions(choose({ accountId: null, profileId: profileId('alt'), hwidSpoof: true }), { onAccepted: accepted });
-        expect(accepted).toHaveBeenCalledWith({ profile: 'alt', account: null });
-        expect(deps.writeCredentials).not.toHaveBeenCalled();
-        expect(deps.launch).toHaveBeenCalledWith({
-            version: '2.6.43',
-            proxy: { proxyIp: '' },
-            ramPreference: '4g',
-            hwidSpoof: true,
-            noJagexProfile: 'alt'
-        });
-    });
-
     test.each([
         ['an account that is gone', { accountId: 'a_gone' }, /Jagex account/],
         ['an account id that is not text', { accountId: 7 }, /Jagex account/],
@@ -506,6 +481,14 @@ describe('starting with options chosen on the dashboard', () => {
         expect(deps.launch).not.toHaveBeenCalled();
         expect(deps.writeCredentials).not.toHaveBeenCalled();
         expect(deps.downloadClient).not.toHaveBeenCalled();
+    });
+
+    test('refuses a start without a Jagex account as Jagex Account Needed', async () => {
+        const { deps, launchOptions, choose } = await prepare();
+        await expect(launchOptions(choose({ accountId: null }))).resolves.toMatchObject({
+            problem: { kind: 'jagex-account-needed', title: 'Jagex Account Needed' }
+        });
+        expect(deps.launch).not.toHaveBeenCalled();
     });
 
     test('refuses options that are not an object', async () => {

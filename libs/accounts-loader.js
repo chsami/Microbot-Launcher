@@ -135,37 +135,6 @@ module.exports = async function (deps) {
     });
 
     /*
-     * Handler to write the preferred profile for a non Jagex account
-     * A check will be made to see if the file exists, if not, create it
-     * We write the selected profile to the file so it can be read later
-     * when launching the client
-     */
-    ipcMain.handle('set-profile-no-jagex', async (event, profile) => {
-        try {
-            const profileFilePath = path.join(
-                microbotDir,
-                'non-jagex-preferred-profile.json'
-            );
-            if (!fs.existsSync(profileFilePath)) {
-                fs.writeFileSync(
-                    profileFilePath,
-                    JSON.stringify({ profile: profile }, null, 2)
-                );
-                return { success: true, path: profileFilePath };
-            }
-            fs.writeFileSync(
-                profileFilePath,
-                JSON.stringify({ profile: profile }, null, 2)
-            );
-            return { success: true, path: profileFilePath };
-        } catch (error) {
-            log.error(error.message);
-            return { error: error.message };
-        }
-    });
-
-    /*
-     * Different from set-profile-no-jagex, this one is for Jagex accounts
      * We find the account object in accounts.json that has the same name as the
      * accountID parameter, and set the profile property to that account object
      */

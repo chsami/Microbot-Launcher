@@ -35,22 +35,11 @@ contextBridge.exposeInMainWorld('electron', {
     removeAccounts: () => ipcRenderer.invoke('remove-accounts'),
     setProfileJagexAccount: (account, profile) =>
         ipcRenderer.invoke('set-profile-jagex', account, profile),
-    setProfileNoJagexAccount: (profile) =>
-        ipcRenderer.invoke('set-profile-no-jagex', profile),
-    readNonJagexProfile: () => ipcRenderer.invoke('read-non-jagex-profile'),
     clientExists: (version) => ipcRenderer.invoke('client-exists', version),
     launcherExists: () => ipcRenderer.invoke('launcher-exists'),
     overwriteCredentialProperties: (character) =>
         ipcRenderer.invoke('overwrite-credential-properties', character),
     checkFileChange: () => ipcRenderer.invoke('check-file-change'),
-    playNoJagexAccount: (version, proxy, ramPreference, hwidSpoof) =>
-        ipcRenderer.invoke(
-            'play-no-jagex-account',
-            version,
-            proxy,
-            ramPreference,
-            hwidSpoof
-        ),
     listJars: () => ipcRenderer.invoke('list-jars'),
     listClientJars: (latestVersion) =>
         ipcRenderer.invoke('list-client-jars', latestVersion),
@@ -110,9 +99,6 @@ contextBridge.exposeInMainWorld('electron', {
         setEnabled: (enabled) => ipcRenderer.invoke('remote-start:set-enabled', enabled)
     },
     alerts: {
-        status: (profiles) => ipcRenderer.invoke('alerts:status', profiles),
-        setEnabled: (profile, enabled) =>
-            ipcRenderer.invoke('alerts:set-enabled', profile, enabled),
         accountStatus: (accountIds) => ipcRenderer.invoke('alerts:accounts', accountIds),
         setAccountEnabled: (accountId, enabled) =>
             ipcRenderer.invoke('alerts:set-account-enabled', accountId, enabled)

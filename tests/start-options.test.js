@@ -17,7 +17,6 @@ const build = (input = {}) =>
         accounts: ACCOUNTS,
         profiles: ['alt', 'pvm'],
         properties: { version_pref: '2.6.44', client_ram: '2g', proxyip: '10.0.0.8:1080' },
-        nonJagexProfile: null,
         versions: ['2.6.44', '2.6.34', 'my-build'],
         latestVersion: '2.6.45',
         linked: { alt: 'link-2' },
@@ -76,11 +75,11 @@ describe('start options sent to the dashboard', () => {
         expect(build({ properties: { selected_account: '333' } }).defaults).toMatchObject({ accountId: 'a_333', profileId: 'p_alt', proxyId: null });
     });
 
-    test('without Jagex accounts it defaults to a normal account on the preferred profile', () => {
-        const { defaults, accounts, profiles } = build({ accounts: [], nonJagexProfile: 'pking' });
+    test('without Jagex accounts it defaults to no account on the default profile', () => {
+        const { defaults, accounts, profiles } = build({ accounts: [] });
         expect(accounts).toEqual([]);
-        expect(defaults).toMatchObject({ accountId: null, profileId: 'p_pking', proxyId: 'x_13' });
-        expect(profiles.map((profile) => profile.id)).toEqual(['p_default', 'p_alt', 'p_pvm', 'p_pking']);
+        expect(defaults).toMatchObject({ accountId: null, profileId: 'p_default' });
+        expect(profiles.map((profile) => profile.id)).toEqual(['p_default', 'p_alt', 'p_pvm']);
     });
 
     test('a version never picked means the latest, and Nightly has no version', () => {

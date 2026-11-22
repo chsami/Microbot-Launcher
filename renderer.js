@@ -940,23 +940,16 @@ async function initializeLauncher() {
         window.electron.logError(result.error);
     }
 
-    /*
-     * Whenever the profile select changes, we set the "preferred" profile on accounts.json
-     * for the current selected account, if no jagex account is selected, we set on
-     * the non-jagex-preferred-profile.json
-     */
+    // A profile choice is saved on the selected Jagex account in accounts.json
     document
         .getElementById('profile')
         .addEventListener('change', async (event) => {
-            const selectedProfile = event.target.value;
             const selectedAccount = document.getElementById('character')?.value;
             if (selectedAccount && selectedAccount !== 'none') {
                 await window.electron.setProfileJagexAccount(
                     selectedAccount,
-                    selectedProfile
+                    event.target.value
                 );
-            } else {
-                await window.electron.setProfileNoJagexAccount(selectedProfile);
             }
         });
 
@@ -985,12 +978,7 @@ async function initializeLauncher() {
                     await applyAccountProxy(account);
                 }
             } else {
-                // If no account is selected, set the profile to the preferred non-Jagex account profile
-                // If no profile is set, default to "default"
-                const nonJagexProfile =
-                    await window.electron.readNonJagexProfile();
-                const profile = nonJagexProfile || 'default';
-                document.getElementById('profile').value = profile;
+                document.getElementById('profile').value = 'default';
             }
             refreshAccountDashboardSwitch();
             if (!restoringSelectedAccount) {
@@ -1089,11 +1077,13 @@ function populateAccountSelector(characters = [], selectedAccount = null) {
     // Clear any existing options (optional)
     characterSelect.innerHTML = '';
 
-    // Create a default "none" option
-    const defaultOption = document.createElement('option');
-    defaultOption.value = 'none';
-    defaultOption.textContent = 'None';
-    characterSelect.appendChild(defaultOption);
+    // Placeholder only while no Jagex account is added; clients can't start without one.
+    if (characters.length === 0) {
+        const defaultOption = document.createElement('option');
+        defaultOption.value = 'none';
+        defaultOption.textContent = 'None';
+        characterSelect.appendChild(defaultOption);
+    }
 
     // Iterate over the characters array and create option elements
     characters.forEach((character) => {
@@ -1163,8 +1153,8 @@ function renderAccountsList() {
     const updateToggleLabel = (value) => {
         if (value === 'none') {
             toggleLabel.textContent = 'None';
-            toggleButton.setAttribute('aria-label', 'No Jagex account selected');
-            toggleButton.title = 'No Jagex account selected';
+            toggleButton.setAttribute('aria-label', 'No Jagex account selected. Pick one to play.');
+            toggleButton.title = 'No Jagex account selected. Pick one to play.';
             return;
         }
 
@@ -1224,30 +1214,6 @@ function renderAccountsList() {
         toggleButton.focus();
     };
 
-    const createNoneOption = () => {
-        const optionRow = document.createElement('div');
-        optionRow.className = 'account-option';
-        optionRow.setAttribute('role', 'option');
-        if (currentSelectedValue === 'none') {
-            optionRow.classList.add('selected');
-            optionRow.setAttribute('aria-selected', 'true');
-        } else {
-            optionRow.setAttribute('aria-selected', 'false');
-        }
-
-        const nameButton = document.createElement('button');
-        nameButton.type = 'button';
-        nameButton.className = 'account-option-name';
-        nameButton.textContent = 'None';
-        nameButton.title = 'Use no Jagex account';
-        nameButton.addEventListener('click', () => {
-            setSelectedAccount('none');
-        });
-
-        optionRow.appendChild(nameButton);
-        return optionRow;
-    };
-
     const createAccountOption = (account) => {
         const optionRow = document.createElement('div');
         optionRow.className = 'account-option';
@@ -1294,15 +1260,6 @@ function renderAccountsList() {
         optionsList.innerHTML = '';
         const normalizedFilter = filterText.trim().toLowerCase();
         let visibleCount = 0;
-
-        const shouldShowNone =
-            normalizedFilter.length === 0 ||
-            'none'.includes(normalizedFilter);
-
-        if (shouldShowNone) {
-            optionsList.appendChild(createNoneOption());
-            visibleCount += 1;
-        }
 
         accounts.forEach((account) => {
             const displayName = getAccountLabel(account).toLowerCase();
@@ -1458,7 +1415,7 @@ async function removeAccountsHandler() {
     // Reset UI to show no accounts state
     await setupSidebarLayout(0);
 
-    // Update the profile to non-Jagex profile or default
+    // Update the profile to default
     await updateProfileBasedOnCharacter();
 
     // Update the play button text
@@ -1476,6 +1433,7 @@ async function setupSidebarLayout(amountOfAccounts) {
     const playJagexButton = document.getElementById('play');
     const logoutButton = document.getElementById('logout');
     const addAccountsButton = document.getElementById('add-accounts');
+    const oldLoginHelp = document.getElementById('old-login-help');
     const characterSelectLabel = document.querySelector(
         'label[for="character"]'
     );
@@ -1493,6 +1451,7 @@ async function setupSidebarLayout(amountOfAccounts) {
             accountsDropdownContainer.style.display = 'block';
         }
         addAccountsButton.style.display = 'block';
+        if (oldLoginHelp) oldLoginHelp.style.display = 'none';
         populateAccountSelector(accounts, selectedAccount);
         const accountStillExists = accounts.some(
             (acc) => acc.accountId === selectedAccount
@@ -1521,11 +1480,13 @@ async function setupSidebarLayout(amountOfAccounts) {
             accountsDropdownContainer.style.display = 'none';
         }
         addAccountsButton.style.display = 'none';
+        // With no accounts added, point people still on a pre-Jagex login to the upgrade steps.
+        if (oldLoginHelp) oldLoginHelp.style.display = 'block';
 
         // Clear character selector and make sure 'none' is selected
         populateAccountSelector([], 'none');
 
-        // Also update the profile to use non-Jagex profile or default
+        // Also reset the profile to default
         updateProfileBasedOnCharacter();
     }
 
@@ -1599,45 +1560,6 @@ function extractVersion(versionString) {
     return s.replace(/^microbot-/, '').replace(/\.jar$/, '');
 }
 
-/**
- * Setup play button for launching without Jagex account
- *
- * First checks for the attempt of launching an outdated version of the client.
- * If for some reason the client selected doesn't exist, it will trigger a download.
- */
-function playNoJagexAccount() {
-    const playNoJagexButton = document.getElementById('play-no-jagex-account');
-    playNoJagexButton?.removeEventListener('click', playButtonClickHandler);
-    playNoJagexButton?.addEventListener('click', async () => {
-        await checkForOutdatedLaunch();
-
-        const proxy = getProxyValues();
-        const ramPreference = getClientRamPreference();
-        const hwidSpoof = getHwidSpoofPreference();
-
-        const selectedProfile =
-            document.getElementById('profile').value || 'default';
-        await window.electron.setProfileNoJagexAccount(selectedProfile);
-        const version = await resolveLaunchVersion();
-        if (version) {
-            try {
-                await recordClientUse(version);
-                const playResult = await window.electron.playNoJagexAccount(
-                    version,
-                    proxy,
-                    ramPreference,
-                    hwidSpoof
-                );
-                if (playResult?.error) {
-                    window.electron.errorAlert(playResult.error);
-                }
-            } catch (err) {
-                window.electron.errorAlert(err?.message || String(err));
-            }
-        }
-    });
-}
-
 async function resolveLaunchVersion() {
     if (channelSwitching) return null;
     if (isNightlyChannel()) {
@@ -1684,10 +1606,8 @@ function renderChannel() {
         button.setAttribute('aria-pressed', button.dataset.channel === clientChannel ? 'true' : 'false');
         button.disabled = channelSwitching;
     });
-    ['play', 'play-no-jagex-account'].forEach((id) => {
-        const button = document.getElementById(id);
-        if (button) button.disabled = channelSwitching;
-    });
+    const playButton = document.getElementById('play');
+    if (playButton) playButton.disabled = channelSwitching;
     const clientRow = document.getElementById('client-row');
     if (clientRow) clientRow.hidden = isNightlyChannel();
     const nightlyInfo = document.getElementById('nightly-info');
@@ -2249,14 +2169,7 @@ async function updateProfileBasedOnCharacter() {
             profileSelect.value = 'default';
         }
     } else {
-        // If no account is selected or no accounts exist, use the non-Jagex preferred profile
-        const nonJagexProfile = await window.electron.readNonJagexProfile();
-        if (nonJagexProfile) {
-            profileSelect.value = nonJagexProfile;
-        } else {
-            // If no non-Jagex profile preference exists, use default
-            profileSelect.value = 'default';
-        }
+        profileSelect.value = 'default';
     }
 }
 
@@ -2323,8 +2236,7 @@ async function initUI(properties) {
     titlebarButtons();
     setupHamburgerMenu();
 
-    // Setup play button for non-Jagex accounts
-    playNoJagexAccount();
+    document.getElementById('old-login-help')?.addEventListener('click', () => window.openSetupGuide?.('Old login'));
 
     // Setup play button for Jagex accounts
     const playJagexButton = document.getElementById('play');

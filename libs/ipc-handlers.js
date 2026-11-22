@@ -95,7 +95,7 @@ module.exports = async function (deps) {
         'libs',
         'jar-executor.js'
     ));
-    const versionCheckedChannels = new Set(['open-client', 'play-no-jagex-account']);
+    const versionCheckedChannels = new Set(['open-client']);
     const versionCheckedIpcMain = new Proxy(ipcMain, {
         get(target, prop) {
             if (prop === 'handle') {
@@ -484,26 +484,6 @@ module.exports = async function (deps) {
     }
 
     ipcMain.handle('list-profiles', async () => readProfileNames((message) => log.error(message)));
-
-    ipcMain.handle('read-non-jagex-profile', async () => {
-        const profileFilePath = path.join(
-            microbotDir,
-            'non-jagex-preferred-profile.json'
-        );
-        if (fs.existsSync(profileFilePath)) {
-            try {
-                const data = fs.readFileSync(profileFilePath, 'utf8');
-                const profile = JSON.parse(data);
-                return profile?.profile;
-            } catch (error) {
-                log.error(`Error reading non-Jagex profile file: ${error}`);
-                return { error: error.message };
-            }
-        } else {
-            log.error('Non-Jagex profile file does not exist');
-            return { error: 'Non-Jagex profile file does not exist' };
-        }
-    });
 
     ipcMain.handle('launcher-version', async () => {
         return packageVersion;
