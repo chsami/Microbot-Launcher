@@ -616,12 +616,15 @@ describe('runelite-loader', () => {
             expect(await setup().loader.state()).toMatchObject({ state: 'added' });
         });
 
-        test('not-member without access is the remove-only state', async () => {
+        test.each([
+            ['the API leaves the account out', () => { access = { available: false, reason: 'not-in-audience' }; }],
+            ['the endpoint is forbidden', () => { access = httpError(403); }]
+        ])('installed but %s, it is hidden and starts no Java', async (_name, loseAccess) => {
             installAgentJar();
-            statusWith({ willLoad: true, lastStart: lastStart('not-member') });
-            access = { available: false, reason: 'not-in-audience' };
+            loseAccess();
 
-            expect(await setup().loader.state()).toEqual({ visible: true, state: 'remove-only', mode: 'runelite' });
+            expect(await setup().loader.state()).toEqual({ visible: false });
+            expect(spawn).not.toHaveBeenCalled();
         });
 
         test('reads the new status fields and tolerates odd shapes', () => {
@@ -633,10 +636,10 @@ describe('runelite-loader', () => {
             expect(parseStatus(JSON.stringify({ installed: true, willLoad: 'no', lastStart: 'x' }))).toMatchObject({ willLoad: null, lastStart: null });
         });
 
-        test('without access but installed, the card offers only Remove and keeps the RuneLite screen', async () => {
+        test('offline but installed, the card offers only Remove and keeps the RuneLite screen', async () => {
             installAgentJar();
             fs.writeFileSync(settingsFile, JSON.stringify({ launcherMode: 'runelite' }));
-            access = httpError(403);
+            access = new Error('socket hang up');
 
             expect(await setup().ipcMain.invoke('runelite-loader:state')).toEqual({ visible: true, state: 'remove-only', mode: 'runelite' });
             expect(JSON.parse(fs.readFileSync(settingsFile, 'utf8')).launcherMode).toBe('runelite');
@@ -645,17 +648,21 @@ describe('runelite-loader', () => {
         test('remove-only opens the RuneLite screen even when the client screen was chosen, without saving it', async () => {
             installAgentJar();
             fs.writeFileSync(settingsFile, JSON.stringify({ launcherMode: 'client' }));
-            access = httpError(403);
+            access = new Error('socket hang up');
 
             expect(await setup().loader.state()).toMatchObject({ state: 'remove-only', mode: 'runelite' });
             expect(JSON.parse(fs.readFileSync(settingsFile, 'utf8')).launcherMode).toBe('client');
         });
 
-        test('also when signed out or offline', async () => {
+        test('signed out it is hidden', async () => {
             installAgentJar(path.join(path.dirname(agentJar), 'agent-0a1b2c3d.jar'));
             email = null;
-            expect(await setup().loader.state()).toMatchObject({ visible: true, state: 'remove-only' });
-            email = 'admin@example.com';
+
+            expect(await setup().loader.state()).toEqual({ visible: false });
+        });
+
+        test('also when offline', async () => {
+            installAgentJar(path.join(path.dirname(agentJar), 'agent-0a1b2c3d.jar'));
             access = new Error('socket hang up');
             expect(await setup().loader.state()).toMatchObject({ visible: true, state: 'remove-only' });
         });
@@ -852,7 +859,7 @@ describe('runelite-loader', () => {
             expect(fs.existsSync(settingsFile)).toBe(false);
         });
 
-        test('unreadable launcher settings are not overwritten by the chosen path', async () => {
+        test('unreadable launcher settings are not overwritten by the chosen path, and RuneLite does not start without knowing the character', async () => {
             const chosen = path.join(dir, 'RuneLite.AppImage');
             fs.writeFileSync(chosen, '');
             fs.writeFileSync(settingsFile, '{ broken');
@@ -860,7 +867,10 @@ describe('runelite-loader', () => {
             const dialog = { showOpenDialog: jest.fn(async () => ({ canceled: false, filePaths: [chosen] })) };
             const { loader } = setup({ spawn: launchSpawn, dialog, finder: undefined, platform: 'linux' });
 
-            expect((await loader.findAndOpen()).ok).toBe(true);
+            const result = await loader.findAndOpen();
+            expect(result.ok).toBe(false);
+            expect(result.error).toMatch(/launcher-settings\.json\) can't be read/);
+            expect(launchSpawn).not.toHaveBeenCalled();
             expect(fs.readFileSync(settingsFile, 'utf8')).toBe('{ broken');
         });
 

@@ -173,7 +173,7 @@ describe('Microbot client / Microbot in RuneLite switch', () => {
     let findResult;
 
     function loadCard(states) {
-        const ids = ['launcher-mode', 'runelite-view', 'runelite-loader', 'runelite-loader-hint', 'runelite-loader-note', 'runelite-loader-starts', 'runelite-loader-starts-label', 'runelite-loader-change', 'runelite-loader-open', 'runelite-loader-error', 'runelite-loader-action', 'runelite-loader-remove'];
+        const ids = ['launcher-mode', 'runelite-view', 'runelite-loader', 'runelite-loader-hint', 'runelite-loader-note', 'runelite-loader-starts', 'runelite-loader-starts-label', 'runelite-loader-change', 'runelite-loader-open', 'runelite-loader-error', 'runelite-loader-action', 'runelite-loader-remove', 'session-recorder-recordings', 'website'];
         const elements = Object.fromEntries(ids.map((id) => [id, fakeElement()]));
         const options = [fakeElement({ dataset: { mode: 'client' } }), fakeElement({ dataset: { mode: 'runelite' } })];
         const sidebar = fakeElement();
@@ -190,9 +190,11 @@ describe('Microbot client / Microbot in RuneLite switch', () => {
         const context = vm.createContext({
             setTimeout: (...args) => setTimeout(...args),
             clearTimeout: (...args) => clearTimeout(...args),
+            URL,
             window: {
                 electron: {
                     runeliteLoader,
+                    dashboard: { open: async () => ({ url: 'https://dashboard.microbot.cloud/dashboard/' }) },
                     logError: jest.fn(),
                     ipcRenderer: { receive: (channel, fn) => channel === 'auth:changed' && (onAuthChanged = fn) }
                 }
@@ -289,6 +291,16 @@ describe('Microbot client / Microbot in RuneLite switch', () => {
         expect(card.elements['runelite-loader-remove'].hidden).toBe(false);
         expect(card.elements['runelite-loader-action'].hidden).toBe(true);
         expect(card.runeliteLoader.setMode).not.toHaveBeenCalled();
+    });
+
+    test('Your recordings opens the Session Recorder runs in the dashboard view', async () => {
+        const card = loadCard([{ visible: false }]);
+        await flush();
+
+        card.elements['session-recorder-recordings'].click();
+        await flush();
+
+        expect(card.elements.website.src).toBe('https://dashboard.microbot.cloud/admin/mousedata?tab=runs');
     });
 
     test('Open RuneLite starts it and says so for a while', async () => {

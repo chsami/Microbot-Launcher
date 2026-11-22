@@ -1,6 +1,7 @@
 const path = require('path');
 const crypto = require('crypto');
 const { makeFinder, launch, describeSpec } = require('./runelite-launch.js');
+const setupRuneliteCharacters = require('./runelite-characters.js');
 
 const ACCESS_PATH = '/api/loader/access';
 const AGENT_PATH = '/api/loader/agent';
@@ -26,6 +27,7 @@ const AGENT_PREFIX = '-javaagent:';
 const MODE_KEY = 'launcherMode';
 const RUNELITE_PATH_KEY = 'runelitePath';
 const MODES = ['client', 'runelite'];
+const CREDENTIALS_HOLD_MS = 20000;
 
 const MESSAGES = {
     unavailable: 'Microbot in RuneLite is not available for your account.',
@@ -42,6 +44,9 @@ const MESSAGES = {
     added: 'Microbot was added to RuneLite.',
     removed: 'Microbot was removed from RuneLite.',
     starting: 'RuneLite is starting. Microbot will be in the sidebar.',
+    startingAs: (name) => `RuneLite is starting as ${name}. Microbot will be in the sidebar.`,
+    checking: (name) => `Checking ${name}'s Jagex login...`,
+    waiting: 'Waiting for the previous client to finish starting...',
     notFound: "RuneLite wasn't found on this PC. Press Find RuneLite… to choose it.",
     launchFailed: 'RuneLite could not be started. Try opening it the usual way.',
     notRuneLite: "That file can't be started. Choose RuneLite itself."
@@ -58,6 +63,8 @@ module.exports = function setupRuneliteLoader(deps) {
     const home = deps.home || require('os').homedir();
     const dialog = deps.dialog || null;
     const finder = deps.finder || makeFinder({ fs, platform, env, home });
+    const launchQueue = deps.launchQueue || null;
+    const holdMs = deps.credentialsHoldMs ?? CREDENTIALS_HOLD_MS;
 
     let operation = null;
     let progressText = '';
@@ -97,6 +104,70 @@ module.exports = function setupRuneliteLoader(deps) {
     };
 
     const writeMode = (mode) => writeSetting(MODE_KEY, mode);
+
+    const sendLaunchStatus = (text) => {
+        try {
+            const win = getWindow();
+            if (win && !win.isDestroyed()) win.webContents.send('runelite-loader:launch-status', { text });
+        } catch (error) {
+            log.warn(`Could not show the RuneLite start status: ${error?.message || error}`);
+        }
+    };
+
+    const focusWindow = () => {
+        try {
+            const win = getWindow();
+            if (!win || win.isDestroyed()) return;
+            if (win.isMinimized?.()) win.restore();
+            win.show?.();
+            win.focus?.();
+        } catch (_) {}
+    };
+
+    const characters = setupRuneliteCharacters({
+        fs,
+        log,
+        microbotDir,
+        home,
+        settingsFile,
+        readSettings,
+        writeSetting,
+        checkSession: deps.checkSession,
+        peekSession: deps.peekSession,
+        sessionTimeoutMs: deps.sessionTimeoutMs,
+        auth: deps.jagexAuth,
+        onChecking: (name) => sendLaunchStatus(MESSAGES.checking(name)),
+        focusWindow
+    });
+
+    const inTurn = (work) => {
+        if (!launchQueue) return work().then((outcome) => outcome.result);
+        if (launchQueue.busy()) sendLaunchStatus(MESSAGES.waiting);
+        return new Promise((resolve, reject) => {
+            launchQueue
+                .run(async () => {
+                    let outcome;
+                    try {
+                        outcome = await work();
+                    } catch (error) {
+                        reject(error);
+                        return;
+                    }
+                    resolve(outcome.result);
+                    if (outcome.hold && holdMs > 0) await new Promise((done) => setTimeout(done, holdMs));
+                })
+                .catch(() => {});
+        });
+    };
+
+    const startWithCharacter = (start) =>
+        inTurn(async () => {
+            const login = await characters.prepare();
+            if (!login.ok) return { result: login, hold: false };
+            const started = await start(login);
+            const result = started?.ok && login.notice ? { ...started, notice: login.notice, relogin: true, accountId: login.accountId } : started;
+            return { result, hold: Boolean(login.touched && started?.ok) };
+        });
 
     const rememberedRuneLite = () => {
         const value = readSettings()?.[RUNELITE_PATH_KEY];
@@ -418,7 +489,7 @@ module.exports = function setupRuneliteLoader(deps) {
 
     const state = async () => {
         const access = await checkAccess();
-        if (operation) return viewFor(access, null);
+        if (operation || !(access.available || access.reason === 'unreachable')) return viewFor(access, null);
         return viewFor(access, await currentStatus(access.available ? access.agent : null));
     };
 
@@ -525,7 +596,7 @@ module.exports = function setupRuneliteLoader(deps) {
         return promise;
     };
 
-    const startRuneLite = async (spec) => {
+    const startRuneLite = async (spec, name = null) => {
         const result = await launch({
             spawn,
             spec,
@@ -537,7 +608,7 @@ module.exports = function setupRuneliteLoader(deps) {
         });
         if (result.ok) {
             log.info(`Started RuneLite (${spec.source}).`);
-            return { ok: true, message: MESSAGES.starting };
+            return { ok: true, message: name ? MESSAGES.startingAs(name) : MESSAGES.starting };
         }
         const code = typeof result.error?.code === 'string' && /^[A-Z0-9_]{2,32}$/.test(result.error.code) ? result.error.code : 'unknown';
         log.warn(`Could not start RuneLite (${spec.source}): error code ${code}.`);
@@ -559,7 +630,7 @@ module.exports = function setupRuneliteLoader(deps) {
         once(async () => {
             const spec = findRuneLite();
             if (!spec) return { ok: false, opener: 'find', error: MESSAGES.notFound };
-            return startRuneLite(spec);
+            return startWithCharacter((login) => startRuneLite(spec, login.name));
         });
 
     const pickerOptions = () => {
@@ -583,7 +654,8 @@ module.exports = function setupRuneliteLoader(deps) {
             } catch (error) {
                 log.warn(`Could not remember where RuneLite is: ${error?.message || error}`);
             }
-            return { ...(await startRuneLite(spec)), opener: 'open', starts: describeSpec(spec, home) };
+            const started = await startWithCharacter((login) => startRuneLite(spec, login.name));
+            return { ...started, opener: 'open', starts: describeSpec(spec, home) };
         });
 
     const install = () => run('install', installNow);
@@ -611,6 +683,9 @@ module.exports = function setupRuneliteLoader(deps) {
         return { mode: readMode() };
     });
     ipcMain.handle('runelite-loader:remove', () => remove());
+    ipcMain.handle('runelite-loader:characters', () => characters.list());
+    ipcMain.handle('runelite-loader:set-character', (_event, accountId) => characters.choose(accountId));
+    ipcMain.handle('runelite-loader:login', (_event, accountId) => characters.login(accountId));
 
     const javaForTools = () => findJava({ install: true });
 
@@ -629,6 +704,7 @@ module.exports = function setupRuneliteLoader(deps) {
         findAndOpen,
         javaForTools,
         installedAgentJar,
+        startInTurn: (start) => startWithCharacter(start),
         readSetting: (key) => readSettings()?.[key],
         writeSetting
     };

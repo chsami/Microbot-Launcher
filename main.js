@@ -64,7 +64,8 @@ async function loadLibraries() {
             projectDir: __dirname,
             fs: fs,
             app: app,
-            mainWindow: mainWindow
+            mainWindow: mainWindow,
+            launchQueue: require(path.join(__dirname, 'libs', 'launch-queue.js'))()
         };
         let apiAuth = null;
         try {
@@ -137,6 +138,7 @@ async function loadLibraries() {
                     downloadsDir: path.join(loaderHome, 'downloads'),
                     agentJar: path.join(loaderHome, 'agent.jar'),
                     settingsFile: path.join(microbotDir, 'launcher-settings.json'),
+                    launchQueue: deps.launchQueue,
                     dialog,
                     getWindow: () => mainWindow
                 });
@@ -217,6 +219,8 @@ async function createWindow() {
     if (process.platform === 'darwin') {
         mainWindow.setWindowButtonVisibility(false);
     }
+
+    require(path.join(__dirname, 'libs', 'theme-settings.js')).register(ipcMain, log);
 
     try {
         const extraHandlers = require(path.join(

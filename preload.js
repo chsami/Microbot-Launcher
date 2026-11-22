@@ -2,6 +2,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electron', {
     closeLauncher: () => ipcRenderer.invoke('close-launcher'),
+    theme: {
+        read: () => ipcRenderer.invoke('theme:read'),
+        write: (value) => ipcRenderer.invoke('theme:write', value)
+    },
     minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
     maximizeWindow: () => ipcRenderer.invoke('maximize-window'),
     startAuthFlow: (proxy) => ipcRenderer.invoke('start-auth-flow', proxy),
@@ -106,6 +110,10 @@ contextBridge.exposeInMainWorld('electron', {
         setMode: (mode) => ipcRenderer.invoke('runelite-loader:set-mode', mode),
         open: () => ipcRenderer.invoke('runelite-loader:open'),
         find: () => ipcRenderer.invoke('runelite-loader:find'),
+        characters: () => ipcRenderer.invoke('runelite-loader:characters'),
+        setCharacter: (accountId) => ipcRenderer.invoke('runelite-loader:set-character', accountId),
+        login: (accountId) => ipcRenderer.invoke('runelite-loader:login', accountId),
+        onLaunchStatus: (func) => ipcRenderer.on('runelite-loader:launch-status', (event, data) => func(data)),
         onProgress: (func) => ipcRenderer.on('runelite-loader:progress', (event, data) => func(data))
     },
     sessionRecorder: {

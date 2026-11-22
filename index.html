@@ -334,6 +334,22 @@
             <button id="custom-clients-close" class="auth-cancel" type="button">Done</button>
         </div>
     </div>
+    <div id="theme-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
+        aria-labelledby="theme-title">
+        <div class="auth-card theme-picker-card">
+            <h1 id="theme-title" class="auth-title">Themes</h1>
+            <p class="auth-subtitle">Changes the launcher now, and clients the next time they start.</p>
+            <p id="theme-unset" class="theme-unset" hidden>Not picked yet: until you choose, the launcher stays Gold and the client keeps the stock RuneLite look.</p>
+            <fieldset>
+                <legend>Colours</legend>
+                <label class="theme-option"><input type="radio" name="theme" value="gold"> Gold <span class="swatches" aria-hidden="true"><span style="background:#0c0a08"></span><span style="background:#1b1612"></span><span style="background:#ffb13b"></span></span></label>
+                <label class="theme-option"><input type="radio" name="theme" value="slate"> Slate <span class="swatches" aria-hidden="true"><span style="background:#15171c"></span><span style="background:#1c1f26"></span><span style="background:#f5a524"></span></span></label>
+                <label class="theme-option"><input type="radio" name="theme" value="classic"> Classic RuneLite <span class="swatches" aria-hidden="true"><span style="background:#181818"></span><span style="background:#282828"></span><span style="background:#dc8a00"></span></span></label>
+            </fieldset>
+            <p id="theme-error" class="auth-error" role="alert" aria-live="polite"></p>
+            <button id="theme-close" class="auth-cancel" type="button">Done</button>
+        </div>
+    </div>
     <div id="proxy-manager-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
         aria-labelledby="proxy-manager-title">
         <div class="auth-card proxy-manager-card">
@@ -551,16 +567,29 @@
                             </span>
                             <span id="runelite-loader-error" class="loader-card-error" role="alert"></span>
                         </div>
+                        <div id="runelite-loader-character" class="loader-card-character" hidden>
+                            <label class="loader-card-character-label" for="runelite-loader-character-select">Log in as</label>
+                            <div class="loader-card-character-row">
+                                <select id="runelite-loader-character-select" class="loader-card-select"></select>
+                                <button id="runelite-loader-add-account" class="loader-card-link" type="button">Add Jagex account</button>
+                            </div>
+                            <span id="runelite-loader-add-note" class="loader-card-note-plain"></span>
+                            <span id="runelite-loader-character-warning" class="loader-card-warning"></span>
+                            <span id="runelite-loader-character-message" class="loader-card-character-message"></span>
+                        </div>
                         <div class="loader-card-actions">
                             <button id="runelite-loader-action" class="account-action primary" type="button" hidden></button>
                             <button id="runelite-loader-open" class="account-action" type="button" hidden></button>
                             <button id="runelite-loader-remove" class="loader-card-link" type="button" hidden>Remove from RuneLite</button>
                         </div>
                     </section>
-                    <label id="session-recorder-row" class="account-remote hidden" for="session-recorder-switch">
+                    <label id="session-recorder-row" class="account-remote hidden" for="session-recorder-switch"
+                        title="While it is on, every action you take in game (clicks, menu options, walking, items you use) is written down step by step. Open the list under Your recordings and use it as a guide when you write a script for that task.">
                         <span class="account-remote-text">
                             <span class="account-remote-title">Session Recorder</span>
+                            <span class="account-hint">Records what you do in game, step by step, so scripts are easier to make.</span>
                             <span id="session-recorder-hint" class="account-hint" aria-live="polite"></span>
+                            <button id="session-recorder-recordings" class="loader-card-link" type="button">Your recordings</button>
                         </span>
                         <input id="session-recorder-switch" class="hwid-spoof-input" type="checkbox" role="switch" />
                         <span class="hwid-spoof-switch" aria-hidden="true"></span>
@@ -699,6 +728,7 @@
         <!-- Custom popup menu -->
         <div id="app-menu" class="app-menu hidden" aria-hidden="true">
             <ul class="menu-root">
+                <li class="menu-item" data-action="themes">Themes</li>
                 <li class="menu-item" data-action="setup-guide">Setup guide</li>
                 <li class="menu-item menu-check" data-action="run-in-background" role="menuitemcheckbox"
                     aria-checked="false" tabindex="0"
@@ -729,6 +759,7 @@
     <script src="profiles-screen.js"></script>
     <script src="setup-guide.js"></script>
     <script src="runelite-loader-card.js"></script>
+    <script src="libs/theme-picker.js"></script>
     <script src="halloween.js"></script>
 
 

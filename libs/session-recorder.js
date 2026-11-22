@@ -8,6 +8,8 @@ const INFO_TIMEOUT_MS = 10000;
 const DOWNLOAD_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_JAR_BYTES = 512 * 1024 * 1024;
 const MAX_TEXT = 300;
+const UPDATE_EVERY_MS = 30 * 60 * 1000;
+const OPEN_GRACE_MS = 6 * 60 * 1000;
 const VERSION_PATTERN = /^[0-9]{1,6}(\.[0-9]{1,6}){1,3}$/;
 const SHA_PATTERN = /^[a-f0-9]{64}$/;
 
@@ -19,17 +21,23 @@ const MESSAGES = {
     start: 'The Session Recorder could not start. Try again in a minute.',
     stopped: 'The Session Recorder stopped. Turn it off and on to start it again.',
     notRunning: 'Turn the Session Recorder on first.',
-    opening: 'RuneLite is starting through the Session Recorder.'
+    opening: 'RuneLite is starting through the Session Recorder.',
+    updating: 'Updating the Session Recorder...',
+    updatingOpen: 'The Session Recorder is updating. Try again in a few seconds.'
 };
 
 module.exports = function setupSessionRecorder(deps) {
     const { ipcMain, log, fs, spawn, auth, runelite, directory } = deps;
     const getWindow = deps.getWindow || (() => null);
+    const updateEveryMs = deps.updateEveryMs || UPDATE_EVERY_MS;
 
     let child = null;
     let status = null;
     let error = '';
     let starting = null;
+    let version = null;
+    let updating = null;
+    let openedAt = 0;
 
     const isOn = () => runelite.readSetting(SETTING_KEY) === true;
 
@@ -47,8 +55,9 @@ module.exports = function setupSessionRecorder(deps) {
         return {
             visible: true,
             on: isOn(),
-            running: Boolean(child) && status?.state === 'ready',
-            message: error || status?.error || status?.message || (isOn() ? MESSAGES.starting : '')
+            running: Boolean(child) && status?.state === 'ready' && !updating,
+            updating: Boolean(updating),
+            message: (updating && MESSAGES.updating) || error || status?.error || status?.message || (isOn() ? MESSAGES.starting : '')
         };
     };
 
@@ -101,7 +110,11 @@ module.exports = function setupSessionRecorder(deps) {
         fs.renameSync(temp, target);
         fs.readdirSync(directory)
             .filter((name) => /^session-recorder-.+\.jar$/.test(name) && name !== path.basename(target))
-            .forEach((name) => fs.rmSync(path.join(directory, name), { force: true }));
+            .forEach((name) => {
+                try {
+                    fs.rmSync(path.join(directory, name), { force: true });
+                } catch (_) {}
+            });
         log.info(`Downloaded the Session Recorder ${info.version}.`);
         return target;
     };
@@ -115,8 +128,8 @@ module.exports = function setupSessionRecorder(deps) {
         push();
     };
 
-    const startNow = async () => {
-        const info = await fetchInfo();
+    const startNow = async (known) => {
+        const info = known || await fetchInfo();
         if (!info) return;
         error = '';
         status = null;
@@ -134,6 +147,7 @@ module.exports = function setupSessionRecorder(deps) {
             const args = ['-jar', jar, ...(agent ? ['--agent', agent] : [])];
             const proc = spawn(java, args, { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
             child = proc;
+            version = info.version;
             let buffered = '';
             proc.stdout?.on('data', (chunk) => {
                 buffered += chunk.toString();
@@ -149,11 +163,14 @@ module.exports = function setupSessionRecorder(deps) {
             proc.on('close', (code) => {
                 if (child !== proc) return;
                 child = null;
+                const restart = updating;
+                updating = null;
                 if (status?.state !== 'stopped') {
                     log.warn(`The Session Recorder exited with code ${code}.`);
                     if (isOn()) error = MESSAGES.stopped;
                 }
                 push();
+                if (restart && status?.state === 'stopped' && isOn()) start(restart);
             });
             log.info(`Started the Session Recorder ${info.version}${agent ? ' with Microbot' : ''}.`);
         } catch (e) {
@@ -163,9 +180,9 @@ module.exports = function setupSessionRecorder(deps) {
         push();
     };
 
-    const start = () => {
+    const start = (known) => {
         if (child || starting) return starting;
-        starting = startNow().finally(() => {
+        starting = startNow(known).finally(() => {
             starting = null;
         });
         return starting;
@@ -176,6 +193,26 @@ module.exports = function setupSessionRecorder(deps) {
         if (child?.stdin?.writable) child.stdin.write('stop\n');
         push();
     };
+
+    const idle = () => Boolean(child?.stdin?.writable) && !updating && status?.state === 'ready'
+        && status.recording === 0 && Date.now() - openedAt > OPEN_GRACE_MS;
+
+    const update = async () => {
+        if (!idle()) return;
+        const info = await fetchInfo();
+        if (!info || info.version === version) return;
+        await download(info);
+        if (!idle() || !isOn()) return;
+        updating = info;
+        log.info(`Updating the Session Recorder from ${version} to ${info.version}.`);
+        child.stdin.write('stop\n');
+        push();
+    };
+
+    const timer = setInterval(() => {
+        update().catch((e) => log.warn(`Could not update the Session Recorder: ${e?.message || e}`));
+    }, updateEveryMs);
+    timer.unref?.();
 
     const state = async () => {
         const info = await fetchInfo();
@@ -192,10 +229,22 @@ module.exports = function setupSessionRecorder(deps) {
         return view(true);
     };
 
-    const open = () => {
+    const cannotOpen = () => {
+        if (updating) return { ok: false, error: MESSAGES.updatingOpen };
         if (!child || status?.state !== 'ready' || !child.stdin?.writable) return { ok: false, error: MESSAGES.notRunning };
+        return null;
+    };
+
+    const send = () => {
+        if (cannotOpen()) return cannotOpen();
+        openedAt = Date.now();
         child.stdin.write('open\n');
         return { ok: true, message: MESSAGES.opening };
+    };
+
+    const open = async () => {
+        if (cannotOpen()) return cannotOpen();
+        return runelite.startInTurn ? runelite.startInTurn(async () => send()) : send();
     };
 
     ipcMain.handle('session-recorder:state', () => state());
