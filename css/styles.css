@@ -1235,6 +1235,7 @@ h2 {
 }
 
 .accounts-search-input {
+    box-sizing: border-box;
     background-color: var(--bg);
     border: 1px solid var(--line);
     border-radius: 6px;
@@ -1265,7 +1266,7 @@ h2 {
     display: flex;
     gap: 8px;
     justify-content: space-between;
-    padding: 6px 8px;
+    padding: 6px 10px;
     transition: background-color 0.2s ease;
 }
 
