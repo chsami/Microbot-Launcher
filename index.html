@@ -155,20 +155,20 @@
                 <div class="guide-body">
                     <section class="guide-step" data-title="Welcome">
                         <h1 class="guide-title">Welcome to Microbot</h1>
-                        <p class="guide-lead">You can be playing in a few minutes. First, find out which account you
-                            have. You don't need all three.</p>
+                        <p class="guide-lead">You can be playing in a few minutes. Since 17 November 2026 every character
+                            needs a Jagex account to log in.</p>
                         <div class="guide-cards">
                             <article class="guide-type">
-                                <span class="guide-badge">Most players</span>
+                                <span class="guide-badge">Required to play</span>
                                 <h2>Jagex account</h2>
-                                <p>You log in on account.jagex.com or with the Jagex Launcher, usually with an
-                                    authenticator code. New accounts are Jagex accounts.</p>
+                                <p>You log in on account.jagex.com or with the Jagex Launcher, with your email,
+                                    password and usually an authenticator code.</p>
                             </article>
                             <article class="guide-type">
-                                <span class="guide-badge muted">Older accounts</span>
-                                <h2>Normal account</h2>
-                                <p>An older account you still log in to by typing your username or email and
-                                    password on the game's login screen.</p>
+                                <span class="guide-badge muted">Needs upgrading</span>
+                                <h2>Old login</h2>
+                                <p>A character you used to log in to on the game's login screen. That login no
+                                    longer works until you upgrade it to a Jagex account. Your progress is kept.</p>
                             </article>
                             <article class="guide-type">
                                 <span class="guide-badge muted">Optional</span>
@@ -177,8 +177,8 @@
                                     account and you don't need it to play.</p>
                             </article>
                         </div>
-                        <p class="guide-tip"><strong>Not sure?</strong> If the game's login screen tells you to use the
-                            Jagex Launcher, you have a Jagex account.</p>
+                        <p class="guide-tip"><strong>Not sure?</strong> If you already play through the Jagex
+                            Launcher, you have a Jagex account.</p>
                     </section>
 
                     <section class="guide-step" data-title="Jagex account" data-target="add-accounts play">
@@ -210,20 +210,30 @@
                         </ul>
                     </section>
 
-                    <section class="guide-step" data-title="Normal account" data-target="play-no-jagex-account">
-                        <h1 class="guide-title">Play with a normal account</h1>
-                        <p class="guide-lead">You don't add normal accounts to the launcher. You log in inside the
-                            game, like you always did.</p>
+                    <section class="guide-step" data-title="Old login">
+                        <h1 class="guide-title">Still on an old login?</h1>
+                        <p class="guide-lead">Typing a username or email and password on the game's login screen
+                            stopped working on 17 November 2026. Upgrade the character to a Jagex account once, then
+                            add it here.</p>
+                        <div class="guide-actions">
+                            <button class="guide-action" type="button" data-action="jagex-upgrade">Open Jagex's
+                                upgrade guide</button>
+                        </div>
                         <ol class="guide-list">
-                            <li data-target="play-no-jagex-account"><strong>Click Play Normal Account.</strong> The
-                                client opens on the game's login screen.</li>
-                            <li><strong>Log in on that screen</strong> with your username or email and password.</li>
+                            <li><strong>Follow Jagex's upgrade guide.</strong> It opens in your browser. You need your
+                                old username or login email and password.</li>
+                            <li><strong>Create your Jagex account and add the character to it.</strong> Your progress
+                                is kept. The upgrade can't be undone.</li>
+                            <li data-target="add-accounts play"><strong>Come back and log in with Jagex.</strong> The
+                                upgraded character shows up in the Jagex Account list.</li>
                         </ol>
                         <ul class="guide-notes">
-                            <li>Play Normal Account also opens the client without logging in, for example to set up
-                                plugins first.</li>
-                            <li>Once an account is moved to a Jagex account, it can't go back. Use the Jagex account
-                                steps for it from then on.</li>
+                            <li>Only upgrade on jagex.com or runescape.com. Fake upgrade sites steal accounts.</li>
+                            <li data-target="profile">If this is the first Jagex account you add here, it opens on the
+                                profile your old login used, so your plugin settings carry over. For any other character,
+                                pick the profile it used before in the Profile list.</li>
+                            <li>Bot alert cards from clients started without a Jagex account are removed from the
+                                dashboard. Start the character with its Jagex account to get alerts again.</li>
                         </ul>
                     </section>
 
@@ -322,6 +332,22 @@
             <p id="custom-clients-empty" class="proxy-list-empty">No custom client JARs.</p>
             <p id="custom-clients-error" class="auth-error" role="alert" aria-live="polite"></p>
             <button id="custom-clients-close" class="auth-cancel" type="button">Done</button>
+        </div>
+    </div>
+    <div id="theme-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
+        aria-labelledby="theme-title">
+        <div class="auth-card theme-picker-card">
+            <h1 id="theme-title" class="auth-title">Themes</h1>
+            <p class="auth-subtitle">Changes the launcher now, and clients the next time they start.</p>
+            <p id="theme-unset" class="theme-unset" hidden>Not picked yet: until you choose, the launcher stays Gold and the client keeps the stock RuneLite look.</p>
+            <fieldset>
+                <legend>Colours</legend>
+                <label class="theme-option"><input type="radio" name="theme" value="gold"> Gold <span class="swatches" aria-hidden="true"><span style="background:#0c0a08"></span><span style="background:#1b1612"></span><span style="background:#ffb13b"></span></span></label>
+                <label class="theme-option"><input type="radio" name="theme" value="slate"> Slate <span class="swatches" aria-hidden="true"><span style="background:#15171c"></span><span style="background:#1c1f26"></span><span style="background:#f5a524"></span></span></label>
+                <label class="theme-option"><input type="radio" name="theme" value="classic"> Classic RuneLite <span class="swatches" aria-hidden="true"><span style="background:#181818"></span><span style="background:#282828"></span><span style="background:#dc8a00"></span></span></label>
+            </fieldset>
+            <p id="theme-error" class="auth-error" role="alert" aria-live="polite"></p>
+            <button id="theme-close" class="auth-cancel" type="button">Done</button>
         </div>
     </div>
     <div id="proxy-manager-modal" class="auth-modal auth-hidden" role="dialog" aria-modal="true"
@@ -541,6 +567,16 @@
                             </span>
                             <span id="runelite-loader-error" class="loader-card-error" role="alert"></span>
                         </div>
+                        <div id="runelite-loader-character" class="loader-card-character" hidden>
+                            <label class="loader-card-character-label" for="runelite-loader-character-select">Log in as</label>
+                            <div class="loader-card-character-row">
+                                <select id="runelite-loader-character-select" class="loader-card-select"></select>
+                                <button id="runelite-loader-add-account" class="loader-card-link" type="button">Add Jagex account</button>
+                            </div>
+                            <span id="runelite-loader-add-note" class="loader-card-note-plain"></span>
+                            <span id="runelite-loader-character-warning" class="loader-card-warning"></span>
+                            <span id="runelite-loader-character-message" class="loader-card-character-message"></span>
+                        </div>
                         <div class="loader-card-actions">
                             <button id="runelite-loader-action" class="account-action primary" type="button" hidden></button>
                             <button id="runelite-loader-open" class="account-action" type="button" hidden></button>
@@ -563,10 +599,8 @@
                     <button id="play" class="play-button loadingButton">
                         Login Jagex Account
                     </button>
-                    <button id="play-no-jagex-account" class="play-button loadingButton">
-                        Play Normal Account
-                    </button>
                 </div>
+                <button id="old-login-help" class="logout-button old-login-help" type="button">Old username login? See how to upgrade</button>
                 <button id="add-accounts" class="add-accounts loadingButton">
                     Add accounts
                 </button>
@@ -694,6 +728,7 @@
         <!-- Custom popup menu -->
         <div id="app-menu" class="app-menu hidden" aria-hidden="true">
             <ul class="menu-root">
+                <li class="menu-item" data-action="themes">Themes</li>
                 <li class="menu-item" data-action="setup-guide">Setup guide</li>
                 <li class="menu-item menu-check" data-action="run-in-background" role="menuitemcheckbox"
                     aria-checked="false" tabindex="0"
@@ -724,6 +759,7 @@
     <script src="profiles-screen.js"></script>
     <script src="setup-guide.js"></script>
     <script src="runelite-loader-card.js"></script>
+    <script src="libs/theme-picker.js"></script>
     <script src="halloween.js"></script>
 
 

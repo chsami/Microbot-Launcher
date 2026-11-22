@@ -1,5 +1,6 @@
 const path = require('path');
 const crypto = require('crypto');
+const { cleanEnv } = require('./runelite-launch');
 
 const INFO_PATH = '/api/loader/recorder/info';
 const SETTING_KEY = 'sessionRecorder';
@@ -30,6 +31,8 @@ module.exports = function setupSessionRecorder(deps) {
     const { ipcMain, log, fs, spawn, auth, runelite, directory } = deps;
     const getWindow = deps.getWindow || (() => null);
     const updateEveryMs = deps.updateEveryMs || UPDATE_EVERY_MS;
+    const env = deps.env || process.env;
+    const platform = deps.platform || process.platform;
 
     let child = null;
     let status = null;
@@ -145,7 +148,7 @@ module.exports = function setupSessionRecorder(deps) {
             const agent = await runelite.installedAgentJar().catch(() => null);
             if (!isOn() || child) return;
             const args = ['-jar', jar, ...(agent ? ['--agent', agent] : [])];
-            const proc = spawn(java, args, { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+            const proc = spawn(java, args, { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: cleanEnv(env, platform) });
             child = proc;
             version = info.version;
             let buffered = '';
@@ -229,12 +232,22 @@ module.exports = function setupSessionRecorder(deps) {
         return view(true);
     };
 
-    const open = () => {
+    const cannotOpen = () => {
         if (updating) return { ok: false, error: MESSAGES.updatingOpen };
         if (!child || status?.state !== 'ready' || !child.stdin?.writable) return { ok: false, error: MESSAGES.notRunning };
+        return null;
+    };
+
+    const send = () => {
+        if (cannotOpen()) return cannotOpen();
         openedAt = Date.now();
         child.stdin.write('open\n');
         return { ok: true, message: MESSAGES.opening };
+    };
+
+    const open = async () => {
+        if (cannotOpen()) return cannotOpen();
+        return runelite.startInTurn ? runelite.startInTurn(async () => send()) : send();
     };
 
     ipcMain.handle('session-recorder:state', () => state());

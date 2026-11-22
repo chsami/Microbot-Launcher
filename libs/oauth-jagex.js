@@ -12,6 +12,17 @@ const { microbotDirName } = require('./dir-module.js');
 const userHome = process.env.HOME || process.env.USERPROFILE;
 const ACCOUNTS_DIR = path.join(userHome, microbotDirName);
 const ACCOUNTS_FILE_PATH = path.join(ACCOUNTS_DIR, 'accounts.json');
+// Written by the removed "Play Normal Account" button; names the profile that login used.
+const OLD_PROFILE_PATH = path.join(ACCOUNTS_DIR, 'non-jagex-preferred-profile.json');
+
+async function readOldProfile() {
+    try {
+        const profile = JSON.parse(await fs.readFile(OLD_PROFILE_PATH, 'utf-8'))?.profile;
+        return typeof profile === 'string' && profile.trim() ? profile.trim() : null;
+    } catch (e) {
+        return null;
+    }
+}
 
 /**
  * Auth complete HTML to better show the user that the auth process is complete
@@ -223,6 +234,7 @@ function hasDisplayName(account) {
 
 function mergeAccounts(existingAccounts, fetchedAccounts, sessionId, now, accountFields = {}) {
     const accounts = existingAccounts.map((acc) => ({ ...acc }));
+    const fieldsFor = typeof accountFields === 'function' ? accountFields : () => accountFields;
     const indexById = new Map(
         accounts.map((acc, index) => [acc.accountId, index])
     );
@@ -236,12 +248,12 @@ function mergeAccounts(existingAccounts, fetchedAccounts, sessionId, now, accoun
         const index = indexById.get(fetched.accountId);
         if (index === undefined) {
             indexById.set(fetched.accountId, accounts.length);
-            accounts.push({ ...fetched, ...accountFields, sessionId, createdOn: now });
+            accounts.push({ ...fetched, ...fieldsFor(true), sessionId, createdOn: now });
             added++;
             continue;
         }
         const current = accounts[index];
-        const next = { ...current, ...fetched, ...accountFields, sessionId };
+        const next = { ...current, ...fetched, ...fieldsFor(false), sessionId };
         if (!hasDisplayName(fetched)) {
             next.displayName = current.displayName;
         }
@@ -293,6 +305,9 @@ async function writeAccountsToFile(sessionId, httpOptions = {}, accountFields = 
             new Date().toISOString(),
             accountFields
         );
+        // The first Jagex account keeps the plugin settings of the old username login's profile.
+        const oldProfile = existingAccounts.length === 0 && added > 0 ? await readOldProfile() : null;
+        if (oldProfile && !accounts[0].profile) accounts[0].profile = oldProfile;
 
         if (added > 0 || updated > 0) {
             const tempPath = `${ACCOUNTS_FILE_PATH}.${process.pid}.tmp`;
@@ -306,6 +321,7 @@ async function writeAccountsToFile(sessionId, httpOptions = {}, accountFields = 
             log.info(
                 `Accounts file updated: ${added} new, ${updated} updated account(s) in ${ACCOUNTS_FILE_PATH}`
             );
+            if (oldProfile) await fs.unlink(OLD_PROFILE_PATH).catch(() => {});
         } else {
             log.info('No account changes.');
         }
@@ -618,7 +634,7 @@ function cancelAuthFlow() {
     return true;
 }
 
-function startSystemBrowserAuthFlow() {
+function startSystemBrowserAuthFlow(accountFields = { proxyIp: '' }) {
     if (pendingSystemBrowserAuth) {
         log.info('Jagex login already pending, reopening the system browser.');
         require('electron').shell.openExternal(pendingSystemBrowserAuth.authUrl);
@@ -689,7 +705,7 @@ function startSystemBrowserAuthFlow() {
             try {
                 const sessionId = await getSessionId(idToken);
                 if (!sessionId) throw new Error('Could not create a game session.');
-                const written = await writeAccountsToFile(sessionId, {}, { proxyIp: '' });
+                const written = await writeAccountsToFile(sessionId, {}, accountFields);
                 if (!written?.ok) throw new Error(written?.error || 'Could not save the accounts.');
                 res.writeHead(204).end();
                 log.info('Authentication flow complete.');
@@ -710,35 +726,47 @@ function startSystemBrowserAuthFlow() {
     return result;
 }
 
-async function startProxiedAuthFlow(proxyUri, proxyIp) {
+async function startProxiedAuthFlow(proxyUri, accountFields) {
     log.info('Proxy set, logging in to Jagex in an isolated browser through the proxy.');
     const loginProxy = await startLoginProxy(proxyUri);
     try {
-        return await startPatchrightAuthFlow(loginProxy, { proxyIp });
+        return await startPatchrightAuthFlow(loginProxy, accountFields);
     } finally {
         await loginProxy.close();
     }
 }
 
-async function startUnproxiedAuthFlow() {
+async function startUnproxiedAuthFlow(accountFields) {
     try {
-        return await startSystemBrowserAuthFlow();
+        return await startSystemBrowserAuthFlow(accountFields);
     } catch (error) {
         if (error.code !== 'EACCES' && error.code !== 'EADDRINUSE') throw error;
         log.warn(`Port 80 unavailable (${error.code}), falling back to patchright browser.`);
-        return await startPatchrightAuthFlow();
+        return await startPatchrightAuthFlow(null, accountFields);
     }
 }
 
-async function startAuthFlow({ proxy } = {}) {
+function loginFields(proxyIp, keepProxies) {
+    return keepProxies ? (isNew) => (isNew ? { proxyIp } : {}) : { proxyIp };
+}
+
+let activeAuthFlows = 0;
+
+async function startAuthFlow({ proxy, keepProxies = false } = {}) {
     const proxyUri = toProxyUri(proxy?.proxyIp);
+    activeAuthFlows += 1;
     try {
         return proxyUri
-            ? await startProxiedAuthFlow(proxyUri, proxy.proxyIp.trim())
-            : await startUnproxiedAuthFlow();
+            ? await startProxiedAuthFlow(proxyUri, loginFields(proxy.proxyIp.trim(), keepProxies))
+            : await startUnproxiedAuthFlow(loginFields('', keepProxies));
     } finally {
+        activeAuthFlows -= 1;
         cancelCurrentAuth = null;
     }
 }
 
-module.exports = { startAuthFlow, cancelAuthFlow, writeAccountsToFile, mergeAccounts };
+function authFlowRunning() {
+    return Boolean(activeAuthFlows > 0 || cancelCurrentAuth || pendingSystemBrowserAuth);
+}
+
+module.exports = { startAuthFlow, cancelAuthFlow, authFlowRunning, writeAccountsToFile, mergeAccounts };

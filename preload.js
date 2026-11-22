@@ -2,6 +2,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electron', {
     closeLauncher: () => ipcRenderer.invoke('close-launcher'),
+    theme: {
+        read: () => ipcRenderer.invoke('theme:read'),
+        write: (value) => ipcRenderer.invoke('theme:write', value)
+    },
     minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
     maximizeWindow: () => ipcRenderer.invoke('maximize-window'),
     startAuthFlow: (proxy) => ipcRenderer.invoke('start-auth-flow', proxy),
@@ -31,22 +35,11 @@ contextBridge.exposeInMainWorld('electron', {
     removeAccounts: () => ipcRenderer.invoke('remove-accounts'),
     setProfileJagexAccount: (account, profile) =>
         ipcRenderer.invoke('set-profile-jagex', account, profile),
-    setProfileNoJagexAccount: (profile) =>
-        ipcRenderer.invoke('set-profile-no-jagex', profile),
-    readNonJagexProfile: () => ipcRenderer.invoke('read-non-jagex-profile'),
     clientExists: (version) => ipcRenderer.invoke('client-exists', version),
     launcherExists: () => ipcRenderer.invoke('launcher-exists'),
     overwriteCredentialProperties: (character) =>
         ipcRenderer.invoke('overwrite-credential-properties', character),
     checkFileChange: () => ipcRenderer.invoke('check-file-change'),
-    playNoJagexAccount: (version, proxy, ramPreference, hwidSpoof) =>
-        ipcRenderer.invoke(
-            'play-no-jagex-account',
-            version,
-            proxy,
-            ramPreference,
-            hwidSpoof
-        ),
     listJars: () => ipcRenderer.invoke('list-jars'),
     listClientJars: (latestVersion) =>
         ipcRenderer.invoke('list-client-jars', latestVersion),
@@ -106,9 +99,6 @@ contextBridge.exposeInMainWorld('electron', {
         setEnabled: (enabled) => ipcRenderer.invoke('remote-start:set-enabled', enabled)
     },
     alerts: {
-        status: (profiles) => ipcRenderer.invoke('alerts:status', profiles),
-        setEnabled: (profile, enabled) =>
-            ipcRenderer.invoke('alerts:set-enabled', profile, enabled),
         accountStatus: (accountIds) => ipcRenderer.invoke('alerts:accounts', accountIds),
         setAccountEnabled: (accountId, enabled) =>
             ipcRenderer.invoke('alerts:set-account-enabled', accountId, enabled)
@@ -120,6 +110,10 @@ contextBridge.exposeInMainWorld('electron', {
         setMode: (mode) => ipcRenderer.invoke('runelite-loader:set-mode', mode),
         open: () => ipcRenderer.invoke('runelite-loader:open'),
         find: () => ipcRenderer.invoke('runelite-loader:find'),
+        characters: () => ipcRenderer.invoke('runelite-loader:characters'),
+        setCharacter: (accountId) => ipcRenderer.invoke('runelite-loader:set-character', accountId),
+        login: (accountId) => ipcRenderer.invoke('runelite-loader:login', accountId),
+        onLaunchStatus: (func) => ipcRenderer.on('runelite-loader:launch-status', (event, data) => func(data)),
         onProgress: (func) => ipcRenderer.on('runelite-loader:progress', (event, data) => func(data))
     },
     sessionRecorder: {

@@ -20,7 +20,6 @@ function setup({
     startOptions,
     accounts,
     accountLinks = {},
-    withoutAccount = [],
     alerts
 } = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'remote-start-'));
@@ -91,7 +90,7 @@ function setup({
         },
         axios,
         auth,
-        alerts: alerts || { linkedProfiles: () => linked, linkedAccounts, profilesWithoutAccount: () => withoutAccount },
+        alerts: alerts || { linkedProfiles: () => linked, linkedAccounts },
         background,
         launchProfile,
         launchAccount,
@@ -379,29 +378,6 @@ describe('starting clients from the dashboard', () => {
             remote.stop();
         });
 
-        test('an older dashboard starting the link of clients without an account starts the profile without one', async () => {
-            const { remote, respond, launchProfile, launchAccount, results } = setup({
-                settings: { remoteStartFor: 'player@example.com' },
-                linked: { main: 'link-1', alt: 'link-2' },
-                accounts: ACCOUNTS,
-                accountLinks: ACCOUNT_LINKS,
-                withoutAccount: ['main']
-            });
-            respond({
-                commands: [
-                    { id: 'start-1', type: 'start_client', clientLinkId: 'link-1', proxyId: null },
-                    { id: 'start-2', type: 'start_client', clientLinkId: 'link-2', proxyId: 'p1' }
-                ]
-            });
-            remote.start();
-            await waitFor(() => results.length === 2);
-
-            expect(launchAccount).not.toHaveBeenCalled();
-            expect(launchProfile).toHaveBeenCalledWith('main', expect.objectContaining({ proxyId: null, withoutAccount: true }));
-            expect(launchProfile).toHaveBeenCalledWith('alt', expect.objectContaining({ proxyId: 'p1', withoutAccount: false }));
-            remote.stop();
-        });
-
         test('a link of an account whose switch is off is neither reported nor started', async () => {
             const { remote, respond, launchAccount, launchProfile, results, syncs } = setup({
                 settings: { remoteStartFor: 'player@example.com' },
@@ -470,7 +446,7 @@ describe('starting clients from the dashboard', () => {
             remote.stop();
             fs.rmSync(dir, { recursive: true, force: true });
 
-            expect(syncs[0].body.clients.map((client) => client.clientLinkId)).toEqual(['link-zezima', 'link-ted', 'link-2']);
+            expect(syncs[0].body.clients.map((client) => client.clientLinkId)).toEqual(['link-zezima', 'link-ted']);
             expect(syncs[0].body.startOptions.accounts.map((account) => [account.id, account.clientLinkId])).toEqual([
                 ['a-111', 'link-zezima'],
                 ['a-222', null],
@@ -479,7 +455,7 @@ describe('starting clients from the dashboard', () => {
             expect(syncs[0].body.startOptions.profiles.map((profile) => [profile.id, profile.clientLinkId])).toEqual([
                 ['p-default', null],
                 ['p-main', null],
-                ['p-alt', 'link-2']
+                ['p-alt', null]
             ]);
             expect(request).not.toHaveBeenCalled();
         });
