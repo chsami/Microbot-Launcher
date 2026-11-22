@@ -52,6 +52,8 @@ describe('session-recorder', () => {
             spawn,
             runelite,
             directory: dir,
+            env: { HOME: '/home/p', DISPLAY: ':0', APPIMAGE: '/home/p/Microbot Launcher.AppImage', APPDIR: '/tmp/.mount_x', LD_LIBRARY_PATH: '/tmp/.mount_x/usr/lib' },
+            platform: 'linux',
             auth: {
                 email: () => 'admin@example.com',
                 request: jest.fn(async (config) => {
@@ -87,10 +89,11 @@ describe('session-recorder', () => {
             javaForTools: jest.fn(async () => '/jdk/bin/java'),
             installedAgentJar: jest.fn(async () => '/home/p/.microbot/loader/agent.jar')
         };
-        spawn = jest.fn((command, args) => {
+        spawn = jest.fn((command, args, options) => {
             const child = new EventEmitter();
             child.command = command;
             child.args = args;
+            child.env = options.env;
             child.stdout = new EventEmitter();
             child.stderr = new EventEmitter();
             child.written = [];
@@ -129,6 +132,7 @@ describe('session-recorder', () => {
         const jar = path.join(dir, 'session-recorder-1.0.0.jar');
         expect(children[0].command).toBe('/jdk/bin/java');
         expect(children[0].args).toEqual(['-jar', jar, '--agent', '/home/p/.microbot/loader/agent.jar']);
+        expect(children[0].env).toEqual({ HOME: '/home/p', DISPLAY: ':0' });
         expect(fs.readFileSync(jar)).toEqual(JAR);
 
         say(children[0], 'RuneLite log line\n' + STATUS_PREFIX + '{"state":"ready","message":"On. Press Open RuneLite to start a recorded RuneLite.","recording":0,"unrecorded":1}\n');
