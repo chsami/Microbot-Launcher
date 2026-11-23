@@ -246,8 +246,22 @@ describe('theme picker', () => {
         await flush();
         action(p.cards()[0], 'Save as file').listeners.click();
         await flush();
-        expect(p.note()).toBe('Saved to C:\\Users\\me\\midnight.json');
+        expect(p.note()).toBe('Saved to C:\\Users\\me\\midnight.json.');
         expect(p.errors()).toBe('');
+    });
+
+    test('a failed Save as file clears an earlier Saved to note', async () => {
+        const p = load({ themes: [midnight], exportReply: { ok: true, file: 'C:\\Users\\me\\midnight.json' } });
+        await flush();
+        p.reads[0]({ theme: 'gold' });
+        await flush();
+        await flush();
+        action(p.cards()[0], 'Save as file').listeners.click();
+        await flush();
+        p.window.electron.themes.exportFile = () => Promise.resolve({ error: 'The disk is full. Free up some space and try again.' });
+        action(p.cards()[0], 'Save as file').listeners.click();
+        await flush();
+        expect(p.note()).toBe('');
     });
 
     test('deleting a theme that is not in use does not mention switching', async () => {

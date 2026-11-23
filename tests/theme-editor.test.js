@@ -247,6 +247,16 @@ describe('theme editor', () => {
         expect(e.refreshes).toHaveLength(1);
     });
 
+    test('a name that was taken says what it was saved as', async () => {
+        const e = load({ saveReply: (theme, id) => ({ id: id || 'gold-2', theme: { ...theme, name: 'Gold (2)' } }) });
+        await e.window.ThemeEditor.open();
+        e.type(e.$('theme-editor-name'), 'Gold');
+        e.click('theme-editor-save');
+        await flush();
+        await flush();
+        expect(e.$('theme-share-note').textContent).toBe('Saved as Gold (2): that name was taken.');
+    });
+
     test('Escape cancels', async () => {
         const e = load();
         await e.window.ThemeEditor.open();

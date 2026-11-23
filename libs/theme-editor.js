@@ -366,6 +366,9 @@
         if (!result || result.error) return mine && showError('Could not save the theme: ' + (result?.error || 'no reply'));
         const picked = window.ThemePicker.current();
         if (mine) close();
+        // the library gives a taken name a number; import says so, and so does this
+        const note = $('theme-share-note');
+        if (note && result.theme?.name && result.theme.name !== cleaned.theme.name) note.textContent = 'Saved as ' + result.theme.name + ': that name was taken.';
         // through the picker's save queue, so theme.json and the picker agree on the new colours; a new theme is picked
         // unless the player picked another theme while it saved
         if ((id === undefined && JSON.stringify(picked) === before) || (picked.theme === 'custom' && picked.id === id)) {

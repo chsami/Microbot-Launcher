@@ -78,11 +78,13 @@
         const readable = window.CustomTheme.readable(resolved);
         $('theme-import-save').disabled = saved || !readable;
         if (!readable) say('theme-import-status', UNREADABLE);
+        else if (saved) say('theme-import-status', 'Already saved. Press Done.');
         say('theme-import-name', previewed.name);
         showLook(resolved);
         // only a theme file can name an image: codes drop it
         say('theme-import-note', previewed.background?.image ? 'This theme uses the image ' + previewed.background.image + '. Put that file in your themes folder.' : '');
-        paint(window.CustomTheme.selection('preview', previewed));
+        // an unreadable theme is not painted: the picker refuses it, and the message above must stay readable
+        paint(readable ? window.CustomTheme.selection('preview', previewed) : window.ThemePicker.current());
     }
 
     async function save() {

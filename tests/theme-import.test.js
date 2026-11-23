@@ -110,6 +110,7 @@ describe('theme import', () => {
         expect(e.$('theme-import-cancel').textContent).toBe('Done');
         e.click('theme-import-preview'); // the same text again is still the saved theme
         expect(e.$('theme-import-save').disabled).toBe(true);
+        expect(e.$('theme-import-status').textContent).toBe('Already saved. Press Done.');
         e.$('theme-import-text').listeners.input();
         expect(e.$('theme-import-cancel').textContent).toBe('Cancel');
         e.click('theme-import-preview');
@@ -122,6 +123,8 @@ describe('theme import', () => {
         e.window.ThemeImport.open(JSON.stringify(murky));
         expect(e.$('theme-import-save').disabled).toBe(true);
         expect(e.$('theme-import-status').textContent).toBe(UNREADABLE);
+        // not painted on the launcher: the picker would refuse it, and the message must stay readable
+        expect(e.vars['--bg']).not.toBe(CustomTheme.resolve(murky).launcher.bg);
         e.click('theme-import-save');
         await flush();
         expect(e.saves).toEqual([]);

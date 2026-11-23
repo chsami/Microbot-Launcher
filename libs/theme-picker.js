@@ -108,11 +108,12 @@
     };
 
     const exportTheme = async (id) => {
+        const note = $('theme-share-note');
+        if (note) note.textContent = '';
         try {
             const result = await themes().exportFile(id);
             if (result?.error) showError('Could not save the theme file: ' + result.error);
-            const note = $('theme-share-note');
-            if (note && result?.file) note.textContent = 'Saved to ' + result.file;
+            if (note && result?.file) note.textContent = 'Saved to ' + result.file + '.';
         } catch (error) {
             showError('Could not save the theme file: ' + (error?.message || error));
         }

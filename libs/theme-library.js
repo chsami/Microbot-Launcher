@@ -22,10 +22,10 @@ const BUILT_IN_NAMES = ['Gold', 'Slate', 'Classic RuneLite'];
 const GONE = { error: 'That theme no longer exists.' };
 // error.code -> words for the player
 const FS_ERRORS = {
-    EACCES: 'The launcher is not allowed to write there. Pick another folder or check its permissions.',
-    EPERM: 'The launcher is not allowed to write there. Pick another folder or check its permissions.',
-    ENOSPC: 'The disk is full.',
-    EROFS: 'That drive is read-only.',
+    EACCES: 'The launcher is not allowed to use that file or folder. Check its permissions and try again.',
+    EPERM: 'The launcher is not allowed to use that file or folder. Check its permissions and try again.',
+    ENOSPC: 'The disk is full. Free up some space and try again.',
+    EROFS: 'That drive is read-only. Save to another drive.',
     EBUSY: 'Another program is using that file. Close it and try again.',
     ENOENT: 'That file or folder no longer exists.',
     ENOTDIR: 'Part of that path is not a folder.',

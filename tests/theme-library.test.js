@@ -201,7 +201,7 @@ describe('theme-library', () => {
             jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {
                 throw Object.assign(new Error("EACCES: permission denied, open 'x'"), { code: 'EACCES' });
             });
-            expect(await handlers['themes:export'](fileEvent, id)).toEqual({ error: 'The launcher is not allowed to write there. Pick another folder or check its permissions.' });
+            expect(await handlers['themes:export'](fileEvent, id)).toEqual({ error: 'The launcher is not allowed to use that file or folder. Check its permissions and try again.' });
         });
 
         test('the launcher page is allowed with a hash or query', async () => {
