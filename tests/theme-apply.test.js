@@ -53,6 +53,11 @@ describe('theme apply', () => {
         for (const line of css.split(/\r?\n/).filter((l) => l.includes('.theme-safe') && !l.trim().startsWith('/*'))) expect(line).toMatch(/^:root\[data-custom="on"\]\[data-unreadable="on"\]/);
     });
 
+    test('a custom Gold base takes its title-bar icons and washes from its own text, like Slate and Classic', () => {
+        const css = require('fs').readFileSync(require('path').join(__dirname, '../css/styles.css'), 'utf8').replace(/\r\n/g, '\n');
+        expect(css).toContain(':root[data-custom="on"][data-theme="gold"] {\n    --titlebar-icon: var(--text-strong);\n    --ink: var(--text);\n    --ink-strong: var(--text-strong);\n}');
+    });
+
     test('custom sets exactly the 19 vars, the select arrow and base', async () => {
         const root = fakeRoot();
         const sel = custom();

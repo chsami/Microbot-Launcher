@@ -119,6 +119,12 @@
 :where(:root[data-theme="slate"], :root[data-theme="classic"], :root[data-custom="on"]) :focus-visible {
     outline-color: var(--gold);
 }
+/* a custom Gold base may be light: its title-bar icons and washes follow its text, like Slate and Classic */
+:root[data-custom="on"][data-theme="gold"] {
+    --titlebar-icon: var(--text-strong);
+    --ink: var(--text);
+    --ink-strong: var(--text-strong);
+}
 /* a custom theme's controls take its accent; the dialogs of an unreadable Gold-base preview stay native, like Gold */
 :root[data-custom="on"] input[type="radio"],
 :root[data-custom="on"] input[type="checkbox"],

@@ -211,6 +211,23 @@ describe('theme editor', () => {
         expect(e.$('theme-editor-save').disabled).toBe(false);
     });
 
+    test('a new theme saved in the background does not undo a theme picked meanwhile', async () => {
+        let reply;
+        const e = load({ saveReply: (theme) => new Promise((resolve) => (reply = () => resolve({ id: 'dawn', theme }))) });
+        await e.window.ThemeEditor.open();
+        e.type(e.$('theme-editor-name'), 'Dawn');
+        e.click('theme-editor-save');
+        await flush();
+        e.click('theme-editor-cancel');
+        await flush();
+        e.window.ThemePicker.current = () => ({ theme: 'gold' }); // the player picks Gold before the save lands
+        reply();
+        await flush();
+        await flush();
+        expect(e.pickerSaves).toEqual([]);
+        expect(e.refreshes).toHaveLength(1);
+    });
+
     test('Escape cancels', async () => {
         const e = load();
         await e.window.ThemeEditor.open();

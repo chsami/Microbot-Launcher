@@ -170,6 +170,12 @@ test('launcher text and light themes raise their own warnings', () => {
     expect(light).toContain('Light themes can be hard to read in parts of the client, where some panels use white text.');
 });
 
+test('readable needs button text to stand out from the accent hover too', () => {
+    const t = T.resolve(theme({ base: 'slate', launcher: { 'gold-hover': '#15171c' } }));
+    expect(T.readable(t)).toBe(false);
+    expect(T.warnings(t)).toContainEqual(expect.stringMatching(/^Button text is hard to read on the accent hover /));
+});
+
 test('readable is false for white text on white', () => {
     for (const b of T.BUILT_IN) expect(T.readable(T.resolve(theme({ base: b })))).toBe(true);
     expect(T.readable(T.resolve(theme({ colors: { text: '#ffffff', background: '#ffffff' } })))).toBe(false);

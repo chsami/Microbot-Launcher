@@ -196,6 +196,7 @@
             [c.light, c.darker, 4.5, 'Muted text is hard to read on panels'],
             [c.accent, c.dark, 3, 'The accent is hard to see on the background'],
             [l['on-gold'], l.gold, 4.5, 'Button text is hard to read on the accent'],
+            [l['on-gold'], l['gold-hover'], 4.5, 'Button text is hard to read on the accent hover'],
             [l.text, l.bg, 4.5, 'Launcher text is hard to read on the page'],
             [l.text, l['surface-2'], 4.5, 'Launcher text is hard to read on cards'],
             [l['text-strong'], l['surface-2'], 4.5, 'Launcher headings are hard to read on cards'],
@@ -211,7 +212,7 @@
         const { client: c, launcher: l } = resolved;
         return contrast(c.text, c.dark) >= 3 && contrast(c.text, c.darker) >= 3
             && [l.bg, l.surface, l['surface-2']].every((bg) => contrast(l.text, bg) >= 3) && contrast(l['text-strong'], l['surface-2']) >= 3
-            && contrast(l['on-gold'], l.gold) >= 3
+            && contrast(l['on-gold'], l.gold) >= 3 && contrast(l['on-gold'], l['gold-hover']) >= 3
             // Gold's Play button is red with heading-coloured text; the other bases' uses the accent pair
             && (resolved.base !== 'gold' || contrast(l['text-strong'], l.red) >= 3);
     }

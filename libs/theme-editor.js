@@ -338,6 +338,7 @@
         // the reply may land after this draft was closed and another opened: it must leave that one alone
         const session = opening;
         const id = editing;
+        const before = JSON.stringify(window.ThemePicker.current());
         pending = session;
         refreshSave();
         let result;
@@ -353,7 +354,8 @@
         const picked = window.ThemePicker.current();
         if (mine) close();
         // through the picker's save queue, so theme.json and the picker agree on the new colours; a new theme is picked
-        if (id === undefined || (picked.theme === 'custom' && picked.id === id)) {
+        // unless the player picked another theme while it saved
+        if ((id === undefined && JSON.stringify(picked) === before) || (picked.theme === 'custom' && picked.id === id)) {
             await window.ThemePicker.save(CustomTheme.selection(result.id, result.theme));
         }
         await window.ThemePicker.refresh();
