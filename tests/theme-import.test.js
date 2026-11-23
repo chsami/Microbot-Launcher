@@ -4,6 +4,7 @@ const CustomTheme = require('../libs/custom-theme');
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 const midnight = CustomTheme.clean({ name: 'Midnight', base: 'slate', colors: { accent: '#3399ff' } }).theme;
 const picked = CustomTheme.selection('midnight', midnight);
+const UNREADABLE = "This theme's text is too hard to read, so it cannot be saved. Change Text or Background in the theme file, or ask for a fixed code, then preview it again.";
 
 function load({ saveReply = (theme) => ({ id: 'imported', theme: { ...theme, name: theme.name + ' (2)' } }), clipboard = () => Promise.resolve() } = {}) {
     const make = (tag) => {
@@ -96,7 +97,34 @@ describe('theme import', () => {
         await flush();
         expect(e.saves).toEqual([[midnight, undefined]]);
         expect(e.refreshes).toHaveLength(1);
-        expect(e.$('theme-import-status').textContent).toBe('Saved as Midnight (2). Pick it in the list to use it.');
+        expect(e.$('theme-import-status').textContent).toBe('Saved as Midnight (2). Press Done, then pick it in Your themes to use it.');
+    });
+
+    test('after a save, Save stays off and Cancel reads Done until the text changes', async () => {
+        const e = load();
+        e.window.ThemeImport.open(CustomTheme.encode(midnight));
+        e.click('theme-import-save');
+        await flush();
+        await flush();
+        expect(e.$('theme-import-save').disabled).toBe(true);
+        expect(e.$('theme-import-cancel').textContent).toBe('Done');
+        e.click('theme-import-preview'); // the same text again is still the saved theme
+        expect(e.$('theme-import-save').disabled).toBe(true);
+        e.$('theme-import-text').listeners.input();
+        expect(e.$('theme-import-cancel').textContent).toBe('Cancel');
+        e.click('theme-import-preview');
+        expect(e.$('theme-import-save').disabled).toBe(false);
+    });
+
+    test('an unreadable theme cannot be saved and says why', async () => {
+        const e = load();
+        const murky = CustomTheme.clean({ name: 'Murky', base: 'slate', colors: { background: '#202020', text: '#252525' } }).theme;
+        e.window.ThemeImport.open(JSON.stringify(murky));
+        expect(e.$('theme-import-save').disabled).toBe(true);
+        expect(e.$('theme-import-status').textContent).toBe(UNREADABLE);
+        e.click('theme-import-save');
+        await flush();
+        expect(e.saves).toEqual([]);
     });
 
     test('a theme file with an image names the image to put in the themes folder', () => {
@@ -325,5 +353,15 @@ describe('copy code', () => {
         expect(e.$('theme-import-text').value).toBe(CustomTheme.encode(midnight));
         expect(e.$('theme-import-text').selected).toBe(true);
         expect(e.$('theme-import-status').textContent).toMatch('Background images are not included in codes. Send the image file too.');
+    });
+
+    test('the clipboard fallback only shows the code: no preview, no Save, Cancel reads Done', async () => {
+        const e = load({ clipboard: () => Promise.reject(new Error('denied')) });
+        await e.window.ThemeImport.copy(midnight, { textContent: 'Copy code' });
+        expect(e.$('theme-import-save').disabled).toBe(true);
+        expect(e.$('theme-import-cancel').textContent).toBe('Done');
+        expect(e.$('theme-import-name').textContent).toBe('');
+        expect(e.vars['--theme-image']).toBeUndefined();
+        expect(e.saves).toEqual([]);
     });
 });

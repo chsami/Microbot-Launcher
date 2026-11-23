@@ -73,7 +73,7 @@
     const refusal = (theme) => {
         const resolved = window.CustomTheme.resolve(theme);
         if (window.CustomTheme.readable(resolved)) return '';
-        return 'This theme was not applied because its text is too hard to read. ' + window.CustomTheme.warnings(resolved).join(' ');
+        return ['This theme was not applied because its text is too hard to read.', ...window.CustomTheme.warnings(resolved), 'Press Edit and change Text or Background.'].join(' ');
     };
 
     const el = (tag, className, text) => {
@@ -84,9 +84,11 @@
     };
 
     const removeTheme = async ({ id, theme }) => {
+        const inUse = desired.theme === 'custom' && desired.id === id;
         const yes = await window.electron.showConfirmationDialog(
             `Delete the theme "${theme.name}"?`,
-            `This deletes ${id}.json from your themes folder. This cannot be undone.`,
+            `This deletes ${id}.json from your themes folder. This cannot be undone.` +
+                (inUse ? `\n\nYou are using this theme. The launcher and the client will switch to ${BASE_NAMES[desired.custom.base]}.` : ''),
             'Delete theme',
             'Delete',
             'Cancel',
@@ -109,6 +111,8 @@
         try {
             const result = await themes().exportFile(id);
             if (result?.error) showError('Could not save the theme file: ' + result.error);
+            const note = $('theme-share-note');
+            if (note && result?.file) note.textContent = 'Saved to ' + result.file;
         } catch (error) {
             showError('Could not save the theme file: ' + (error?.message || error));
         }
@@ -264,7 +268,8 @@
                 }
             })
             .catch(() => {}) // keep the current look if the read fails
-            .then(refresh);
+            // the list only shows in the Themes window; with it closed it matters only to pick up hand edits to the picked file
+            .then(() => (desired.theme === 'custom' || !modal()?.classList.contains('auth-hidden') ? refresh() : undefined));
     };
     sync();
     window.addEventListener('focus', sync);

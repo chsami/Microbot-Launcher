@@ -1,16 +1,16 @@
 
 // theme-picker.js runs in the renderer; give it just enough of a DOM to drive it
-function load({ deferWrites = false, failFirstWrite = false, saved = {}, themes = [], editorOpen = false, importOpen = false } = {}) {
+function load({ deferWrites = false, failFirstWrite = false, saved = {}, themes = [], editorOpen = false, importOpen = false, exportReply = { error: 'The disk is full.' } } = {}) {
     const listeners = {};
     const on = (key) => (type, fn) => { listeners[key + ':' + type] = fn; };
     const classes = {};
     const element = (key) => ({
-        classList: { add: (c) => (classes[key + ':' + c] = true), remove: (c) => delete classes[key + ':' + c] },
+        classList: { add: (c) => (classes[key + ':' + c] = true), remove: (c) => delete classes[key + ':' + c], contains: (c) => !!classes[key + ':' + c] },
         addEventListener: on(key),
         textContent: '',
     });
     const focused = {};
-    const els = { 'theme-modal': element('modal'), 'theme-close': element('close'), 'theme-error': element('error'), 'app-menu': element('menu'), 'menu-btn': { focus: () => (focused.menu = true) } };
+    const els = { 'theme-modal': element('modal'), 'theme-close': element('close'), 'theme-error': element('error'), 'app-menu': element('menu'), 'menu-btn': { focus: () => (focused.menu = true) }, 'theme-share-note': element('note') };
     // created nodes: setting innerHTML would throw, so text from a theme can only arrive as textContent
     const inputs = [];
     const make = (tag) => {
@@ -78,7 +78,7 @@ function load({ deferWrites = false, failFirstWrite = false, saved = {}, themes 
         list: () => Promise.resolve(themes.filter((e) => !removed.includes(e.id))),
         image: () => Promise.resolve({ error: 'That image is not in the themes folder.' }),
         remove: (id) => (removed.push(id), Promise.resolve({ ok: true })),
-        exportFile: (id) => (exported.push(id), Promise.resolve({ error: 'The disk is full.' })),
+        exportFile: (id) => (exported.push(id), Promise.resolve(exportReply)),
     };
     const confirms = [];
     electron.showConfirmationDialog = (...args) => (confirms.push(args), Promise.resolve(true));
@@ -97,7 +97,7 @@ function load({ deferWrites = false, failFirstWrite = false, saved = {}, themes 
     const rows = () => els['theme-custom-list'].children;
     // the custom theme cards, after the New theme card
     const cards = () => rows().slice(1);
-    return { dispatched, root, vars, rows, cards, builtIns: () => els['theme-builtin-list'].children, empty: els['theme-empty'], opened, copies, removed, exported, confirms, missing: els['theme-missing'], reads, writes, pending, change, focus: () => listeners['window:focus'](), errors: () => els['theme-error'].textContent, classes, focused, open: () => listeners['themes:click'](), key: (key) => listeners['modal:keydown']({ key }), keydown: (e) => listeners['modal:keydown'](e), modal: els['theme-modal'], document, window };
+    return { dispatched, root, vars, rows, cards, builtIns: () => els['theme-builtin-list'].children, empty: els['theme-empty'], opened, copies, removed, exported, confirms, missing: els['theme-missing'], reads, writes, pending, change, focus: () => listeners['window:focus'](), errors: () => els['theme-error'].textContent, note: () => els['theme-share-note'].textContent, classes, focused, open: () => listeners['themes:click'](), key: (key) => listeners['modal:keydown']({ key }), keydown: (e) => listeners['modal:keydown'](e), modal: els['theme-modal'], document, window };
 }
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -238,6 +238,29 @@ describe('theme picker', () => {
         expect(p.errors()).toBe('Could not save the theme file: The disk is full.');
     });
 
+    test('Save as file says where it saved the file', async () => {
+        const p = load({ themes: [midnight], exportReply: { ok: true, file: 'C:\\Users\\me\\midnight.json' } });
+        await flush();
+        p.reads[0]({ theme: 'gold' });
+        await flush();
+        await flush();
+        action(p.cards()[0], 'Save as file').listeners.click();
+        await flush();
+        expect(p.note()).toBe('Saved to C:\\Users\\me\\midnight.json');
+        expect(p.errors()).toBe('');
+    });
+
+    test('deleting a theme that is not in use does not mention switching', async () => {
+        const p = load({ themes: [midnight] });
+        await flush();
+        p.reads[0]({ theme: 'gold' });
+        await flush();
+        await flush();
+        action(p.cards()[0], 'Delete').listeners.click();
+        await flush();
+        expect(p.confirms[0][1]).toBe('This deletes midnight.json from your themes folder. This cannot be undone.');
+    });
+
     test('a focus read applies a change made elsewhere', async () => {
         const p = load();
         await flush();
@@ -247,6 +270,22 @@ describe('theme picker', () => {
         p.reads[1]({ theme: 'classic' });
         await flush();
         expect(p.root.dataset).toEqual({ theme: 'classic' });
+    });
+
+    test('a focus with the window closed and a built-in theme picked does not read the theme files', async () => {
+        const p = load();
+        await flush();
+        p.reads[0]({ theme: 'gold' });
+        await flush();
+        const list = p.window.electron.themes.list;
+        let calls = 0;
+        p.window.electron.themes.list = (...a) => (calls++, list(...a));
+        p.modal.classList.add('auth-hidden');
+        p.focus();
+        await flush();
+        p.reads[1]({ theme: 'gold' });
+        await flush();
+        expect(calls).toBe(0);
     });
 
     test('opening focuses the dialog heading, not a card, and Escape closes', async () => {
@@ -426,7 +465,7 @@ describe('theme picker', () => {
         await flush();
         expect(p.writes).toEqual([]);
         expect(p.vars['--gold']).toBe('#3399ff'); // the last good colours stay
-        expect(p.errors()).toMatch(/^This theme was not applied because its text is too hard to read\./);
+        expect(p.errors()).toMatch(/^This theme was not applied because its text is too hard to read\. .* Press Edit and change Text or Background\.$/);
     });
 
     test('deleting the picked theme keeps the file when switching away fails', async () => {
@@ -541,6 +580,7 @@ describe('theme picker', () => {
         await flush();
         await flush();
         expect(p.confirms[0][0]).toBe('Delete the theme "Midnight"?');
+        expect(p.confirms[0][1]).toBe('This deletes midnight.json from your themes folder. This cannot be undone.\n\nYou are using this theme. The launcher and the client will switch to Slate.');
         expect(p.writes).toEqual([{ theme: 'slate' }]);
         expect(p.removed).toEqual(['midnight']);
         expect(p.vars).toEqual({});

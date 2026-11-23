@@ -69,7 +69,9 @@ describe('theme editor', () => {
         const pickerSaves = [];
         const refreshes = [];
         const confirms = [];
+        const winListeners = {};
         const window = {
+            addEventListener: (type, fn) => (winListeners[type] = fn),
             electron: {
                 showConfirmationDialog: (...args) => (confirms.push(args), Promise.resolve(discard)),
                 themes: {
@@ -109,7 +111,7 @@ describe('theme editor', () => {
             dialog.listeners.input({ target: el });
         };
         const click = (id) => $(id).listeners.click();
-        return { window, $, dialog, vars: document.documentElement.props, root: document.documentElement, saves, pickerSaves, refreshes, confirms, colour, hex, byId, base, checkedBase, type, click };
+        return { window, winListeners, $, dialog, vars: document.documentElement.props, root: document.documentElement, saves, pickerSaves, refreshes, confirms, colour, hex, byId, base, checkedBase, type, click };
     }
 
     afterEach(() => {
@@ -153,6 +155,23 @@ describe('theme editor', () => {
         expect(e.saves).toHaveLength(1);
         expect(e.saves[0][1]).toBe('dawn');
         expect(e.saves[0][0]).toMatchObject({ name: 'Dawn', base: 'gold', background: null });
+    });
+
+    test('the image list reloads on window focus and keeps the picked image, even one that is gone', async () => {
+        const e = load();
+        const sky = CustomTheme.clean({ name: 'Sky', base: 'slate', background: { image: 'sky.png', strength: 50 } }).theme;
+        await e.window.ThemeEditor.open('sky', sky);
+        e.window.electron.themes.images = () => Promise.resolve(['new.png']);
+        e.winListeners.focus();
+        await flush();
+        expect(e.$('theme-editor-image').children.map((o) => o.value)).toEqual(['', 'new.png', 'sky.png']);
+        expect(e.$('theme-editor-image').value).toBe('sky.png');
+        e.click('theme-editor-cancel');
+        await flush();
+        e.window.electron.themes.images = () => Promise.resolve(['later.png']);
+        e.winListeners.focus(); // closed: the list is left alone
+        await flush();
+        expect(e.$('theme-editor-image').children.map((o) => o.value)).toEqual(['', 'new.png', 'sky.png']);
     });
 
     test('Tab wraps at the last enabled control: Cancel while Save is disabled', async () => {

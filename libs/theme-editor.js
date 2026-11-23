@@ -172,6 +172,7 @@
         $('theme-editor-cancel').addEventListener('click', cancel);
         $('theme-editor-close').addEventListener('click', cancel);
         $('theme-editor-save').addEventListener('click', save);
+        window.addEventListener('focus', reloadImages);
         $('theme-editor-folder').addEventListener('click', async () => {
             const result = await themes()?.openFolder();
             if (result?.error) showError('Could not open the themes folder: ' + result.error);
@@ -252,6 +253,28 @@
             .then((problem) => problem && showError(problem));
     }
 
+    function listImages(names, image) {
+        const list = Array.isArray(names) ? names : [];
+        // keep the picked image listed even if the file is gone, so saving does not drop it
+        if (image && !list.includes(image)) list.push(image);
+        const options = [['', 'None'], ...list.map((n) => [n, n])].map(([value, text]) => {
+            const option = el('option', '', text);
+            option.value = value;
+            return option;
+        });
+        $('theme-editor-image').replaceChildren(...options);
+        $('theme-editor-image').value = image;
+    }
+
+    // images dropped into the themes folder show up when the player comes back to the launcher
+    async function reloadImages() {
+        if ($('theme-editor').classList.contains('auth-hidden')) return;
+        const ticket = opening;
+        const names = await Promise.resolve(themes()?.images()).catch(() => null);
+        if (ticket !== opening || !Array.isArray(names)) return;
+        listImages(names, $('theme-editor-image').value);
+    }
+
     async function open(id, theme) {
         const ticket = ++opening;
         // the one wait comes first and nothing is touched before it, so a newer open() simply wins
@@ -281,17 +304,7 @@
         if (typeof style.roundScrollbars === 'boolean') changed.add('style.roundScrollbars');
         $('theme-editor-width').value = String(style.scrollbarWidth || 10);
         if (style.scrollbarWidth) changed.add('style.scrollbarWidth');
-        const image = t.background?.image || '';
-        const list = Array.isArray(names) ? names : [];
-        // keep the theme's own image listed even if the file is gone, so saving does not drop it
-        if (image && !list.includes(image)) list.push(image);
-        const options = [['', 'None'], ...list.map((n) => [n, n])].map(([value, text]) => {
-            const option = el('option', '', text);
-            option.value = value;
-            return option;
-        });
-        $('theme-editor-image').replaceChildren(...options);
-        $('theme-editor-image').value = image;
+        listImages(names, t.background?.image || '');
         $('theme-editor-strength').value = String(t.background?.strength ?? 30);
         returnTo = document.activeElement;
         // the Themes window and its backdrop would hide the live preview, so it steps aside while the editor is open

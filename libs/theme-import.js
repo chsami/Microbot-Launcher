@@ -3,6 +3,7 @@
 (function () {
     const MAX_FILE = 64 * 1024;
     const NO_IMAGE = 'Background images are not included in codes. Send the image file too.';
+    const UNREADABLE = "This theme's text is too hard to read, so it cannot be saved. Change Text or Background in the theme file, or ask for a fixed code, then preview it again.";
 
     async function readDrop(file) {
         if (!file || !/\.json$/i.test(file.name || '')) return { error: 'Drop a theme .json file.' };
@@ -46,6 +47,12 @@
     let rev = 0; // bumped whenever the box text or dialog changes, so a save that finishes later knows it is stale
     let dropToken = 0; // the newest file drop; closing the dialog voids it too
     let copied = null; // the Copy code button showing "Copied": its button, original label and reset timer
+    let saved = false; // the text in the box is saved: Save stays off and Cancel reads Done until the text changes
+
+    function setSaved(on) {
+        saved = on;
+        $('theme-import-cancel').textContent = on ? 'Done' : 'Cancel';
+    }
 
     function paint(selection) {
         // a missing image is not an error here: the preview note already names the image to add
@@ -67,16 +74,20 @@
             paint(window.ThemePicker.current());
             return;
         }
-        $('theme-import-save').disabled = false;
+        const resolved = window.CustomTheme.resolve(previewed);
+        const readable = window.CustomTheme.readable(resolved);
+        $('theme-import-save').disabled = saved || !readable;
+        if (!readable) say('theme-import-status', UNREADABLE);
         say('theme-import-name', previewed.name);
-        showLook(window.CustomTheme.resolve(previewed));
+        showLook(resolved);
         // only a theme file can name an image: codes drop it
         say('theme-import-note', previewed.background?.image ? 'This theme uses the image ' + previewed.background.image + '. Put that file in your themes folder.' : '');
         paint(window.CustomTheme.selection('preview', previewed));
     }
 
     async function save() {
-        if (!previewed) return; // the button is only on after a Preview of the text in the box
+        // the button is only on after a Preview of the text in the box; the picker would refuse an unreadable theme
+        if (!previewed || saved || !window.CustomTheme.readable(window.CustomTheme.resolve(previewed))) return;
         const button = $('theme-import-save');
         button.disabled = true;
         const started = rev;
@@ -86,9 +97,14 @@
         } catch (error) {
             result = { error: error?.message || String(error) };
         }
-        if (started === rev) button.disabled = false; // not for text that changed meanwhile: it needs a new Preview
-        if (!result || result.error) return say('theme-import-error', 'Could not save the theme: ' + (result?.error || 'no reply'));
-        say('theme-import-status', 'Saved as ' + result.theme.name + '. Pick it in the list to use it.');
+        const failed = !result || result.error;
+        // not for text that changed meanwhile: it needs a new Preview
+        if (started === rev) {
+            if (failed) button.disabled = false;
+            else setSaved(true);
+        }
+        if (failed) return say('theme-import-error', 'Could not save the theme: ' + (result?.error || 'no reply'));
+        say('theme-import-status', 'Saved as ' + result.theme.name + '. Press Done, then pick it in Your themes to use it.');
         await window.ThemePicker.refresh();
     }
 
@@ -117,6 +133,7 @@
         // Save as new theme saves what was previewed, so new text needs a new Preview first
         $('theme-import-text').addEventListener('input', () => {
             rev++;
+            setSaved(false);
             $('theme-import-save').disabled = true;
         });
         dialog.addEventListener('keydown', (e) => {
@@ -148,6 +165,7 @@
             dialog.classList.remove('auth-hidden');
         }
         $('theme-import-text').value = text || '';
+        setSaved(false);
         $('theme-import-save').disabled = true;
         for (const id of ['theme-import-name', 'theme-import-error', 'theme-import-status', 'theme-import-note']) say(id, '');
         showLook(null);
@@ -161,9 +179,12 @@
         try {
             await window.navigator.clipboard.writeText(code);
         } catch {
-            open(code);
+            // only to copy by hand: the player's own theme, so no preview and no Save (it would save a duplicate)
+            open();
+            $('theme-import-text').value = code;
+            setSaved(true);
             $('theme-import-text').select();
-            say('theme-import-status', 'Could not copy to the clipboard. Copy the code above by hand.' + note);
+            say('theme-import-status', 'Could not copy to the clipboard. The code above is selected: press Ctrl+C (Cmd+C on a Mac) to copy it.' + note);
             return;
         }
         say('theme-share-note', note.trim());

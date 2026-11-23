@@ -23,6 +23,7 @@ const webpL = (w, h) => {
 const webpLossy = (w, h) => riff('VP8 ', Buffer.from([0, 0, 0, 0x9d, 0x01, 0x2a, w & 0xff, w >> 8, h & 0xff, h >> 8]));
 const PAGE = pathToFileURL(path.join(__dirname, '..', 'index.html')).href;
 const fileEvent = { senderFrame: { url: PAGE } };
+const BROKEN = 'This file is not valid JSON. Fix it in a text editor, or delete it from your themes folder.';
 
 describe('theme-library', () => {
     let home;
@@ -47,7 +48,7 @@ describe('theme-library', () => {
         const list = library.list(home);
         expect(list).toHaveLength(4);
         expect(list.find((e) => e.id === 'midnight').theme.name).toBe('Midnight');
-        expect(list.find((e) => e.id === 'broken')).toEqual({ id: 'broken', error: 'This file is not valid theme JSON.' });
+        expect(list.find((e) => e.id === 'broken')).toEqual({ id: 'broken', error: BROKEN });
         expect(list.find((e) => e.id === 'huge')).toEqual({ id: 'huge', error: 'This file is too big to be a theme.' });
         expect(list.find((e) => e.id === 'Bad Name.json')).toEqual({
             id: 'Bad Name.json', error: 'Rename this file using only a-z, 0-9 and -, like midnight.json.',
@@ -91,6 +92,14 @@ describe('theme-library', () => {
         expect(library.save(theme('Gone'), 'gone', home)).toEqual({ error: 'That theme no longer exists.' });
         expect(library.save(theme('Bad'), '../x', home).error).toBeTruthy();
         expect(library.save({ name: '' }, undefined, home).error).toBeTruthy();
+    });
+
+    test('renaming a theme to another theme\'s name gets (2)', () => {
+        library.save(theme('Midnight'), undefined, home);
+        const { id } = library.save(theme('Dawn'), undefined, home);
+        expect(library.save(theme('Midnight'), id, home).theme.name).toBe('Midnight (2)');
+        expect(library.save(theme('Gold'), id, home).theme.name).toBe('Gold (2)');
+        expect(library.save(theme('Dawn'), id, home).theme.name).toBe('Dawn'); // its own name is free
     });
 
     test('remove deletes a theme file', () => {
@@ -175,6 +184,24 @@ describe('theme-library', () => {
             }
             expect(shell.openExternal).not.toHaveBeenCalled();
             expect(shell.openPath).not.toHaveBeenCalled();
+        });
+
+        test('the launcher page is matched by file path, not URL spelling', async () => {
+            const spelled = [PAGE.replace(/index\.html$/, 'index%2Ehtml')];
+            if (process.platform === 'win32') spelled.push(PAGE.replace(/index\.html$/, 'INDEX.html'), PAGE.replace(/^file:\/\/\/(.)/, (m, d) => 'file:///' + (d === d.toLowerCase() ? d.toUpperCase() : d.toLowerCase())));
+            for (const url of spelled) {
+                expect(await handlers['themes:list']({ senderFrame: { url } })).toEqual(expect.any(Array));
+            }
+        });
+
+        test('a file system error comes back in plain words', async () => {
+            jest.spyOn(os, 'homedir').mockReturnValue(home);
+            const { id } = library.save(theme('Midnight'), undefined, home);
+            dialog.showSaveDialog.mockResolvedValue({ canceled: false, filePath: path.join(home, 'out.json') });
+            jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {
+                throw Object.assign(new Error("EACCES: permission denied, open 'x'"), { code: 'EACCES' });
+            });
+            expect(await handlers['themes:export'](fileEvent, id)).toEqual({ error: 'The launcher is not allowed to write there. Pick another folder or check its permissions.' });
         });
 
         test('the launcher page is allowed with a hash or query', async () => {
@@ -455,10 +482,17 @@ describe('theme-library', () => {
         const { id } = library.save(theme('Midnight'), undefined, home);
         const target = path.join(home, 'out.json');
         const dialog = { showSaveDialog: jest.fn(async () => ({ canceled: false, filePath: target })) };
-        expect(await library.exportFile(id, dialog, home)).toEqual({ ok: true });
+        expect(await library.exportFile(id, dialog, home)).toEqual({ ok: true, file: target });
         expect(dialog.showSaveDialog.mock.calls[0][0].defaultPath).toBe('midnight.json');
         expect(JSON.parse(fs.readFileSync(target, 'utf8')).name).toBe('Midnight');
         dialog.showSaveDialog.mockResolvedValueOnce({ canceled: true });
         expect(await library.exportFile(id, dialog, home)).toEqual({ canceled: true });
     });
+});
+
+test('a file error the player can act on comes back in plain words, any other one without a path', () => {
+    const { plainError } = require('../libs/theme-library');
+    expect(plainError(Object.assign(new Error("ENOENT: no such file or directory, open 'C:/x/y.json'"), { code: 'ENOENT' }))).toBe('That file or folder no longer exists.');
+    expect(plainError(Object.assign(new Error("EXDEV: cross-device link, rename 'C:/a' -> 'D:/b'"), { code: 'EXDEV' }))).toBe('Could not read or write the theme file.');
+    expect(plainError(new Error('That is not a theme id.'))).toBe('That is not a theme id.');
 });

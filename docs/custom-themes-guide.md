@@ -1,3 +1,4 @@
+<!-- libs/theme-guide.html is the same guide as the launcher shows it: change both together. -->
 # Custom themes guide
 
 A theme is a set of colours. You can make your own for the launcher and the client, and share it with friends.
@@ -24,7 +25,7 @@ To change a theme later, press **Edit** next to it. If it is the theme you use, 
 
 ## 3. Read the warnings
 
-Warnings are shown under the colour pickers, for example "Text is hard to read on panels (3.2:1, aim for 4.5:1)."
+Warnings are shown under the preview, for example "Text is hard to read on panels (3.2:1, aim for 4.5:1)."
 
 The number is a contrast score. It says how well two colours stand apart. A higher number is easier to read. 4.5:1 is a good score for text, and 3:1 is enough for the accent.
 
@@ -43,7 +44,7 @@ To use a theme someone sent you:
 1. Open **Themes** and press **Import theme**.
 2. Paste the code, or paste the text of a theme file, into the box. You can also drag a theme .json file onto the window.
 3. Press **Preview**. The launcher shows the theme and any warnings. Nothing is saved yet.
-4. Press **Save as new theme**. If you already have a theme with that name, the new one is called "Name (2)". The window says "Saved as Name. Pick it in the list to use it."
+4. Press **Save as new theme**. If you already have a theme with that name, the new one is called "Name (2)". The window says "Saved as Name. Press Done, then pick it in Your themes to use it."
 5. Pick it in the Themes window.
 
 You can also press **Save as file** next to a theme and send the file.
@@ -71,7 +72,7 @@ In the editor, open **Advanced**.
 - **Client: corner rounding**: 0 to 12. Shows "Off" at 0.
 - **Client: round scrollbars**: on or off.
 - **Client: scrollbar width**: 4 to 17. Shows "Default" until you change it.
-- **Background image**: choose a picture for the launcher background, or **None**. Put .png, .jpg, .jpeg or .webp files in your themes folder first. Each image can be up to 5 MB and 8192 pixels wide or tall.
+- **Background image**: choose a picture for the launcher background, or **None**. Put .png, .jpg, .jpeg or .webp files in your themes folder first. Each image can be up to 5 MB, 8192 pixels wide or tall, and 40 million pixels in all.
 - **Image strength**: 0 to 60 %. Higher shows more of the picture.
 
 Hover a colour name to see its key in the file.

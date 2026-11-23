@@ -20,6 +20,20 @@ const MAX_SIDE = 8192;
 const MAX_PIXELS = 40000000;
 const BUILT_IN_NAMES = ['Gold', 'Slate', 'Classic RuneLite'];
 const GONE = { error: 'That theme no longer exists.' };
+// error.code -> words for the player
+const FS_ERRORS = {
+    EACCES: 'The launcher is not allowed to write there. Pick another folder or check its permissions.',
+    EPERM: 'The launcher is not allowed to write there. Pick another folder or check its permissions.',
+    ENOSPC: 'The disk is full.',
+    EROFS: 'That drive is read-only.',
+    EBUSY: 'Another program is using that file. Close it and try again.',
+    ENOENT: 'That file or folder no longer exists.',
+    ENOTDIR: 'Part of that path is not a folder.',
+    EISDIR: 'That is a folder, not a file.',
+    EIO: 'The disk could not be read or written.',
+};
+// other file system errors carry a path in their message, so they get a general line (the log keeps the detail)
+const plainError = (error) => FS_ERRORS[error.code] || (/^E[A-Z]+$/.test(error.code || '') ? 'Could not read or write the theme file.' : error.message);
 const BAD_ID = { error: 'That is not a theme id.' };
 
 function themesDir(home = os.homedir()) {
@@ -44,7 +58,7 @@ function readTheme(file) {
     try {
         raw = JSON.parse(fs.readFileSync(file, 'utf8'));
     } catch {
-        return { error: 'This file is not valid theme JSON.' };
+        return { error: 'This file is not valid JSON. Fix it in a text editor, or delete it from your themes folder.' };
     }
     return clean(raw);
 }
@@ -88,6 +102,11 @@ function reserveId(name, dir) {
     }
 }
 
+// the names a theme with this id may not use: the built-ins and every other theme
+function takenNames(home, id) {
+    return [...BUILT_IN_NAMES, ...list(home).filter((e) => e.id !== id && e.theme).map((e) => e.theme.name)];
+}
+
 function save(raw, id, home) {
     const cleaned = clean(raw);
     if (cleaned.error) return cleaned;
@@ -97,6 +116,7 @@ function save(raw, id, home) {
         if (typeof id !== 'string' || !ID.test(id)) return BAD_ID;
         const file = path.join(dir, id + '.json');
         if (!stat(file)) return GONE;
+        theme.name = uniqueName(theme.name, takenNames(home, id));
         writeAtomic(file, JSON.stringify(theme, null, 2));
         return { id, theme };
     }
@@ -107,8 +127,7 @@ function save(raw, id, home) {
     // the id comes from the name as given (Gold -> gold-theme), the shown name gets the (2)
     fs.mkdirSync(dir, { recursive: true });
     const newId = reserveId(theme.name, dir);
-    const taken = [...BUILT_IN_NAMES, ...list(home).filter((e) => e.id !== newId && e.theme).map((e) => e.theme.name)];
-    theme.name = uniqueName(theme.name, taken);
+    theme.name = uniqueName(theme.name, takenNames(home, newId));
     const file = path.join(dir, newId + '.json');
     try {
         writeAtomic(file, JSON.stringify(theme, null, 2));
@@ -209,7 +228,7 @@ async function exportFile(id, dialog, home) {
     const result = await dialog.showSaveDialog({ defaultPath: id + '.json', filters: [{ name: 'Theme', extensions: ['json'] }] });
     if (result.canceled || !result.filePath) return { canceled: true };
     fs.writeFileSync(result.filePath, JSON.stringify(read.theme, null, 2));
-    return { ok: true };
+    return { ok: true, file: result.filePath };
 }
 
 // Gold when no theme is picked: unlike the login and captcha pages, the guide has no original colours of its own
@@ -293,13 +312,12 @@ function register(ipcMain, shell, log, dialog, page = path.join(__dirname, '..',
         }
         return { ok: true };
     };
-    const pageUrl = url.pathToFileURL(page).href;
+    // by path, as one file can be spelled as many URLs (drive letter case, %-escapes); Windows paths ignore case
+    const samePath = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
+    const pagePath = path.resolve(page);
     const fromPage = (event) => {
         try {
-            const sender = new URL(String(event?.senderFrame?.url ?? ''));
-            sender.hash = '';
-            sender.search = '';
-            return sender.href === pageUrl;
+            return samePath(url.fileURLToPath(String(event?.senderFrame?.url ?? '')), pagePath);
         } catch {
             return false;
         }
@@ -329,10 +347,10 @@ function register(ipcMain, shell, log, dialog, page = path.join(__dirname, '..',
                 return await fn.call(event, ...args);
             } catch (error) {
                 log?.error(`${name} failed:`, error.message);
-                return { error: error.message };
+                return { error: plainError(error) };
             }
         });
     }
 }
 
-module.exports = { themesDir, list, save, remove, images, readImage, exportFile, register };
+module.exports = { themesDir, list, save, remove, images, readImage, exportFile, register, plainError };
