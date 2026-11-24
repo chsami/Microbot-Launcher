@@ -999,11 +999,7 @@ async function initializeLauncher() {
 
     await checkForClientUpdate(properties);
 
-    iii = setInterval(async () => {
-        const properties = await window.electron.readProperties();
-        await checkForClientUpdate(properties);
-        await refreshNightlyInfo(true);
-    }, 5 * 60 * 1000); // 5 minutes
+    startUpdateChecks();
 
     await handleJagexAccountLogic(properties);
 
@@ -1783,6 +1779,15 @@ async function downloadClientIfNotExist(version) {
     return { exists: true };
 }
 
+function startUpdateChecks() {
+    if (iii) clearInterval(iii);
+    iii = setInterval(async () => {
+        const properties = await window.electron.readProperties();
+        await checkForClientUpdate(properties);
+        await refreshNightlyInfo(true);
+    }, 5 * 60 * 1000); // 5 minutes
+}
+
 function updateNowBtn() {
     document
         .querySelector('#update-now-btn')
@@ -1792,6 +1797,7 @@ function updateNowBtn() {
             document.getElementById('loader-container').style.display = 'block';
             // The banner holds the only Update Now button: bring it back so a failed update can be retried.
             const offerRetry = () => {
+                startUpdateChecks();
                 document.getElementById('loader-container').style.display =
                     'none';
                 if (!isNightlyChannel()) {

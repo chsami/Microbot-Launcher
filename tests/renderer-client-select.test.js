@@ -241,7 +241,8 @@ describe('renderer client version select', () => {
         const banner = { style: 'display:flex' };
         const loader = { style: {} };
         let click;
-        context.clearInterval = () => {};
+        context.clearInterval = jest.fn();
+        context.setInterval = jest.fn(() => 7);
         context.document.querySelector = (selector) =>
             selector === '#update-available' ? banner : { addEventListener: (_, fn) => (click = fn) };
         context.document.getElementById = (id) => (id === 'loader-container' ? loader : select);
@@ -252,11 +253,15 @@ describe('renderer client version select', () => {
         context.window.electron.fetchClientVersion = async () => ({ error: 'offline' });
         await click();
         expect([banner.style, loader.style.display]).toEqual([expected, 'none']);
+        // the periodic check runs again, so "Remind me later" does not end the reminders
+        expect(context.setInterval).toHaveBeenCalledTimes(1);
 
         // version check works, download fails
         context.window.electron.fetchClientVersion = async () => '2.6.29';
         await click();
         expect([banner.style, loader.style.display]).toEqual([expected, 'none']);
+        expect(context.setInterval).toHaveBeenCalledTimes(2);
+        expect(context.clearInterval).toHaveBeenCalledWith(7);
     });
 
     test.each([
