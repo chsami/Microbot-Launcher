@@ -2442,8 +2442,7 @@ async function checkForClientUpdate(properties) {
     if (
         await shouldPromptForClientDownload(
             clientVersion,
-            listOfJars,
-            properties
+            listOfJars
         )
     ) {
         document.querySelector('#update-available').style = 'display:flex';
@@ -2587,49 +2586,50 @@ function rememberLatestClientVersion(version) {
  * @async
  * @param {string} latestClientVersion - The version of the latest client available.
  * @param {Array<string>} installedClientVersions - The list of installed client versions.
- * @param {MicrobotProperties} properties - The properties object to update if necessary.
  * @returns {Promise<boolean>} True if the latest client is installed, false otherwise.
  */
 async function shouldPromptForClientDownload(
     latestClientVersion,
-    installedClientVersions,
-    properties
+    installedClientVersions
 ) {
-    const isLatestInstalled = installedClientVersions.some(
-        (file) => extractVersion(file) === latestClientVersion
-    );
-    const isClientVersionOnPropertiesLatest =
-        properties['client'] === latestClientVersion;
+    // Read the settings now, in the queue: ones read before the version check may be out of date.
+    return withProperties(async (properties) => {
+        const isLatestInstalled = installedClientVersions.some(
+            (file) => extractVersion(file) === latestClientVersion
+        );
+        const isClientVersionOnPropertiesLatest =
+            properties['client'] === latestClientVersion;
 
-    // Latest version is installed, set on properties if not already set
-    if (isLatestInstalled) {
-        if (!isClientVersionOnPropertiesLatest) {
-            properties['client'] = latestClientVersion;
+        // Latest version is installed, set on properties if not already set
+        if (isLatestInstalled) {
+            if (!isClientVersionOnPropertiesLatest) {
+                properties['client'] = latestClientVersion;
+                await window.electron.writeProperties(properties);
+            }
+            return false;
+        }
+
+        /**
+         * Latest version is not installed.
+         * Properties file is out of sync (e.g., client JAR was deleted).
+         * Correct the properties to the latest version actually installed.
+         */
+        if (isClientVersionOnPropertiesLatest) {
+            const orderedClientJars = await orderClientJarsByVersion();
+            if (orderedClientJars.length > 0) {
+                const newestOfficial =
+                    orderedClientJars.find((jar) => jar.kind === 'official') ||
+                    orderedClientJars[0];
+                properties['client'] = newestOfficial.version;
+            } else {
+                properties['client'] = '0.0.0';
+            }
             await window.electron.writeProperties(properties);
         }
-        return false;
-    }
 
-    /**
-     * Latest version is not installed.
-     * Properties file is out of sync (e.g., client JAR was deleted).
-     * Correct the properties to the latest version actually installed.
-     */
-    if (isClientVersionOnPropertiesLatest) {
-        const orderedClientJars = await orderClientJarsByVersion();
-        if (orderedClientJars.length > 0) {
-            const newestOfficial =
-                orderedClientJars.find((jar) => jar.kind === 'official') ||
-                orderedClientJars[0];
-            properties['client'] = newestOfficial.version;
-        } else {
-            properties['client'] = '0.0.0';
-        }
-        await window.electron.writeProperties(properties);
-    }
-
-    // Latest is not installed, prompt for download.
-    return true;
+        // Latest is not installed, prompt for download.
+        return true;
+    });
 }
 
 /**
