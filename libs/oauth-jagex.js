@@ -8,6 +8,7 @@ const log = require('electron-log');
 const { getAvailableBrowsers, isOperaLauncherStub } = require('./browser-util.js');
 const { toProxyUri, startLoginProxy } = require('./login-proxy.js');
 const { microbotDirName } = require('./dir-module.js');
+const { launcherColors } = require('./theme-settings.js');
 
 const userHome = process.env.HOME || process.env.USERPROFILE;
 const ACCOUNTS_DIR = path.join(userHome, microbotDirName);
@@ -26,9 +27,9 @@ async function readOldProfile() {
 
 /**
  * Auth complete HTML to better show the user that the auth process is complete
- * and soon gonna be redirected to the launcher.
+ * and soon gonna be redirected to the launcher. Colours are the launcher theme's (validated #rrggbb).
  */
-const AUTH_COMPLETE_HTML =
+const renderAuthComplete = (c) =>
     /* HTML */
     `<!DOCTYPE html>
         <html lang="en">
@@ -46,8 +47,8 @@ const AUTH_COMPLETE_HTML =
                         margin: 0;
                         font-family: system-ui, -apple-system, Segoe UI, Roboto,
                             Helvetica, Arial, sans-serif;
-                        background: #0d1117;
-                        color: #e6edf3;
+                        background: ${c.bg};
+                        color: ${c.text};
                         display: flex;
                         align-items: center;
                         justify-content: center;
@@ -70,8 +71,8 @@ const AUTH_COMPLETE_HTML =
                     .spinner {
                         width: 54px;
                         height: 54px;
-                        border: 6px solid #2d333b;
-                        border-top-color: #2f81f7;
+                        border: 6px solid ${c.line};
+                        border-top-color: ${c.accent};
                         border-radius: 50%;
                         animation: spin 1s linear infinite;
                         margin: 2.25rem auto 0;
@@ -579,7 +580,7 @@ async function startPatchrightAuthFlow(loginProxy = null, accountFields = { prox
                 await route.fulfill({
                     status: 200,
                     contentType: 'text/html',
-                    body: AUTH_COMPLETE_HTML
+                    body: authCompleteHtml()
                 });
             });
 
@@ -672,7 +673,7 @@ function startSystemBrowserAuthFlow(accountFields = { proxyIp: '' }) {
             if (req.method === 'GET' && req.url.split('?')[0] === '/') {
                 res.writeHead(200, { 'Content-Type': 'text/html' });
                 res.end(
-                    AUTH_COMPLETE_HTML.replace(
+                    authCompleteHtml().replace(
                         '</body>',
                         `<script>fetch('/token',{method:'POST',body:(location.hash||location.search).slice(1)}).then(r=>r.ok||(document.querySelector('h1').textContent='Authentication Failed'))</script></body>`
                     )
@@ -769,4 +770,8 @@ function authFlowRunning() {
     return Boolean(activeAuthFlows > 0 || cancelCurrentAuth || pendingSystemBrowserAuth);
 }
 
-module.exports = { startAuthFlow, cancelAuthFlow, authFlowRunning, writeAccountsToFile, mergeAccounts };
+// no theme picked (null): the page keeps its original colours
+const ORIGINAL_AUTH_COLORS = { bg: '#0d1117', text: '#e6edf3', line: '#2d333b', accent: '#2f81f7' };
+const authCompleteHtml = (c = launcherColors()) => renderAuthComplete(c || ORIGINAL_AUTH_COLORS);
+
+module.exports = { startAuthFlow, cancelAuthFlow, authFlowRunning, writeAccountsToFile, mergeAccounts, authCompleteHtml };

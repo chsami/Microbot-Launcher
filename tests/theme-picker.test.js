@@ -42,14 +42,15 @@ function load({ deferWrites = false, failFirstWrite = false, saved = {} } = {}) 
             },
         },
     };
-    const window = { electron, addEventListener: on('window') };
+    const dispatched = [];
+    const window = { electron, addEventListener: on('window'), dispatchEvent: (e) => dispatched.push(e.type) };
     // load through Jest's module system so coverage counts the picker
     global.window = window;
     global.document = document;
     jest.isolateModules(() => require('../libs/theme-picker.js'));
     listeners['document:DOMContentLoaded']();
     const change = (name, value) => listeners['modal:change']({ target: { name, value } });
-    return { root, reads, writes, pending, change, focus: () => listeners['window:focus'](), errors: () => els['theme-error'].textContent, classes, focused, open: () => listeners['themes:click'](), key: (key) => listeners['modal:keydown']({ key }) };
+    return { dispatched, root, reads, writes, pending, change, focus: () => listeners['window:focus'](), errors: () => els['theme-error'].textContent, classes, focused, open: () => listeners['themes:click'](), key: (key) => listeners['modal:keydown']({ key }) };
 }
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -60,6 +61,23 @@ afterEach(() => {
 });
 
 describe('theme picker', () => {
+    test('announces each applied theme so other views can restyle', async () => {
+        const p = load();
+        await flush();
+        const before = p.dispatched.length;
+        p.change('theme', 'slate');
+        expect(p.dispatched.slice(before)).toEqual(['theme-changed']);
+    });
+
+    test('re-applying the same theme does not announce a change', async () => {
+        const p = load();
+        await flush();
+        p.change('theme', 'slate');
+        const before = p.dispatched.length;
+        p.change('theme', 'slate');
+        expect(p.dispatched.slice(before)).toEqual([]);
+    });
+
     test('a read that started before a change does not undo it', async () => {
         const p = load();
         await flush();

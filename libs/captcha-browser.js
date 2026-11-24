@@ -1,16 +1,20 @@
 const crypto = require('crypto');
+const { launcherColors } = require('./theme-settings');
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
-const DONE_PAGE = `<!doctype html>
+// what the page looked like before themes; kept for players who never picked one
+const ORIGINAL_COLORS = { bg: '#0f1115', text: '#c9ced8' };
+
+const donePage = (c) => `<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><title>Microbot</title>
-<style>html,body{margin:0;height:100%;background:#0f1115;color:#c9ced8;font:15px system-ui,sans-serif}body{display:flex;align-items:center;justify-content:center;text-align:center;padding:0 16px}</style>
+<style>html,body{margin:0;height:100%;background:${c.bg};color:${c.text};font:15px system-ui,sans-serif}body{display:flex;align-items:center;justify-content:center;text-align:center;padding:0 16px}</style>
 </head>
 <body><p>You're verified. You can close this tab and go back to the Microbot Launcher.</p></body>
 </html>`;
 
-module.exports = function createBrowserCaptcha({ http, shell, log, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+module.exports = function createBrowserCaptcha({ http, shell, log, timeoutMs = DEFAULT_TIMEOUT_MS, colors = launcherColors }) {
     return (pageUrl) => {
         let finish = () => {};
         const callbackPath = `/captcha/${crypto.randomBytes(24).toString('base64url')}`;
@@ -26,7 +30,7 @@ module.exports = function createBrowserCaptcha({ http, shell, log, timeoutMs = D
                     return;
                 }
                 res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-                res.end(DONE_PAGE);
+                res.end(donePage(colors() || ORIGINAL_COLORS));
                 finish(token);
             });
 
