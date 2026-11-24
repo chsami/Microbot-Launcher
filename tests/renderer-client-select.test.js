@@ -209,13 +209,13 @@ describe('renderer client version select', () => {
         vm.runInContext('channelSwitching = false', context);
         expect(await context.__renderer.resolveLaunchVersion()).toBe('2.6.28');
     });
-    test('a failed version fetch keeps the last known latest version', () => {
-        expect(context.__renderer.rememberLatestClientVersion({ error: 'Invalid URL' })).toBe('2.6.28');
+    test('a failed version fetch is unknown but keeps the remembered version', () => {
+        expect(context.__renderer.rememberLatestClientVersion({ error: 'Invalid URL' })).toBeNull();
+        expect(vm.runInContext('latestClientVersion', context)).toBe('2.6.28');
     });
 
-    test('a failed version fetch skips the outdated-version prompt', async () => {
+    test('a failed version fetch skips the outdated-version prompt, even with a remembered version', async () => {
         context.window.electron.fetchClientVersion = async () => ({ error: 'offline' });
-        vm.runInContext('latestClientVersion = null;', context);
         await context.__renderer.populateAndSelectClientVersion('2.6.2');
 
         await context.__renderer.checkForOutdatedLaunch();

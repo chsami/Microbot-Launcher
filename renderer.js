@@ -2587,14 +2587,15 @@ async function orderClientJarsByVersion() {
 }
 
 /**
- * Remembers a fetched latest client version and returns the newest known one.
- * A failed fetch ({ error }) returns the last good version, or null if there was none.
+ * Remembers a fetched latest client version and returns it.
+ * A failed fetch ({ error }) returns null: the latest version is unknown, and the remembered one may be out of date.
  */
 function rememberLatestClientVersion(version) {
     if (typeof version === 'string' && version) {
         latestClientVersion = version;
+        return version;
     }
-    return latestClientVersion;
+    return null;
 }
 
 /**
