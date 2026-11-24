@@ -1,6 +1,8 @@
+const { launcherColors } = require('./theme-settings');
+
 const BROWSER_FALLBACK_MESSAGE = 'Finish the check in the browser tab that just opened, then come back here.';
 
-module.exports = function createCaptchaWindow({ BrowserWindow, shell, getParent, log, openInBrowser }) {
+module.exports = function createCaptchaWindow({ BrowserWindow, shell, getParent, log, openInBrowser, colors = launcherColors }) {
     return (url) =>
         new Promise((resolve) => {
             const parent = getParent();
@@ -16,7 +18,7 @@ module.exports = function createCaptchaWindow({ BrowserWindow, shell, getParent,
                 fullscreenable: false,
                 autoHideMenuBar: true,
                 title: 'Microbot',
-                backgroundColor: '#0f1115',
+                backgroundColor: colors()?.bg || '#0f1115', // the pre-theme colour when no theme is picked
                 webPreferences: {
                     sandbox: true,
                     contextIsolation: true,

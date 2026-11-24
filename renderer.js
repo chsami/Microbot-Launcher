@@ -2478,6 +2478,42 @@ async function updateEmbeddedPage({ reload = false, landing = false } = {}) {
     webview.src = target;
 }
 
+// Mirrors the .sidebar scrollbar in css/styles.css; auto width/color lets the webkit rules apply.
+// Shorthand + !important: the dashboard sets its own ::-webkit-scrollbar-thumb { background: ... }.
+function webviewScrollbarCss(style) {
+    const v = (name) => style.getPropertyValue(name).trim();
+    return `html, body { scrollbar-width: auto !important; scrollbar-color: auto !important; }
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: transparent !important; }
+        ::-webkit-scrollbar-corner { background: transparent !important; }
+        ::-webkit-scrollbar-thumb { background: ${v('--line-strong')} padding-box !important; border: 2px solid transparent; border-radius: 6px; }
+        ::-webkit-scrollbar-thumb:hover { background: ${v('--gold-soft')} padding-box !important; }
+        ::-webkit-scrollbar-thumb:active { background: ${v('--gold')} padding-box !important; }`;
+}
+
+let scrollbarCssKey = null;
+let scrollbarPageLoaded = false; // set at dom-ready, so a theme change during the first insert still restyles (runs queue)
+let scrollbarRun = Promise.resolve();
+let scrollbarWaiting = false;
+// One restyle at a time so the key always names the last sheet inserted; a burst of
+// theme changes collapses into one more run, which reads the colours when it starts.
+function applyWebviewScrollbar(webview) {
+    if (scrollbarWaiting) return scrollbarRun;
+    scrollbarWaiting = true;
+    scrollbarRun = scrollbarRun.then(async () => {
+        scrollbarWaiting = false;
+        const old = scrollbarCssKey;
+        try {
+            const key = await webview.insertCSS(webviewScrollbarCss(getComputedStyle(document.documentElement)));
+            if (old) await webview.removeInsertedCSS(old).catch(() => {});
+            scrollbarCssKey = key;
+        } catch (err) {
+            console.error('insertCSS failed', err);
+        }
+    });
+    return scrollbarRun;
+}
+
 /**
  * Initialize the webview for the embedded site.
  * On the Microbot landing page it manipulates some elements
@@ -2487,22 +2523,16 @@ function loadLandingPageWebview() {
     const webview = document.getElementById('website');
     const webviewOverlay = document.getElementById('embed-overlay');
     if (webview) {
+        // only restyle once the page has loaded
+        window.addEventListener('theme-changed', () => scrollbarPageLoaded && applyWebviewScrollbar(webview));
         embeddedPageReady = true;
         updateEmbeddedPage();
         window.electron.ipcRenderer.receive('dashboard:reload', () => updateEmbeddedPage({ reload: true }));
         window.electron.ipcRenderer.receive('dashboard:unavailable', () => updateEmbeddedPage({ landing: true }));
         webview.addEventListener('dom-ready', () => {
-            // Mirrors the .sidebar scrollbar in css/styles.css; auto width/color lets the webkit rules apply.
-            webview
-                .insertCSS(
-                    `html, body { scrollbar-width: auto !important; scrollbar-color: auto !important; }
-                    ::-webkit-scrollbar { width: 10px; height: 10px; }
-                    ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
-                    ::-webkit-scrollbar-thumb { background-color: #2e261c; border: 2px solid transparent; border-radius: 6px; background-clip: padding-box; }
-                    ::-webkit-scrollbar-thumb:hover { background-color: #e9c98f; }
-                    ::-webkit-scrollbar-thumb:active { background-color: #ffb13b; }`
-                )
-                .catch((err) => console.error('insertCSS failed', err));
+            scrollbarPageLoaded = true;
+            scrollbarCssKey = null; // a navigation drops the old CSS
+            applyWebviewScrollbar(webview);
             if (!webview.getURL().startsWith('https://www.themicrobot.com')) {
                 webviewOverlay?.classList.add('hidden');
                 return;

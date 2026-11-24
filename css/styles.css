@@ -29,11 +29,22 @@
     --faint: #6f685d;
     --gold: #ffb13b;
     --gold-hover: #ffc35c;
+    /* selection and hover wash: the accent in Gold, neutral text where orange would read brown */
+    --tint: var(--gold);
     --gold-soft: #e9c98f;
     --on-gold: #1a1714;
     --red: #c2231f;
     --red-text: #ff7a6e;
     --green: #9fd98a;
+    /* primary confirm buttons; danger buttons keep --red */
+    --primary: var(--red);
+    --primary-hover: var(--red);
+    --on-primary: var(--text-strong);
+    --titlebar-icon: #ffffff;
+    /* white washes and texts: pure white in Gold, the text colour elsewhere */
+    --ink: #ffffff;
+    --ink-strong: #ffffff;
+    --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffb13b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     /* Cinzel is reserved for the logo; everything else reads in Montserrat. */
     --logo: Cinzel, Georgia, serif;
     --body: Montserrat, Roboto, sans-serif;
@@ -41,6 +52,7 @@
 
 /* Themes (menu > Themes). Gold is :root above; the client and native launcher share these palettes. */
 :root[data-theme="slate"] {
+    --tint: var(--text);
     --bg: #15171c;
     --surface: #15171c;
     --surface-2: #1c1f26;
@@ -55,10 +67,18 @@
     --faint: #626a7a;
     --gold: #f5a524;
     --gold-hover: #f7b445;
-    --gold-soft: #e9c98f;
+    --gold-soft: #f9cd87;
     --on-gold: #15171c;
+    --primary: var(--gold);
+    --primary-hover: var(--gold-hover);
+    --on-primary: var(--on-gold);
+    --titlebar-icon: var(--text-strong);
+    --ink: var(--text);
+    --ink-strong: var(--text-strong);
+    --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23f5a524' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 :root[data-theme="classic"] {
+    --tint: var(--text);
     --bg: #181818;
     --surface: #1e1e1e;
     --surface-2: #282828;
@@ -75,6 +95,29 @@
     --gold-hover: #f0a01e;
     --gold-soft: #e6be78;
     --on-gold: #141414;
+    --primary: var(--gold);
+    --primary-hover: var(--gold-hover);
+    --on-primary: var(--on-gold);
+    --titlebar-icon: var(--text-strong);
+    --ink: var(--text);
+    --ink-strong: var(--text-strong);
+    --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23dc8a00' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+/* Gold keeps the browser's native controls; custom themes get this in the custom branch */
+:root[data-theme="slate"] input[type="radio"],
+:root[data-theme="slate"] input[type="checkbox"],
+:root[data-theme="slate"] input[type="range"],
+:root[data-theme="classic"] input[type="radio"],
+:root[data-theme="classic"] input[type="checkbox"],
+:root[data-theme="classic"] input[type="range"] {
+    accent-color: var(--gold);
+    /* a dark box when unchecked, not white */
+    color-scheme: dark;
+}
+/* Chromium's default focus ring is the Windows accent (orange); colour only, Gold unchanged */
+/* :where keeps this at (0,1,0) so component rings (red delete/proxy) still win */
+:where(:root[data-theme="slate"], :root[data-theme="classic"]) :focus-visible {
+    outline-color: var(--gold);
 }
 .theme-picker-card fieldset {
     border: 0;
@@ -288,16 +331,22 @@ webview#website {
 }
 
 .auth-submit {
-    background: var(--red);
-    border: 1px solid var(--red);
+    background: var(--primary);
+    border: 1px solid var(--primary);
     padding: 12px;
     border-radius: 6px;
-    color: var(--text-strong);
+    color: var(--on-primary);
     font-family: var(--body);
     font-size: 14px;
     font-weight: 700;
     cursor: pointer;
     transition: opacity 0.2s ease;
+}
+
+.auth-submit:not([disabled]):hover,
+.guide-primary:hover {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
 }
 
 .auth-submit[disabled] {
@@ -460,7 +509,7 @@ webview#website {
 .account-info-button:hover,
 .account-info-button:focus-visible {
     color: var(--gold);
-    background: color-mix(in srgb, var(--gold) 10%, transparent);
+    background: color-mix(in srgb, var(--tint) 10%, transparent);
 }
 
 .auth-link.auth-link-center {
@@ -560,7 +609,7 @@ webview#website {
 }
 
 .account-action.primary:hover {
-    background: color-mix(in srgb, var(--gold) 12%, transparent);
+    background: color-mix(in srgb, var(--tint) 12%, transparent);
 }
 
 .mode-switch {
@@ -600,7 +649,7 @@ webview#website {
 }
 
 .mode-option[aria-pressed="true"] {
-    background: color-mix(in srgb, var(--gold) 18%, transparent);
+    background: color-mix(in srgb, var(--tint) 18%, transparent);
     color: var(--gold);
 }
 
@@ -837,7 +886,7 @@ webview#website {
 }
 
 .auth-close:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
     color: var(--text-strong);
 }
 
@@ -1271,11 +1320,11 @@ h2 {
 }
 
 .account-option:hover {
-    background-color: color-mix(in srgb, var(--gold) 8%, transparent);
+    background-color: color-mix(in srgb, var(--tint) 8%, transparent);
 }
 
 .account-option.selected {
-    background-color: color-mix(in srgb, var(--gold) 12%, transparent);
+    background-color: color-mix(in srgb, var(--tint) 12%, transparent);
 }
 
 .account-option.selected .account-option-name {
@@ -1362,7 +1411,7 @@ h2 {
     border: 1px solid var(--line);
     border-radius: 6px;
     margin-bottom: 10px;
-    background: var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffb13b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 14px center;
+    background: var(--surface-2) var(--select-arrow) no-repeat right 14px center;
     color: var(--text-strong);
     font-family: var(--body);
     font-size: 14px;
@@ -1600,7 +1649,7 @@ h2 {
 }
 
 .hwid-spoof-input:checked + .hwid-spoof-switch {
-    background: color-mix(in srgb, var(--gold) 35%, transparent);
+    background: color-mix(in srgb, var(--tint) 35%, transparent);
 }
 
 .hwid-spoof-input:checked + .hwid-spoof-switch::after {
@@ -1640,11 +1689,11 @@ h2 {
 }
 
 .channel-option:hover {
-    color: #ffffff;
+    color: var(--ink-strong);
 }
 
 .channel-option[aria-pressed="true"] {
-    background: color-mix(in srgb, var(--gold) 18%, transparent);
+    background: color-mix(in srgb, var(--tint) 18%, transparent);
     color: var(--gold);
 }
 
@@ -1681,7 +1730,7 @@ h2 {
 .nightly-info-title {
     font-size: 14px;
     font-weight: 600;
-    color: #ffffff;
+    color: var(--ink-strong);
 }
 
 .nightly-info-hint {
@@ -2117,6 +2166,7 @@ h2 {
 .titlebar button.hamburger {
     background: transparent;
     border: none;
+    color: var(--titlebar-icon);
     width: 100%;
     height: 100%;
     display: flex;
@@ -2128,12 +2178,12 @@ h2 {
 
 .titlebar .titlebar-controls button:hover,
 .titlebar button.hamburger:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: color-mix(in srgb, var(--ink) 10%, transparent);
 }
 
 .titlebar .titlebar-controls button:active,
 .titlebar button.hamburger:active {
-    background: rgba(255, 255, 255, 0.2);
+    background: color-mix(in srgb, var(--ink) 20%, transparent);
 }
 
 .titlebar .titlebar-controls button:focus-visible,
@@ -2142,7 +2192,7 @@ h2 {
 .app-menu .submenu-item:focus-visible {
     outline: 2px solid var(--gold);
     outline-offset: -2px;
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
 }
 
 /* hamburger/menu button */
@@ -2161,7 +2211,7 @@ button.hamburger {
     top: 30px;
     left: 0;
     background: var(--bg);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     border-radius: 6px;
     padding: 4px 0;
@@ -2205,7 +2255,7 @@ button.hamburger {
 
 .app-menu .menu-item:hover,
 .app-menu .submenu-item:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
 }
 
 .app-menu .menu-item.menu-check {
@@ -2246,7 +2296,7 @@ button.hamburger {
     top: 0;
     left: 100%;
     background: var(--bg);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     border-radius: 6px;
     padding: 4px 0;
@@ -2265,7 +2315,7 @@ button.hamburger {
 .app-menu .separator {
     height: 1px;
     margin: 4px 0;
-    background: rgba(255, 255, 255, 0.1);
+    background: color-mix(in srgb, var(--ink) 10%, transparent);
 }
 
 .app-menu .submenu-item {
@@ -2332,7 +2382,7 @@ button.hamburger {
     padding: 14px;
     border-radius: 10px;
     border: 1px solid var(--line);
-    background: color-mix(in srgb, var(--gold) 5%, transparent);
+    background: color-mix(in srgb, var(--tint) 5%, transparent);
 }
 
 .profiles-cloud-icon {
@@ -2379,7 +2429,7 @@ button.hamburger {
 }
 
 .profiles-cloud-button:hover {
-    background: color-mix(in srgb, var(--gold) 12%, transparent);
+    background: color-mix(in srgb, var(--tint) 12%, transparent);
 }
 
 .profiles-note {
@@ -2503,7 +2553,7 @@ button.hamburger {
 
 .profile-row.is-active {
     border-color: var(--gold);
-    background: color-mix(in srgb, var(--gold) 6%, transparent);
+    background: color-mix(in srgb, var(--tint) 6%, transparent);
 }
 
 .profile-row.is-confirming {
@@ -2593,7 +2643,7 @@ button.hamburger {
 }
 
 .profile-use-button:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--gold) 12%, transparent);
+    background: color-mix(in srgb, var(--tint) 12%, transparent);
 }
 
 .profile-use-button:disabled {
@@ -2741,7 +2791,7 @@ button.hamburger {
 .password-toggle:hover,
 .password-toggle:focus-visible {
     color: var(--text-strong);
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
 .auth-error:empty {
@@ -2993,14 +3043,14 @@ button.hamburger {
     align-self: flex-start;
     padding: 3px 8px;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--gold) 14%, transparent);
+    background: color-mix(in srgb, var(--tint) 14%, transparent);
     color: var(--gold);
     font-size: 11px;
     font-weight: 700;
 }
 
 .guide-badge.muted {
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
     color: var(--muted);
 }
 
@@ -3009,7 +3059,7 @@ button.hamburger {
     padding: 10px 14px;
     border-left: 3px solid var(--gold);
     border-radius: 0 6px 6px 0;
-    background: color-mix(in srgb, var(--gold) 6%, transparent);
+    background: color-mix(in srgb, var(--tint) 6%, transparent);
     font-size: 13px;
     line-height: 1.5;
 }
@@ -3115,7 +3165,7 @@ button.hamburger {
 }
 
 .guide-list > li.guide-active {
-    background: color-mix(in srgb, var(--gold) 6%, transparent);
+    background: color-mix(in srgb, var(--tint) 6%, transparent);
     border-color: color-mix(in srgb, var(--gold) 28%, transparent);
 }
 
@@ -3192,7 +3242,7 @@ button.hamburger {
 
 .guide-action:hover,
 .guide-action:focus-visible {
-    background: color-mix(in srgb, var(--gold) 12%, transparent);
+    background: color-mix(in srgb, var(--tint) 12%, transparent);
     outline: none;
 }
 
@@ -3243,9 +3293,9 @@ button.hamburger {
 
 .guide-primary {
     min-width: 110px;
-    border: 1px solid var(--red);
-    background: var(--red);
-    color: var(--text-strong);
+    border: 1px solid var(--primary);
+    background: var(--primary);
+    color: var(--on-primary);
 }
 
 .guide-secondary {
@@ -3334,7 +3384,7 @@ button.hamburger {
 }
 
 .guide-resume-dismiss:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
     color: var(--text-strong);
 }
 
