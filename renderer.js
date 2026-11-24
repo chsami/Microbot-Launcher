@@ -931,6 +931,14 @@ async function initializeLauncher() {
         }
     }
 
+    // Nightly has its own download messages, and the periodic check skips it.
+    if (properties['client'] === '0.0.0' && !clientVersion && properties[CLIENT_CHANNEL] !== 'nightly') {
+        showErrorToast(
+            'Could not reach microbot.cloud to download the Microbot client. Check your internet connection. The launcher checks again every 5 minutes and shows Update Now when it can download, or you can restart it.',
+            { logs: false }
+        );
+    }
+
     document.getElementById('loader-container').style.display = 'none';
 
     await window.electron.writeProperties(properties);
@@ -1782,12 +1790,20 @@ function updateNowBtn() {
             if (iii) clearInterval(iii);
             document.querySelector('#update-available').style = 'display:none';
             document.getElementById('loader-container').style.display = 'block';
+            // The banner holds the only Update Now button: bring it back so a failed update can be retried.
+            const offerRetry = () => {
+                document.getElementById('loader-container').style.display =
+                    'none';
+                if (!isNightlyChannel()) {
+                    document.querySelector('#update-available').style =
+                        'display:flex';
+                }
+            };
             const clientVersion = rememberLatestClientVersion(
                 await window.electron.fetchClientVersion()
             );
             if (!clientVersion) {
-                document.getElementById('loader-container').style.display =
-                    'none';
+                offerRetry();
                 window.electron.errorAlert(
                     'Could not check the latest client version. Check your internet connection and try again.'
                 );
@@ -1796,8 +1812,7 @@ function updateNowBtn() {
             const result = await window.electron.downloadClient(clientVersion);
             if (result?.error) {
                 window.electron.errorAlert(result.error);
-                document.getElementById('loader-container').style.display =
-                    'none';
+                offerRetry();
                 return;
             }
 
