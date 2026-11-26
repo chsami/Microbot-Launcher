@@ -338,6 +338,29 @@ describe('renderer client version select', () => {
         expect(context.clearInterval).toHaveBeenCalledWith(7);
     });
 
+    test('a successful Update Now restarts the periodic check', async () => {
+        const loader = { style: {} };
+        let click;
+        context.clearInterval = jest.fn();
+        context.setInterval = jest.fn(() => 7);
+        context.document.querySelector = (selector) =>
+            selector === '#update-available' ? { style: '' } : { addEventListener: (_, fn) => (click = fn) };
+        context.document.getElementById = (id) => (id === 'loader-container' ? loader : select);
+        context.__renderer.updateNowBtn();
+        Object.assign(context.window.electron, {
+            fetchClientVersion: async () => '2.6.2',
+            downloadClient: async () => ({ success: true }),
+            readProperties: async () => ({}),
+            writeProperties: jest.fn(async () => {})
+        });
+
+        await click();
+
+        expect(context.window.electron.writeProperties).toHaveBeenCalledWith({ client: '2.6.2' });
+        expect(context.setInterval).toHaveBeenCalledTimes(1);
+        expect(loader.style.display).toBe('none');
+    });
+
     test.each([
         ['stable', 'offline', true],
         ['nightly', 'offline', false],

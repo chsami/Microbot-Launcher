@@ -934,7 +934,7 @@ async function initializeLauncher() {
     // Nightly has its own download messages, and the periodic check skips it.
     if (properties['client'] === '0.0.0' && !clientVersion && properties[CLIENT_CHANNEL] !== 'nightly') {
         showErrorToast(
-            'Could not reach microbot.cloud to download the Microbot client. Check your internet connection. The launcher checks again every 5 minutes and shows Update Now when it can download, or you can restart it.',
+            'Could not reach microbot.cloud to download the Microbot client. Check your internet connection. The launcher tries again every 5 minutes and shows Update Now when the download is ready, or restart the launcher to try now.',
             { logs: false }
         );
     }
@@ -1829,6 +1829,7 @@ function updateNowBtn() {
             properties['client'] = clientVersion;
             await window.electron.writeProperties(properties);
 
+            startUpdateChecks();
             document.getElementById('loader-container').style.display = 'none';
         });
 }
