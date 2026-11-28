@@ -44,6 +44,20 @@ describe('captcha-browser', () => {
         await expect(check.promise).resolves.toBe('abc+1');
     });
 
+    test('the done page uses the launcher theme colours', async () => {
+        const check = createBrowserCaptcha({ http, shell, log, colors: () => ({ bg: '#123456', text: '#abcdef' }) })('https://microbot.cloud/api/captcha');
+        const response = await get(`${new URL(await opened).searchParams.get('return')}?token=t`);
+        expect(response.body).toContain('background:#123456;color:#abcdef');
+        await expect(check.promise).resolves.toBe('t');
+    });
+
+    test('nobody picked a theme: the done page keeps its original colours', async () => {
+        const check = createBrowserCaptcha({ http, shell, log, colors: () => null })('https://microbot.cloud/api/captcha');
+        const response = await get(`${new URL(await opened).searchParams.get('return')}?token=t`);
+        expect(response.body).toContain('background:#0f1115;color:#c9ced8');
+        await expect(check.promise).resolves.toBe('t');
+    });
+
     test('each check gets its own return path', async () => {
         const first = createBrowserCaptcha({ http, shell, log })('https://microbot.cloud/api/captcha');
         const firstPath = new URL(new URL(await opened).searchParams.get('return')).pathname;

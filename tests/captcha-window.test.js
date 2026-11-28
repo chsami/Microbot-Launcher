@@ -85,6 +85,18 @@ describe('captcha-window', () => {
         expect(win.options.webPreferences).toMatchObject({ sandbox: true, contextIsolation: true, nodeIntegration: false });
     });
 
+    test('paints the window in the launcher theme background', () => {
+        const themed = createCaptchaWindow({ BrowserWindow: FakeBrowserWindow, shell, getParent: () => null, log, openInBrowser, colors: () => ({ bg: '#123456' }) });
+        themed('https://microbot.cloud/api/captcha');
+        expect(FakeBrowserWindow.last.options.backgroundColor).toBe('#123456');
+    });
+
+    test('nobody picked a theme: the window keeps its original background', () => {
+        const plain = createCaptchaWindow({ BrowserWindow: FakeBrowserWindow, shell, getParent: () => null, log, openInBrowser, colors: () => null });
+        plain('https://microbot.cloud/api/captcha');
+        expect(FakeBrowserWindow.last.options.backgroundColor).toBe('#0f1115');
+    });
+
     test('logs Turnstile errors from the page', () => {
         open('https://microbot.cloud/api/captcha');
         const contents = FakeBrowserWindow.last.webContents;

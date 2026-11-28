@@ -92,11 +92,12 @@ describe('renderer client version select', () => {
             window: { electron, addEventListener: noop },
             document,
             console,
+            getComputedStyle: () => ({ getPropertyValue: () => '#123456' }),
             sessionStorage: { getItem: () => null, setItem: noop }
         });
         const source = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
         vm.runInContext(
-            `${source}\nglobalThis.__renderer = { formatNightlyBuildTime, resolveLaunchVersion, checkForOutdatedLaunch, populateAndSelectClientVersion, selectClientVersion, shouldPromptForClientDownload, orderClientJarsByVersion, rememberLatestClientVersion, refreshClientJars };`,
+            `${source}\nglobalThis.__renderer = { formatNightlyBuildTime, resolveLaunchVersion, checkForOutdatedLaunch, populateAndSelectClientVersion, selectClientVersion, shouldPromptForClientDownload, orderClientJarsByVersion, rememberLatestClientVersion, refreshClientJars, webviewScrollbarCss, applyWebviewScrollbar, loadLandingPageWebview };`,
             context
         );
         context.__renderer.rememberLatestClientVersion('2.6.28');
@@ -104,6 +105,61 @@ describe('renderer client version select', () => {
 
     afterEach(() => {
         fs.rmSync(microbotDir, { recursive: true, force: true });
+    });
+
+    test('the dashboard scrollbar CSS uses the theme variables', () => {
+        const vars = { '--line-strong': ' #111111 ', '--gold-soft': '#222222', '--gold': '#333333' };
+        const css = context.__renderer.webviewScrollbarCss({ getPropertyValue: (name) => vars[name] });
+        // shorthand + !important so it beats a page's own ::-webkit-scrollbar-thumb { background: ... }
+        expect(css).toContain('::-webkit-scrollbar-thumb { background: #111111 padding-box !important;');
+        expect(css).toContain(':hover { background: #222222 padding-box !important; }');
+        expect(css).toContain(':active { background: #333333 padding-box !important; }');
+        expect(css).toContain('::-webkit-scrollbar-corner { background: transparent !important; }');
+    });
+
+    test('overlapping scrollbar restyles run one at a time and a burst collapses into one more run', async () => {
+        let running = 0;
+        let most = 0;
+        let next = 0;
+        const removed = [];
+        const webview = {
+            insertCSS: async () => {
+                most = Math.max(most, ++running);
+                await new Promise((resolve) => setTimeout(resolve, 5));
+                running--;
+                return `k${++next}`;
+            },
+            removeInsertedCSS: async (key) => removed.push(key)
+        };
+        const { applyWebviewScrollbar } = context.__renderer;
+        const first = applyWebviewScrollbar(webview);
+        await new Promise((resolve) => setTimeout(resolve, 0)); // the first restyle is now inserting
+        await Promise.all([first, applyWebviewScrollbar(webview), applyWebviewScrollbar(webview)]);
+        expect(most).toBe(1);
+        expect(next).toBe(2); // the second and third calls shared one run
+        expect(removed).toEqual(['k1']);
+
+        await applyWebviewScrollbar(webview);
+        expect(removed).toEqual(['k1', 'k2']); // the key always names the last sheet inserted
+    });
+
+    test('a theme change during the first insert restyles again once it finishes', async () => {
+        const inserts = [];
+        const finishers = [];
+        const webview = {
+            insertCSS: () => new Promise((resolve) => finishers.push(() => resolve(`k${inserts.push(1)}`))),
+            removeInsertedCSS: async () => {}
+        };
+        const handlers = {};
+        context.document.getElementById = (id) => (id === 'website' ? Object.assign(webview, { dataset: {}, addEventListener: (e, fn) => (handlers[e] = fn), getURL: () => 'about:blank' }) : null);
+        context.window.addEventListener = (e, fn) => (handlers['w:' + e] = fn);
+        context.__renderer.loadLandingPageWebview();
+        handlers['dom-ready']();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        handlers['w:theme-changed'](); // the first insert is still in flight
+        finishers.shift()();
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        expect(finishers).toHaveLength(1); // a second run started
     });
 
     test('lists official, older and custom jars with labels', async () => {
@@ -131,10 +187,28 @@ describe('renderer client version select', () => {
         fs.unlinkSync(path.join(microbotDir, 'microbot-2.6.28.jar'));
         const jars = await handlers['list-jars']();
 
-        const prompt = await context.__renderer.shouldPromptForClientDownload('2.6.28', jars, properties);
+        const prompt = await context.__renderer.shouldPromptForClientDownload('2.6.28', jars);
 
         expect(prompt).toBe(true);
         expect(properties.client).toBe('2.6.2');
+    });
+
+    test.each([
+        ['the latest client is installed', [], '2.6.28'],
+        ['the latest client is missing', ['microbot-2.6.28.jar'], '2.6.2']
+    ])('an update check keeps settings saved while it waits on the network: %s', async (_, removed, client) => {
+        removed.forEach((name) => fs.unlinkSync(path.join(microbotDir, name)));
+        properties = { client: removed.length ? '2.6.28' : '2.6.2', version_pref: '2.6.2', client_ram: '1g' };
+        context.document.querySelector = () => ({ style: '' });
+        let answer;
+        context.window.electron.fetchClientVersion = () => new Promise((resolve) => (answer = resolve));
+
+        const check = context.checkForClientUpdate({ ...properties });
+        properties = { ...properties, version_pref: '2.6.28', client_ram: '4g' };
+        answer('2.6.28');
+        await check;
+
+        expect(properties).toEqual({ client, version_pref: '2.6.28', client_ram: '4g' });
     });
 
     test('launching a custom jar keeps the selection and skips the outdated dialog', async () => {
