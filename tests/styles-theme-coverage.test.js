@@ -17,7 +17,7 @@ const arrow = (hex) =>
 test('styles.css has no white-alpha colours outside the Halloween block', () => {
     const start = css.indexOf('.is-halloween');
     // Gold's title-bar icons stay pure white
-    const outside = (start < 0 ? css : css.slice(0, start)).replace('--titlebar-icon: #ffffff;', '').replace('--ink: #ffffff;', '').replace('--ink-strong: #ffffff;', '');
+    const outside = (start < 0 ? css : css.slice(0, start)).replaceAll('--titlebar-icon: #ffffff;', '').replaceAll('--ink: #ffffff;', '').replaceAll('--ink-strong: #ffffff;', '');
     expect(outside).not.toMatch(/rgba\(\s*255,\s*255,\s*255/);
     expect(outside).not.toMatch(/#ffffff\b/i);
 });
@@ -61,7 +61,18 @@ test('select arrows are drawn in each theme\'s accent, Gold byte-identical to be
     expect(rule('.game-info select,\n.proxy-section select')).toContain('background: var(--surface-2) var(--select-arrow) no-repeat right 14px center;');
 });
 
-test('native radios, checkboxes and sliders take the accent in Slate and Classic only, Gold stays native', () => {
+test('theme dialog primary buttons use the primary colours', () => {
+    expect(rule('.theme-button-primary')).toMatch(/background: var\(--primary\);\s*border-color: var\(--primary\);\s*color: var\(--on-primary\);/);
+});
+
+test('theme dialog cards fit below the title bar and the importer has no empty gap', () => {
+    expect(rule('.theme-editor-card')).toContain('box-sizing: border-box;');
+    // cancels the card's 16px gap while nothing is previewed
+    expect(rule('.theme-import-result')).toContain('margin-top: -16px;');
+    expect(rule('.auth-card')).toContain('gap: 16px;');
+});
+
+test('native radios, checkboxes and sliders take the accent in Slate, Classic and custom themes only, Gold stays native', () => {
     const sel = [];
     for (const t of ['slate', 'classic']) for (const k of ['radio', 'checkbox', 'range']) sel.push(`:root[data-theme="${t}"] input[type="${k}"]`);
     const native = rule(sel.join(',\n'));
@@ -70,8 +81,8 @@ test('native radios, checkboxes and sliders take the accent in Slate and Classic
     expect(native).toContain('color-scheme: dark;');
 });
 
-test('focus outlines follow the accent in Slate and Classic only', () => {
-    expect(rule(':where(:root[data-theme="slate"], :root[data-theme="classic"]) :focus-visible')).toContain('outline-color: var(--gold);');
+test('focus outlines follow the accent in Slate, Classic and custom themes, not Gold', () => {
+    expect(rule(':where(:root[data-theme="slate"], :root[data-theme="classic"], :root[data-custom="on"]) :focus-visible')).toContain('outline-color: var(--gold);');
 });
 
 test('white washes and texts use --ink, pure white in Gold as before, the text colour in Slate and Classic', () => {
@@ -86,6 +97,28 @@ test('white washes and texts use --ink, pure white in Gold as before, the text c
     expect(rule('.nightly-info-title')).toContain('color: var(--ink-strong);');
 });
 
-test('Gold\'s theme radios keep their gold accent', () => {
-    expect(rule('.theme-option input')).toContain('accent-color: var(--gold);');
+
+test('custom themes get the accent on native controls; dialogs on a Gold base stay native', () => {
+    const k = ['radio', 'checkbox', 'range'];
+    const group = (pre) => k.map((x) => `${pre} input[type="${x}"]`).join(',\n');
+    expect(rule(group(':root[data-custom="on"]'))).toMatch(/accent-color: var\(--gold\);\s*color-scheme: dark;/);
+    expect(rule(group(':root[data-custom="on"][data-unreadable="on"]:not([data-theme="slate"]):not([data-theme="classic"]) .theme-safe'))).toMatch(/accent-color: auto;\s*color-scheme: normal;/);
+});
+
+test('the Themes window is a scrolling grid of cards that keep full names', () => {
+    // the id beats the later .auth-card width and padding
+    expect(rule('#theme-modal .theme-picker-card')).toContain('padding: 0;');
+    expect(rule('#theme-modal .theme-picker-card')).toMatch(/box-sizing: border-box;[\s\S]*max-height: calc\(100vh - 64px\);[\s\S]*width: min\(760px, 94vw\);/);
+    expect(rule('.theme-picker-body')).toContain('overflow-y: auto;');
+    expect(rule('.theme-grid')).toMatch(/gap: 12px;\s*grid-template-columns: repeat\(auto-fill, minmax\(200px, 1fr\)\);/);
+    expect(rule('.theme-card-name')).toContain('overflow-wrap: anywhere;');
+    expect(rule('.theme-card-name')).not.toContain('ellipsis');
+    expect(rule('.theme-card.is-current')).toContain('border: 2px solid var(--gold);');
+    // one focus ring, on the card: the radio itself draws none
+    expect(rule('.theme-card:has(.theme-card-radio:focus-visible)')).toMatch(/outline: 2px solid var\(--text-strong\);\s*outline-offset: 3px;/);
+    // opening focuses the dialog, so the picked card shows no focus ring until the keyboard is used
+    expect(html).toContain('<h1 id="theme-title" class="theme-editor-title" tabindex="-1">Themes</h1>');
+    expect(rule('.theme-card-radio:focus-visible')).toContain('outline: none;');
+    expect(rule('.theme-thumb')).toMatch(/border-radius: 8px;[\s\S]*height: 96px;/);
+    expect(css).toContain('.theme-picker-body::-webkit-scrollbar-thumb {');
 });

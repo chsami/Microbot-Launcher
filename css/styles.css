@@ -116,37 +116,160 @@
 }
 /* Chromium's default focus ring is the Windows accent (orange); colour only, Gold unchanged */
 /* :where keeps this at (0,1,0) so component rings (red delete/proxy) still win */
-:where(:root[data-theme="slate"], :root[data-theme="classic"]) :focus-visible {
+:where(:root[data-theme="slate"], :root[data-theme="classic"], :root[data-custom="on"]) :focus-visible {
     outline-color: var(--gold);
 }
-.theme-picker-card fieldset {
-    border: 0;
-    margin: 0 0 14px;
-    padding: 0;
+/* a custom Gold base may be light: its title-bar icons and washes follow its text, like Slate and Classic */
+:root[data-custom="on"][data-theme="gold"] {
+    --titlebar-icon: var(--text-strong);
+    --ink: var(--text);
+    --ink-strong: var(--text-strong);
 }
-.theme-picker-card legend {
-    color: var(--text-strong);
-    font-weight: 700;
-    margin-bottom: 8px;
+/* a custom theme's controls take its accent; the dialogs of an unreadable Gold-base preview stay native, like Gold */
+:root[data-custom="on"] input[type="radio"],
+:root[data-custom="on"] input[type="checkbox"],
+:root[data-custom="on"] input[type="range"] {
+    accent-color: var(--gold);
+    color-scheme: dark;
 }
-.theme-option {
-    align-items: center;
+:root[data-custom="on"][data-unreadable="on"]:not([data-theme="slate"]):not([data-theme="classic"]) .theme-safe input[type="radio"],
+:root[data-custom="on"][data-unreadable="on"]:not([data-theme="slate"]):not([data-theme="classic"]) .theme-safe input[type="checkbox"],
+:root[data-custom="on"][data-unreadable="on"]:not([data-theme="slate"]):not([data-theme="classic"]) .theme-safe input[type="range"] {
+    accent-color: auto;
+    color-scheme: normal;
+}
+/* While an unreadable custom theme is painted (only an editor or import preview can be), the Themes window, editor and
+   import dialogs keep the colours of its base built-in theme (same as that theme's own block), so a bad custom theme can
+   never make the way back unreadable. Built-in and readable custom themes show their own. */
+:root[data-custom="on"][data-unreadable="on"]:not([data-theme]) .theme-safe,
+:root[data-custom="on"][data-unreadable="on"][data-theme="gold"] .theme-safe {
+    --bg: #0c0a08;
+    --surface: #15110d;
+    --surface-2: #1b1612;
+    --surface-3: #2a2119;
+    --line: #2e261c;
+    --line-strong: #4a3a2a;
+    --line-mid: #3a2e22;
+    --shade: #0a0806;
+    --text: #d6cfc2;
+    --text-strong: #f5efe4;
+    --muted: #9b9384;
+    --faint: #6f685d;
+    --gold: #ffb13b;
+    --gold-hover: #ffc35c;
+    --gold-soft: #e9c98f;
+    --on-gold: #1a1714;
+    --tint: var(--gold);
+    --red: #c2231f;
+    --red-text: #ff7a6e;
+    --green: #9fd98a;
+    --primary: var(--red);
+    --primary-hover: var(--red);
+    --on-primary: var(--text-strong);
+    --titlebar-icon: #ffffff;
+    --ink: #ffffff;
+    --ink-strong: #ffffff;
+    --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffb13b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+:root[data-custom="on"][data-unreadable="on"][data-theme="slate"] .theme-safe {
+    --bg: #15171c;
+    --surface: #15171c;
+    --surface-2: #1c1f26;
+    --surface-3: #242833;
+    --line: #262a33;
+    --line-strong: #2e3340;
+    --line-mid: #2e3340;
+    --shade: #15171c;
+    --text: #c9cdd6;
+    --text-strong: #e3e6ec;
+    --muted: #8b93a3;
+    --faint: #626a7a;
+    --gold: #f5a524;
+    --gold-hover: #f7b445;
+    --gold-soft: #f9cd87;
+    --on-gold: #15171c;
+    --tint: var(--text);
+    --red: #c2231f;
+    --red-text: #ff7a6e;
+    --green: #9fd98a;
+    --primary: var(--gold);
+    --primary-hover: var(--gold-hover);
+    --on-primary: var(--on-gold);
+    --titlebar-icon: var(--text-strong);
+    --ink: var(--text);
+    --ink-strong: var(--text-strong);
+    --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23f5a524' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+:root[data-custom="on"][data-unreadable="on"][data-theme="classic"] .theme-safe {
+    --bg: #181818;
+    --surface: #1e1e1e;
+    --surface-2: #282828;
+    --surface-3: #3c3c3c;
+    --line: #323232;
+    --line-strong: #4d4d4d;
+    --line-mid: #4d4d4d;
+    --shade: #181818;
+    --text: #c6c6c6;
+    --text-strong: #ebebeb;
+    --muted: #a5a5a5;
+    --faint: #737373;
+    --gold: #dc8a00;
+    --gold-hover: #f0a01e;
+    --gold-soft: #e6be78;
+    --on-gold: #141414;
+    --tint: var(--text);
+    --red: #c2231f;
+    --red-text: #ff7a6e;
+    --green: #9fd98a;
+    --primary: var(--gold);
+    --primary-hover: var(--gold-hover);
+    --on-primary: var(--on-gold);
+    --titlebar-icon: var(--text-strong);
+    --ink: var(--text);
+    --ink-strong: var(--text-strong);
+    --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23dc8a00' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+/* A custom theme's background image (libs/theme-apply.js), behind everything; the sidebar lets it show through. */
+:root[data-theme-image="on"] body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: var(--theme-image) center/cover no-repeat;
+    opacity: var(--theme-image-strength);
+}
+:root[data-theme-image="on"] .sidebar {
+    background: color-mix(in srgb, var(--surface) calc(100% - var(--theme-image-strength) * 100%), transparent);
+}
+:root[data-theme-image="on"] webview#website {
+    background: var(--bg);
+}
+.theme-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.theme-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+.theme-button {
+    background: var(--surface-2);
     border: 1px solid var(--line);
     border-radius: 6px;
+    color: var(--text);
     cursor: pointer;
-    display: flex;
-    gap: 10px;
-    margin-bottom: 6px;
-    padding: 8px 10px;
+    font: inherit;
+    font-size: 12px;
+    padding: 6px 8px;
 }
-.theme-option:hover,
-.theme-option:has(input:checked) {
+.theme-button:hover {
     border-color: var(--gold);
 }
-.theme-option input {
-    accent-color: var(--gold);
-}
-.theme-option:has(input:focus-visible) {
+.theme-button:focus-visible {
     outline: 2px solid var(--gold);
     outline-offset: 2px;
 }
@@ -155,16 +278,915 @@
     font-size: 12px;
     margin: 0 0 12px;
 }
-.theme-option .swatches {
-    display: flex;
-    gap: 4px;
-    margin-left: auto;
+/* The Themes window: a fixed header and footer around a scrolling body of theme cards (libs/theme-picker.js).
+   The id beats the later .auth-card width and padding. */
+#theme-modal .theme-picker-card {
+    box-sizing: border-box;
+    gap: 0;
+    max-height: calc(100vh - 64px);
+    overflow: hidden;
+    padding: 0;
+    width: min(760px, 94vw);
 }
-.theme-option .swatches span {
-    border: 1px solid var(--line-strong);
+.theme-picker-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 20px;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 20px 24px;
+}
+.theme-picker-body .theme-unset {
+    margin: 0;
+}
+.theme-section-head {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.theme-section-title {
+    border: 0;
+    color: var(--text-strong);
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    margin: 0 auto 0 0;
+    overflow: visible;
+    padding: 0;
+}
+.theme-section .theme-unset {
+    margin-bottom: 10px;
+}
+.theme-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+.theme-card {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-sizing: border-box;
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    position: relative;
+}
+.theme-card:hover {
+    border-color: var(--line-strong);
+}
+/* the 2px border takes 1px of padding so the card does not grow when picked */
+.theme-card.is-current {
+    border: 2px solid var(--gold);
+    padding: 7px;
+}
+/* the radio is hidden, so the card draws its one focus ring */
+.theme-card:has(.theme-card-radio:focus-visible) {
+    outline: 2px solid var(--text-strong);
+    outline-offset: 3px;
+}
+#theme-title:focus {
+    outline: none;
+}
+.theme-card-radio {
+    border: 0;
+    clip-path: inset(50%);
+    height: 1px;
+    margin: 0;
+    opacity: 0;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+}
+.theme-card-radio:focus-visible {
+    outline: none;
+}
+.theme-card-pick {
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+/* a mini launcher in the theme's own colours, set as --thumb-* on the element */
+.theme-thumb {
+    background: var(--thumb-bg);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    height: 96px;
+    overflow: hidden;
+    position: relative;
+}
+.theme-thumb-titlebar {
+    background: var(--thumb-surface);
+    flex-shrink: 0;
+    height: 8px;
+}
+.theme-thumb-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+.theme-thumb-page {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 5px;
+    padding: 10px;
+}
+.theme-thumb-side {
+    background: var(--thumb-surface);
+    box-sizing: border-box;
+    padding: 8px 6px;
+    width: 38%;
+}
+.theme-thumb-card {
+    background: var(--thumb-surface-2);
+    border: 1px solid var(--thumb-line);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 6px;
+}
+.theme-thumb-heading,
+.theme-thumb-text,
+.theme-thumb-muted {
+    border-radius: 2px;
+    flex-shrink: 0;
+    height: 4px;
+}
+.theme-thumb-heading {
+    background: var(--thumb-text-strong);
+    height: 6px;
+    width: 50%;
+}
+.theme-thumb-text {
+    background: var(--thumb-text);
+    width: 80%;
+}
+.theme-thumb-muted {
+    background: var(--thumb-muted);
+    width: 80%;
+}
+.theme-thumb-short {
+    width: 60%;
+}
+.theme-thumb-button {
+    background: var(--thumb-gold);
     border-radius: 3px;
+    flex-shrink: 0;
+    height: 10px;
+    margin-top: auto;
+    width: 32%;
+}
+.theme-thumb-pill {
+    background: var(--thumb-gold);
+    border-radius: 999px;
+    height: 8px;
+    margin-top: 2px;
+    width: 50%;
+}
+.theme-thumb-check {
+    align-items: center;
+    background: var(--gold);
+    border-radius: 50%;
+    color: var(--on-gold);
+    display: none;
+    height: 22px;
+    justify-content: center;
+    position: absolute;
+    right: 6px;
+    top: 6px;
+    width: 22px;
+}
+.theme-card.is-current .theme-thumb-check {
+    display: flex;
+}
+.theme-card-info {
+    align-items: flex-start;
+    display: flex;
+    gap: 8px;
+}
+.theme-card-text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+/* full names: they wrap, never cut */
+.theme-card-name {
+    color: var(--text-strong);
+    font-size: 13px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+.theme-card-sub {
+    color: var(--muted);
+    font-size: 11px;
+    overflow-wrap: anywhere;
+}
+.theme-card-inuse {
+    background: var(--gold);
+    border-radius: 999px;
+    color: var(--on-gold);
+    display: none;
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 8px;
+}
+.theme-card.is-current .theme-card-inuse {
+    display: inline;
+}
+.theme-card-actions {
+    align-items: center;
+    display: flex;
+    gap: 2px;
+}
+.theme-icon-button {
+    align-items: center;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--muted);
+    cursor: pointer;
+    display: inline-flex;
+    height: 32px;
+    justify-content: center;
+    padding: 0;
+    width: 32px;
+}
+.theme-icon-button:hover {
+    background: var(--surface-3);
+    color: var(--text-strong);
+}
+.theme-icon-button:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 1px;
+}
+.theme-card-copied {
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: 4px;
+}
+.theme-card-broken {
+    background: transparent;
+    border-style: dashed;
+    gap: 4px;
+}
+.theme-card-broken .theme-card-name {
+    color: var(--muted);
+}
+.theme-card-new {
+    align-items: center;
+    background: transparent;
+    border: 1px dashed var(--line-strong);
+    color: var(--muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    justify-content: center;
+    min-height: 150px;
+}
+.theme-card-new:hover {
+    border-color: var(--gold);
+    color: var(--text-strong);
+}
+.theme-card-new:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+}
+.theme-link {
+    background: none;
+    border: 0;
+    color: var(--gold);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.theme-link:hover {
+    color: var(--gold-hover);
+}
+.theme-link:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+}
+
+/* The theme editor and importer: no backdrop, so the launcher behind shows the live preview. They start below the
+   title bar so the window buttons stay usable, and the card scrolls inside. */
+#theme-editor,
+#theme-importer {
+    align-items: flex-start;
+    background: transparent;
+    padding: 0;
+    top: 48px;
+}
+.theme-editor-card {
+    box-sizing: border-box;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    max-height: calc(100vh - 64px);
+    overflow-y: auto;
+    width: min(560px, 92vw);
+}
+.theme-editor-card > * {
+    flex-shrink: 0;
+}
+.theme-button-primary {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--on-primary);
+    font-weight: 700;
+}
+.theme-button-primary:not(:disabled):hover {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+}
+.theme-button-primary:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+.theme-import-actions {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+}
+.theme-import-actions .theme-unset {
+    margin: 0;
+}
+/* name, notes and error take no room until they have something to say */
+/* -16px cancels the card's gap above this zero-height block while nothing is previewed */
+.theme-import-result {
+    margin-top: -16px;
+}
+.theme-import-result > p {
+    margin: 0;
+}
+.theme-import-result > .auth-error:empty {
+    min-height: 0;
+}
+.theme-import-result > :not(:empty) {
+    margin-top: 6px;
+}
+.theme-editor-card fieldset {
+    border: 0;
+    margin: 0;
+    padding: 0;
+}
+.theme-editor-card legend {
+    color: var(--text-strong);
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+.theme-import-field {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.theme-editor-name input,
+.theme-editor-hex,
+.theme-editor-field select,
+.theme-import-field textarea {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    color: var(--text);
+    font: inherit;
+    padding: 6px 8px;
+}
+/* The editor: a fixed header and footer around a scrolling body of controls beside a sticky preview. */
+#theme-editor .theme-editor-card {
+    gap: 0;
+    overflow: hidden;
+    padding: 0;
+    width: min(900px, 94vw);
+}
+.theme-editor-head {
+    border-bottom: 1px solid var(--line);
+    padding: 18px 56px 14px 24px;
+}
+.theme-editor-title {
+    color: var(--text-strong);
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0 0 4px;
+}
+.theme-editor-hint {
+    color: var(--muted);
+    font-size: 12px;
+    margin: 0;
+}
+#theme-editor .theme-editor-body {
+    align-items: start;
+    display: grid;
+    flex: 1 1 auto;
+    gap: 24px;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 20px 24px;
+}
+.theme-editor-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+}
+.theme-editor-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+}
+.theme-editor-foot {
+    align-items: center;
+    border-top: 1px solid var(--line);
+    display: flex;
+    gap: 8px;
+    padding: 12px 24px;
+}
+.theme-editor-foot-text {
+    flex: 1;
+    min-width: 0;
+}
+.theme-editor-foot-text p {
+    margin: 0;
+}
+.theme-editor-foot .auth-error:empty {
+    display: none;
+}
+.theme-editor-status {
+    color: var(--muted);
+    font-size: 12px;
+}
+.theme-editor-foot .theme-button {
+    font-size: 13px;
+    min-height: 32px;
+    padding: 6px 16px;
+}
+#theme-editor-save:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+@media (max-width: 759px) {
+    #theme-editor .theme-editor-body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .theme-editor-preview {
+        order: -1;
+        position: static;
+    }
+}
+#theme-editor :is(input, select, button, summary):focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+}
+.theme-editor-name {
+    display: grid;
+    gap: 6px;
+}
+.theme-editor-name label {
+    color: var(--text-strong);
+    font-weight: 700;
+}
+.theme-editor-name input,
+.theme-editor-field select {
+    box-sizing: border-box;
+    min-height: 32px;
+}
+/* Start from: three radio cards; the real radios stay for keyboard use but are not drawn */
+.theme-editor-bases {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.theme-editor-base-card {
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    gap: 8px;
+    min-height: 40px;
+    padding: 8px 10px;
+    position: relative;
+}
+.theme-editor-base-card:hover {
+    border-color: var(--line-strong);
+}
+.theme-editor-base-card:has(input:checked) {
+    background: var(--surface-2);
+    border-color: var(--gold);
+}
+.theme-editor-base-card:has(input:focus-visible) {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+}
+.theme-editor-radio {
+    height: 1px;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+    width: 1px;
+}
+.theme-editor-chips {
+    display: flex;
+    flex: none;
+}
+.theme-editor-chips span {
+    background: var(--chip);
+    border: 1px solid var(--line-strong);
+    border-radius: 50%;
+    height: 14px;
+    width: 14px;
+}
+.theme-editor-chips span + span {
+    margin-left: -4px;
+}
+.theme-editor-base-name {
+    flex: 1;
+    font-size: 13px;
+    line-height: 1.2;
+    min-width: 0;
+}
+.theme-editor-tick {
+    color: var(--gold);
+    flex: none;
+    visibility: hidden;
+}
+.theme-editor-base-card:has(input:checked) .theme-editor-tick {
+    visibility: visible;
+}
+/* A colour row: swatch, words, hex code, changed dot (basics only), reset; a hex error sits under it */
+.theme-editor-colour {
+    align-items: center;
+    column-gap: 8px;
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto 8px 32px;
+    min-height: 32px;
+    padding: 4px 0;
+}
+.theme-editor-grid {
+    display: grid;
+}
+.theme-editor-grid .theme-editor-colour {
+    grid-template-columns: 28px minmax(0, 1fr) auto 32px;
+}
+.theme-editor-words {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.theme-editor-label {
+    color: var(--text-strong);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.theme-editor-grid .theme-editor-label {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 400;
+}
+.theme-editor-hex {
+    box-sizing: content-box;
+    font-family: Consolas, 'Courier New', monospace;
+    min-height: 18px;
+    width: 8ch;
+}
+.theme-editor-hex[aria-invalid="true"] {
+    border-color: var(--red-text);
+}
+.theme-editor-hex-error {
+    color: var(--red-text);
+    font-size: 12px;
+    grid-column: 2 / -1;
+    margin: 0;
+}
+.theme-editor-hex-error:empty {
+    display: none;
+}
+.theme-editor-dot {
+    background: var(--gold);
+    border-radius: 50%;
+    height: 8px;
+    width: 8px;
+}
+.theme-editor-colour[data-changed="no"] .theme-editor-dot {
+    visibility: hidden;
+}
+.theme-editor-reset {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--muted);
+    cursor: pointer;
+    display: grid;
+    flex: none;
+    height: 32px;
+    padding: 0;
+    place-items: center;
+    width: 32px;
+}
+.theme-editor-reset::before {
+    background: currentColor;
+    content: '';
     height: 16px;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12a9 9 0 1 0 3-6.7L3 8'/%3E%3Cpath d='M3 3v5h5'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12a9 9 0 1 0 3-6.7L3 8'/%3E%3Cpath d='M3 3v5h5'/%3E%3C/svg%3E") center / contain no-repeat;
     width: 16px;
+}
+.theme-editor-reset:not(:disabled):hover {
+    border-color: var(--line-strong);
+    color: var(--text-strong);
+}
+.theme-editor-reset:disabled {
+    cursor: default;
+    opacity: 0.35;
+}
+/* Advanced: a full-width summary row with a turning chevron */
+.theme-editor-advanced summary {
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    gap: 12px;
+    list-style: none;
+    min-height: 32px;
+    padding: 10px 12px;
+}
+.theme-editor-advanced summary::-webkit-details-marker {
+    display: none;
+}
+.theme-editor-advanced summary:hover {
+    border-color: var(--line-strong);
+}
+.theme-editor-summary-text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+}
+.theme-editor-summary-title {
+    color: var(--text-strong);
+    font-weight: 700;
+}
+.theme-editor-chevron {
+    color: var(--gold);
+    flex: none;
+    transition: transform 0.15s ease;
+}
+.theme-editor-advanced[open] .theme-editor-chevron {
+    transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+    .theme-editor-chevron {
+        transition: none;
+    }
+}
+.theme-editor-advanced[open] {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+.theme-editor-advanced fieldset {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+}
+.theme-editor-field {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+    min-height: 32px;
+}
+.theme-editor-field > label:first-child:not(.theme-editor-switch) {
+    flex: 0 0 140px;
+}
+.theme-editor-field input[type="range"],
+.theme-editor-field select {
+    flex: 1;
+    min-width: 0;
+}
+.theme-editor-field input[type="range"] {
+    accent-color: var(--gold);
+}
+.theme-editor-field:has(input:disabled) {
+    opacity: 0.45;
+}
+.theme-editor-field output {
+    color: var(--muted);
+    font-size: 12px;
+    min-width: 7ch;
+    text-align: right;
+}
+.theme-editor-switch {
+    align-items: center;
+    cursor: pointer;
+    display: flex;
+    flex: 1;
+    justify-content: space-between;
+    position: relative;
+}
+.theme-editor-link {
+    align-self: flex-start;
+    background: none;
+    border: 0;
+    color: var(--gold);
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    min-height: 32px;
+    padding: 0;
+    text-decoration: underline;
+}
+.theme-editor-link:hover {
+    color: var(--gold-hover);
+}
+/* The readability line under the previews: an icon and a title, never colour alone */
+.theme-editor-check {
+    align-items: flex-start;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    display: flex;
+    font-size: 13px;
+    gap: 8px;
+    padding: 10px 12px;
+}
+.theme-editor-check[data-state="warn"] {
+    background: var(--surface-2);
+    border-color: var(--red-text);
+}
+.theme-editor-check svg {
+    flex: none;
+    margin-top: 1px;
+}
+.theme-editor-check-ok {
+    color: var(--green);
+}
+.theme-editor-check-warn {
+    color: var(--red-text);
+}
+.theme-editor-check[data-state="ok"] .theme-editor-check-warn,
+.theme-editor-check[data-state="warn"] .theme-editor-check-ok {
+    display: none;
+}
+.theme-editor-check[hidden] {
+    display: none;
+}
+.theme-editor-check-title {
+    color: var(--text-strong);
+    font-weight: 700;
+    margin: 0;
+}
+.theme-editor-check[data-state="ok"] .theme-editor-check-title {
+    color: var(--muted);
+    font-weight: 400;
+}
+.theme-editor-check .theme-editor-warnings {
+    margin-top: 4px;
+}
+.theme-editor-colour input[type="color"] {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    cursor: pointer;
+    height: 32px;
+    padding: 0;
+    width: 100%;
+}
+.theme-editor-colour input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 2px;
+}
+.theme-editor-colour input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 4px;
+}
+/* the launcher's select look: accent chevron, no native arrow */
+.theme-editor-field select {
+    appearance: none;
+    background: var(--surface-2) var(--select-arrow) no-repeat right 10px center;
+    color: var(--text-strong);
+    cursor: pointer;
+    font-weight: 600;
+    padding-right: 30px;
+}
+.theme-editor-warnings {
+    color: var(--red-text);
+    font-size: 12px;
+    margin: 0;
+    padding-left: 18px;
+}
+.theme-editor-warnings:empty {
+    display: none;
+}
+/* The mock client panel, painted from the theme's client colours (--c-*) and style. */
+.theme-mock {
+    background: var(--c-dark);
+    border: 1px solid var(--c-border);
+    border-radius: var(--c-corners);
+    color: var(--c-text);
+    font-size: 12px;
+    padding: 8px;
+}
+.theme-mock-title {
+    background: var(--c-darker);
+    border-radius: var(--c-corners);
+    font-weight: 700;
+    padding: 6px 8px;
+}
+.theme-mock-card {
+    background: var(--c-darker);
+    border: 1px solid var(--c-border);
+    border-radius: var(--c-corners);
+    margin-top: 8px;
+    padding: 8px;
+}
+.theme-mock-card p {
+    margin: 0 0 6px;
+}
+.theme-mock-muted {
+    color: var(--c-light);
+}
+.theme-mock-button {
+    background: var(--c-accent);
+    border-radius: var(--c-corners);
+    color: var(--c-darker);
+    display: inline-block;
+    padding: 4px 10px;
+}
+.theme-mock-scroll {
+    background: var(--c-dark);
+    height: 36px;
+    margin-top: 8px;
+    overflow-y: scroll;
+}
+.theme-mock-scroll > div {
+    height: 120px;
+}
+.theme-mock-scroll::-webkit-scrollbar {
+    background: var(--c-scrollTrack);
+    width: var(--c-scrollbar-width);
+}
+.theme-mock-scroll::-webkit-scrollbar-thumb {
+    background: var(--c-medium);
+    border-radius: var(--c-scrollbar-radius);
+}
+/* The mock launcher strip, painted from the theme's launcher colours (--l-*) */
+.theme-mock-launcher {
+    background: var(--l-bg);
+    border: 1px solid var(--l-line);
+    border-radius: 8px;
+    color: var(--l-text);
+    font-size: 12px;
+    padding: 10px;
+}
+.theme-mock-launcher-card {
+    background: var(--l-surface-2);
+    border: 1px solid var(--l-line);
+    border-radius: 6px;
+    display: grid;
+    gap: 4px;
+    padding: 10px;
+}
+.theme-mock-launcher-card p {
+    margin: 0;
+}
+.theme-mock-launcher-title {
+    color: var(--l-text-strong);
+    font-weight: 700;
+}
+.theme-mock-launcher-muted {
+    color: var(--l-muted);
+}
+.theme-mock-launcher-play {
+    background: var(--l-gold);
+    border-radius: 6px;
+    color: var(--l-on-gold);
+    font-weight: 700;
+    justify-self: start;
+    padding: 4px 16px;
+}
+.theme-mock-launcher[data-base="gold"] .theme-mock-launcher-play {
+    background: var(--l-red);
+    color: var(--l-text-strong);
 }
 
 
@@ -927,27 +1949,42 @@ h2 {
 }
 
 /* Don't add scrollbar-width/scrollbar-color here: Chromium then ignores these rules. */
-.sidebar::-webkit-scrollbar {
+.sidebar::-webkit-scrollbar,
+.theme-editor-card::-webkit-scrollbar,
+.theme-editor-body::-webkit-scrollbar,
+.theme-picker-body::-webkit-scrollbar {
     width: 10px;
 }
 
-.sidebar::-webkit-scrollbar-track {
+.sidebar::-webkit-scrollbar-track,
+.theme-editor-card::-webkit-scrollbar-track,
+.theme-editor-body::-webkit-scrollbar-track,
+.theme-picker-body::-webkit-scrollbar-track {
     background: transparent;
 }
 
 /* Transparent border keeps a 10px grab area around a slimmer visible thumb. */
-.sidebar::-webkit-scrollbar-thumb {
+.sidebar::-webkit-scrollbar-thumb,
+.theme-editor-card::-webkit-scrollbar-thumb,
+.theme-editor-body::-webkit-scrollbar-thumb,
+.theme-picker-body::-webkit-scrollbar-thumb {
     background-color: var(--line);
     border: 2px solid transparent;
     border-radius: 6px;
     background-clip: padding-box;
 }
 
-.sidebar::-webkit-scrollbar-thumb:hover {
+.sidebar::-webkit-scrollbar-thumb:hover,
+.theme-editor-card::-webkit-scrollbar-thumb:hover,
+.theme-editor-body::-webkit-scrollbar-thumb:hover,
+.theme-picker-body::-webkit-scrollbar-thumb:hover {
     background-color: var(--gold-soft);
 }
 
-.sidebar::-webkit-scrollbar-thumb:active {
+.sidebar::-webkit-scrollbar-thumb:active,
+.theme-editor-card::-webkit-scrollbar-thumb:active,
+.theme-editor-body::-webkit-scrollbar-thumb:active,
+.theme-picker-body::-webkit-scrollbar-thumb:active {
     background-color: var(--gold);
 }
 
