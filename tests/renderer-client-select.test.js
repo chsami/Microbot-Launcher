@@ -97,7 +97,7 @@ describe('renderer client version select', () => {
         });
         const source = fs.readFileSync(path.join(__dirname, '..', 'renderer.js'), 'utf8');
         vm.runInContext(
-            `${source}\nglobalThis.__renderer = { formatNightlyBuildTime, resolveLaunchVersion, checkForOutdatedLaunch, populateAndSelectClientVersion, selectClientVersion, shouldPromptForClientDownload, orderClientJarsByVersion, rememberLatestClientVersion, refreshClientJars, webviewScrollbarCss, applyWebviewScrollbar, loadLandingPageWebview };`,
+            `${source}\nglobalThis.__renderer = { formatNightlyBuildTime, resolveLaunchVersion, checkForOutdatedLaunch, populateAndSelectClientVersion, selectClientVersion, shouldPromptForClientDownload, orderClientJarsByVersion, rememberLatestClientVersion, refreshClientJars, webviewScrollbarCss, applyWebviewScrollbar, loadLandingPageWebview, checkForClientUpdate, updateNowBtn, initializeLauncher };`,
             context
         );
         context.__renderer.rememberLatestClientVersion('2.6.28');
@@ -282,5 +282,105 @@ describe('renderer client version select', () => {
 
         vm.runInContext('channelSwitching = false', context);
         expect(await context.__renderer.resolveLaunchVersion()).toBe('2.6.28');
+    });
+    test('a failed version fetch is unknown but keeps the remembered version', () => {
+        expect(context.__renderer.rememberLatestClientVersion({ error: 'Invalid URL' })).toBeNull();
+        expect(vm.runInContext('latestClientVersion', context)).toBe('2.6.28');
+    });
+
+    test('a failed version fetch skips the outdated-version prompt, even with a remembered version', async () => {
+        context.window.electron.fetchClientVersion = async () => ({ error: 'offline' });
+        await context.__renderer.populateAndSelectClientVersion('2.6.2');
+
+        await context.__renderer.checkForOutdatedLaunch();
+
+        expect(dialog).not.toHaveBeenCalled();
+    });
+
+    test('a failed version fetch does not show the update banner', async () => {
+        context.window.electron.fetchClientVersion = async () => ({ error: 'offline' });
+        vm.runInContext('latestClientVersion = null;', context);
+        const banner = { style: 'display:none' };
+        context.document.querySelector = (selector) => (selector === '#update-available' ? banner : null);
+
+        await context.__renderer.checkForClientUpdate({ client: '2.6.2' });
+
+        expect(banner.style).toBe('display:none');
+    });
+
+    test.each([
+        ['stable', 'display:flex'],
+        ['nightly', 'display:none']
+    ])('a failed Update Now on %s leaves the banner as %s', async (channel, expected) => {
+        const banner = { style: 'display:flex' };
+        const loader = { style: {} };
+        let click;
+        context.clearInterval = jest.fn();
+        context.setInterval = jest.fn(() => 7);
+        context.document.querySelector = (selector) =>
+            selector === '#update-available' ? banner : { addEventListener: (_, fn) => (click = fn) };
+        context.document.getElementById = (id) => (id === 'loader-container' ? loader : select);
+        vm.runInContext(`clientChannel = '${channel}'`, context);
+        context.__renderer.updateNowBtn();
+
+        // version check fails
+        context.window.electron.fetchClientVersion = async () => ({ error: 'offline' });
+        await click();
+        expect([banner.style, loader.style.display]).toEqual([expected, 'none']);
+        // the periodic check runs again, so "Remind me later" does not end the reminders
+        expect(context.setInterval).toHaveBeenCalledTimes(1);
+
+        // version check works, download fails
+        context.window.electron.fetchClientVersion = async () => '2.6.29';
+        await click();
+        expect([banner.style, loader.style.display]).toEqual([expected, 'none']);
+        expect(context.setInterval).toHaveBeenCalledTimes(2);
+        expect(context.clearInterval).toHaveBeenCalledWith(7);
+    });
+
+    test('a successful Update Now restarts the periodic check', async () => {
+        const loader = { style: {} };
+        let click;
+        context.clearInterval = jest.fn();
+        context.setInterval = jest.fn(() => 7);
+        context.document.querySelector = (selector) =>
+            selector === '#update-available' ? { style: '' } : { addEventListener: (_, fn) => (click = fn) };
+        context.document.getElementById = (id) => (id === 'loader-container' ? loader : select);
+        context.__renderer.updateNowBtn();
+        Object.assign(context.window.electron, {
+            fetchClientVersion: async () => '2.6.2',
+            downloadClient: async () => ({ success: true }),
+            readProperties: async () => ({}),
+            writeProperties: jest.fn(async () => {})
+        });
+
+        await click();
+
+        expect(context.window.electron.writeProperties).toHaveBeenCalledWith({ client: '2.6.2' });
+        expect(context.setInterval).toHaveBeenCalledTimes(1);
+        expect(loader.style.display).toBe('none');
+    });
+
+    test.each([
+        ['stable', 'offline', true],
+        ['nightly', 'offline', false],
+        ['stable', '2.6.28', false]
+    ])('first run on %s with version check %s: offline toast %s', async (channel, fetched, shown) => {
+        const elements = {};
+        context.document.getElementById = (id) => (elements[id] ??= { style: {}, hidden: true });
+        Object.assign(context.window.electron, {
+            fetchClientVersion: async () => (fetched === 'offline' ? { error: 'offline' } : fetched),
+            launcherVersion: async () => '1.0.0',
+            readProperties: async () => ({ client: '0.0.0', client_channel: channel }),
+            // stop startup right after the first-run step
+            writeProperties: async () => {
+                throw new Error('stop');
+            }
+        });
+
+        await expect(context.__renderer.initializeLauncher()).rejects.toThrow('stop');
+
+        expect(elements.toast?.hidden === false).toBe(shown);
+        if (shown) expect(elements['toast-text'].textContent).toContain('Could not reach microbot.cloud');
     });
 });

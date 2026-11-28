@@ -12,7 +12,7 @@ module.exports = async function (deps) {
         app
     } = deps;
 
-    const url = 'https:/microbot.cloud';
+    const url = 'https://microbot.cloud';
     const filestorage = 'https://files.microbot.cloud';
 
     const { startAuthFlow, cancelAuthFlow, authFlowRunning } = require(path.join(
